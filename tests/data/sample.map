@@ -1,0 +1,21 @@
+# Sample valid schema
+demo 1
+
+# numeric entries
+0 foo u8 (byte)
+1 bar u16 (small)
+2 baz u32 (mid)
+3 qux u64 (large)
+4 qa i8 (s1)
+5 qb i16 (s2)
+6 qc i32 (s3)
+7 qd i64 (s4)
+8 fe f32 (float)
+9 fd f64 (double)
+
+# strings
+10 s1 str (var string)
+11 s2 str (another var)
+12 fs1 fstr (fixed string)
+13 fs2 fstr (fixed 2)
+14 s3 str
