@@ -21,6 +21,53 @@ This repository is the C-first implementation of a MessagePack-based configurati
   - `Description`: optional, not stored in the binary
 - Hard caps in this profile: 128 entries, 4096-byte page size.
 
+### Example Schema
+Below is a well-documented example `.map` file demonstrating the schema format:
+
+```
+# vehicle.map - Configuration schema for a vehicle control system
+# Comments start with '#' and are ignored by the parser.
+
+vehicle 1
+
+# ─────────────────────────────────────────────────────────────────────────────
+# IDENTIFICATION
+# ─────────────────────────────────────────────────────────────────────────────
+0  id     u32   (Unique vehicle identifier, assigned at manufacture)
+1  model  fstr  (Model code, e.g. "MX500" - max 16 chars)
+2  vin    str   (Vehicle identification number - max 64 chars)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OPERATIONAL LIMITS
+# ─────────────────────────────────────────────────────────────────────────────
+10 maxsp  u16   (Maximum speed in km/h, range 0-65535)
+11 minsp  u16   (Minimum speed in km/h before idle shutdown)
+12 accel  f32   (Acceleration limit in m/s^2)
+13 decel  f32   (Deceleration limit in m/s^2)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SENSOR CALIBRATION
+# ─────────────────────────────────────────────────────────────────────────────
+20 toff   i8    (Temperature sensor offset in degrees C, -128 to 127)
+21 pscal  f64   (Pressure sensor scale factor, high precision)
+22 flags  u8    (Sensor enable bitmask: bit0=temp, bit1=pressure, bit2=gps)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TELEMETRY
+# ─────────────────────────────────────────────────────────────────────────────
+30 tint   u32   (Telemetry reporting interval in milliseconds)
+31 turl   str   (Telemetry endpoint URL - max 64 chars)
+32 tkey   fstr  (Telemetry API key - max 16 chars, stored fixed-length)
+```
+
+**Key points illustrated:**
+- **Header line**: `vehicle 1` sets map name to "vehicle" and version to 1.
+- **Comments**: Lines starting with `#` are ignored; use them for documentation.
+- **Index gaps**: Indices need not be contiguous (0, 1, 2, then 10, 11, ...).
+- **Type variety**: Shows u8/u16/u32, i8, f32/f64, str (variable up to 64), fstr (fixed up to 16).
+- **Descriptions**: Parenthesized text documents each field but is not stored in binary output.
+
+
 ## Layout
 - `include/cfgpack/` — public headers
   - `error.h` — error codes enum.

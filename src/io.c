@@ -9,6 +9,12 @@
 
 #define PAGE_CAP 4096
 
+/**
+ * @brief Encode a cfgpack value into msgpack format.
+ * @param buf  Output buffer.
+ * @param v    Value to encode.
+ * @return CFGPACK_OK on success, CFGPACK_ERR_ENCODE or CFGPACK_ERR_INVALID_TYPE on failure.
+ */
 static cfgpack_err_t encode_value(cfgpack_buf_t *buf, const cfgpack_value_t *v) {
     switch (v->type) {
         case CFGPACK_TYPE_U8: return cfgpack_msgpack_encode_uint64(buf, v->v.u64);
@@ -70,6 +76,13 @@ cfgpack_err_t cfgpack_pageout_file(const cfgpack_ctx_t *ctx, const char *path, u
     return CFGPACK_OK;
 }
 
+/**
+ * @brief Decode a msgpack value into a cfgpack value.
+ * @param r     Reader state.
+ * @param type  Expected type to decode.
+ * @param out   Output value structure.
+ * @return CFGPACK_OK on success, error code on failure.
+ */
 static cfgpack_err_t decode_value(cfgpack_reader_t *r, cfgpack_type_t type, cfgpack_value_t *out) {
     out->type = type;
     switch (type) {

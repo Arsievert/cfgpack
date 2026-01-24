@@ -10,22 +10,44 @@
 
 #define MAX_LINE_LEN 256
 
+/**
+ * @brief Populate a parse error structure.
+ * @param err   Error structure to fill (may be NULL).
+ * @param line  Line number where the error occurred.
+ * @param msg   Human-readable error message.
+ */
 static void set_err(cfgpack_parse_error_t *err, size_t line, const char *msg) {
     if (!err) return;
     err->line = line;
     snprintf(err->message, sizeof(err->message), "%s", msg);
 }
 
+/**
+ * @brief Check if a character is whitespace.
+ * @param c  Character to test.
+ * @return Non-zero if whitespace, zero otherwise.
+ */
 static int is_space(unsigned char c) {
     return (c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r');
 }
 
+/**
+ * @brief Check if a line is blank or a comment.
+ * @param line  Null-terminated line string.
+ * @return Non-zero if line is empty/whitespace or starts with '#'.
+ */
 static int is_blank_or_comment(const char *line) {
     while (*line && is_space((unsigned char)*line)) line++;
     return (*line == '\0' || *line == '#');
 }
 
 
+/**
+ * @brief Parse a type string into a cfgpack_type_t.
+ * @param tok  Type token (e.g. "u8", "i32", "str").
+ * @param out  Output type enum.
+ * @return CFGPACK_OK on success, CFGPACK_ERR_INVALID_TYPE if unrecognized.
+ */
 static cfgpack_err_t parse_type(const char *tok, cfgpack_type_t *out) {
     if (strcmp(tok, "u8") == 0) { *out = CFGPACK_TYPE_U8; return CFGPACK_OK; }
     if (strcmp(tok, "u16") == 0) { *out = CFGPACK_TYPE_U16; return CFGPACK_OK; }
@@ -42,10 +64,23 @@ static cfgpack_err_t parse_type(const char *tok, cfgpack_type_t *out) {
     return CFGPACK_ERR_INVALID_TYPE;
 }
 
+/**
+ * @brief Check if an entry name exceeds the allowed length.
+ * @param name  Null-terminated name string.
+ * @return Non-zero if name is empty or longer than 5 characters.
+ */
 static int name_too_long(const char *name) {
     return strlen(name) > 5 || strlen(name) == 0;
 }
 
+/**
+ * @brief Check for duplicate index or name in existing entries.
+ * @param entries  Array of parsed entries.
+ * @param count    Number of entries in array.
+ * @param idx      Index to check for duplicates.
+ * @param name     Name to check for duplicates.
+ * @return Non-zero if a duplicate index or name exists.
+ */
 static int has_duplicate(const cfgpack_entry_t *entries, size_t count, uint16_t idx, const char *name) {
     for (size_t i = 0; i < count; ++i) {
         if (entries[i].index == idx) return 1;
@@ -54,6 +89,11 @@ static int has_duplicate(const cfgpack_entry_t *entries, size_t count, uint16_t 
     return 0;
 }
 
+/**
+ * @brief Sort entries by index using insertion sort.
+ * @param entries  Array of entries to sort in-place.
+ * @param n        Number of entries.
+ */
 static void sort_entries(cfgpack_entry_t *entries, size_t n) {
     for (size_t i = 1; i < n; ++i) {
         cfgpack_entry_t key = entries[i];

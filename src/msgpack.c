@@ -119,6 +119,13 @@ void cfgpack_reader_init(cfgpack_reader_t *r, const uint8_t *data, size_t len) {
     r->pos = 0;
 }
 
+/**
+ * @brief Read bytes from a msgpack reader.
+ * @param r    Reader state.
+ * @param dst  Destination buffer.
+ * @param n    Number of bytes to read.
+ * @return 0 on success, -1 if insufficient data.
+ */
 static int read_bytes(cfgpack_reader_t *r, void *dst, size_t n) {
     if (r->pos + n > r->len) return -1;
     memcpy(dst, r->data + r->pos, n);
