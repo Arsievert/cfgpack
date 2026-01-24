@@ -1,0 +1,4 @@
+demo 1
+2 c u8 0  # third by index
+0 a u8 0  # first by index
+1 b u8 0  # second by index

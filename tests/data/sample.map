@@ -1,21 +1,25 @@
 # Sample valid schema
 demo 1
 
-# numeric entries
-0 foo u8 (byte)
-1 bar u16 (small)
-2 baz u32 (mid)
-3 qux u64 (large)
-4 qa i8 (s1)
-5 qb i16 (s2)
-6 qc i32 (s3)
-7 qd i64 (s4)
-8 fe f32 (float)
-9 fd f64 (double)
+# numeric entries - unsigned integers
+0 foo u8 255          # max u8 value
+1 bar u16 1000        # unsigned 16-bit example
+2 baz u32 100000      # unsigned 32-bit example
+3 qux u64 9999999     # unsigned 64-bit example
+
+# numeric entries - signed integers
+4 qa i8 -10           # signed 8-bit, range -128 to 127
+5 qb i16 -1000        # signed 16-bit example
+6 qc i32 -100000      # signed 32-bit example
+7 qd i64 -9999999     # signed 64-bit example
+
+# floating point
+8 fe f32 3.14         # 32-bit float (single precision)
+9 fd f64 2.718281828  # 64-bit float (double precision)
 
 # strings
-10 s1 str (var string)
-11 s2 str (another var)
-12 fs1 fstr (fixed string)
-13 fs2 fstr (fixed 2)
-14 s3 str
+10 s1 str "hello"     # variable-length string, max 64 chars
+11 s2 str "world"     # another string example
+12 fs1 fstr "fixed"   # fixed-length string, max 16 chars
+13 fs2 fstr "test"    # another fstr example
+14 s3 str NIL         # string with no default (must be set explicitly)

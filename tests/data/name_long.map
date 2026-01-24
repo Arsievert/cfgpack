@@ -1,2 +1,2 @@
 demo 1
-0 toolong u8
+0 toolong u8 0  # name exceeds 5 chars
