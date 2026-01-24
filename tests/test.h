@@ -3,6 +3,11 @@
 
 #include <stdio.h>
 
+/* ANSI color codes */
+#define COLOR_GREEN "\033[32m"
+#define COLOR_RED   "\033[31m"
+#define COLOR_RESET "\033[0m"
+
 typedef enum {
     TEST_OK = 0,
     TEST_FAIL = 1
@@ -13,7 +18,7 @@ typedef enum {
 
 #define CHECK(expr) do { \
     if (!(expr)) { \
-        fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #expr); \
+        fprintf(stderr, COLOR_RED "FAIL" COLOR_RESET " %s:%d: %s\n", __FILE__, __LINE__, #expr); \
         return (TEST_FAIL); \
     } \
 } while (0)
