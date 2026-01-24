@@ -1,0 +1,11 @@
+{
+  "name": "test",
+  "version": 42,
+  "entries": [
+    {"index": 0, "name": "speed", "type": "u16", "default": 100},
+    {"index": 1, "name": "name", "type": "fstr", "default": "hello"},
+    {"index": 2, "name": "temp", "type": "i8", "default": -10},
+    {"index": 3, "name": "ratio", "type": "f32", "default": 3.14},
+    {"index": 4, "name": "desc", "type": "str", "default": null}
+  ]
+}

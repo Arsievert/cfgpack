@@ -1,9 +1,12 @@
 #include "cfgpack/schema.h"
 #include "cfgpack/cfgpack.h"
+#include "cfgpack/io_file.h"
 #include "test.h"
 
 #include <stdio.h>
 #include <string.h>
+
+static char scratch[8192];
 
 TEST_CASE(test_parse_ok) {
     cfgpack_schema_t schema;
@@ -12,7 +15,7 @@ TEST_CASE(test_parse_ok) {
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
-    rc = cfgpack_parse_schema("tests/data/sample.map", &schema, entries, 128, defaults, &err);
+    rc = cfgpack_parse_schema_file("tests/data/sample.map", &schema, entries, 128, defaults, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_OK);
     CHECK(schema.entry_count == 15);
     CHECK(schema.version == 1);
@@ -39,7 +42,7 @@ TEST_CASE(test_parse_bad_type) {
     fprintf(f, "demo 1\n0 foo nope NIL  # invalid type should fail\n");
     fclose(f);
 
-    rc = cfgpack_parse_schema(path, &schema, entries, 128, defaults, &err);
+    rc = cfgpack_parse_schema_file(path, &schema, entries, 128, defaults, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_ERR_INVALID_TYPE);
     return (TEST_OK);
 }
@@ -58,7 +61,7 @@ TEST_CASE(test_parse_duplicate_index) {
     fprintf(f, "demo 1\n0 foo u8 0  # first entry\n0 bar u8 0  # duplicate index\n");
     fclose(f);
 
-    rc = cfgpack_parse_schema(path, &schema, entries, 128, defaults, &err);
+    rc = cfgpack_parse_schema_file(path, &schema, entries, 128, defaults, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_ERR_DUPLICATE);
     return (TEST_OK);
 }

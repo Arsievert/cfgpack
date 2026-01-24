@@ -4,7 +4,6 @@
 #include "cfgpack/value.h"
 #include "cfgpack/schema.h"
 
-#include <stdio.h>
 #include <string.h>
 
 #define PAGE_CAP 4096
@@ -58,23 +57,7 @@ cfgpack_err_t cfgpack_pageout(const cfgpack_ctx_t *ctx, uint8_t *out, size_t out
     return (buf.len <= out_cap) ? CFGPACK_OK : CFGPACK_ERR_ENCODE;
 }
 
-cfgpack_err_t cfgpack_pageout_file(const cfgpack_ctx_t *ctx, const char *path, uint8_t *scratch, size_t scratch_cap) {
-    size_t len = 0;
-    FILE *f;
-    cfgpack_err_t rc;
 
-    rc = cfgpack_pageout(ctx, scratch, scratch_cap, &len);
-    if (rc != CFGPACK_OK) return rc;
-
-    f = fopen(path, "wb");
-    if (!f) return CFGPACK_ERR_IO;
-    if (fwrite(scratch, 1, len, f) != len) {
-        fclose(f);
-        return CFGPACK_ERR_IO;
-    }
-    fclose(f);
-    return CFGPACK_OK;
-}
 
 /**
  * @brief Decode a msgpack value into a cfgpack value.
@@ -150,17 +133,4 @@ cfgpack_err_t cfgpack_pagein_buf(cfgpack_ctx_t *ctx, const uint8_t *data, size_t
         cfgpack_presence_set(ctx, idx);
     }
     return CFGPACK_OK;
-}
-
-cfgpack_err_t cfgpack_pagein_file(cfgpack_ctx_t *ctx, const char *path, uint8_t *scratch, size_t scratch_cap) {
-    FILE *f = fopen(path, "rb");
-    size_t n;
-    if (!f) return CFGPACK_ERR_IO;
-    n = fread(scratch, 1, scratch_cap, f);
-    if (n == scratch_cap && !feof(f)) {
-        fclose(f);
-        return CFGPACK_ERR_IO; /* file too big for scratch */
-    }
-    fclose(f);
-    return cfgpack_pagein_buf(ctx, scratch, n);
 }

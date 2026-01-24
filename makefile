@@ -17,10 +17,16 @@ SRCDIRS  := src
 TESTDIRS := tests
 TESTDATA := tests/data
 
-SRC      := $(foreach d,$(SRCDIRS),$(wildcard $(d)/*.c))
+# Core library sources (excludes io_file.c for embedded use)
+CORESRC  := $(filter-out src/io_file.c,$(foreach d,$(SRCDIRS),$(wildcard $(d)/*.c)))
+# File I/O wrapper (optional, for desktop/POSIX)
+IOFILESRC := src/io_file.c
+
 TESTSRC  := $(foreach d,$(TESTDIRS),$(wildcard $(d)/*.c))
 
-OBJECTS  := $(SRC:%.c=$(OBJ)/%.o)
+COREOBJ  := $(CORESRC:%.c=$(OBJ)/%.o)
+IOFILEOBJ := $(IOFILESRC:%.c=$(OBJ)/%.o)
+OBJECTS  := $(COREOBJ) $(IOFILEOBJ)
 TESTOBJ  := $(TESTSRC:%.c=$(OBJ)/%.o)
 TESTBINS := $(filter-out $(OUT)/test,$(TESTSRC:tests/%.c=$(OUT)/%))
 TESTCOMMON := $(OBJ)/tests/test.o
@@ -30,12 +36,13 @@ vpath %.c $(SRCDIRS) $(TESTDIRS)
 
 .DEFAULT_GOAL := all
 
-all: $(LIB) ## Build static library
+all: $(LIB) ## Build static library (core only, no file I/O)
 
-$(LIB): $(OBJECTS)
+# Core library without io_file.c
+$(LIB): $(COREOBJ)
 	@mkdir -p $(OUT)
 	@echo "AR $(LIB)"
-	@$(AR) rcs $(LIB) $(OBJECTS)
+	@$(AR) rcs $(LIB) $(COREOBJ)
 
 $(OBJ)/%.o: %.c
 	@mkdir -p $(@D) $(JSON)
@@ -45,10 +52,11 @@ $(OBJ)/%.o: %.c
 tests: $(TESTBINS) ## Build and run all tests
 	@for t in $(TESTBINS); do ./$$t || exit 1; done
 
-$(OUT)/%: $(OBJ)/tests/%.o $(TESTCOMMON) $(LIB)
+# Tests link against core lib + io_file.o (for file convenience functions)
+$(OUT)/%: $(OBJ)/tests/%.o $(TESTCOMMON) $(LIB) $(IOFILEOBJ)
 	@mkdir -p $(OUT)
 	@echo "LD $@"
-	@$(CC) $(LDFLAGS) -o $@ $< $(TESTCOMMON) $(LIB) $(LDLIBS)
+	@$(CC) $(LDFLAGS) -o $@ $< $(TESTCOMMON) $(IOFILEOBJ) $(LIB) $(LDLIBS)
 
 clean: ## Remove build artifacts
 	-@$(RM) -rvf -- $(BUILD) compile_commands.json .cache

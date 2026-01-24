@@ -1,6 +1,7 @@
 /* Runtime and I/O bounds tests for cfgpack (no-heap profile). */
 
 #include "cfgpack/cfgpack.h"
+#include "cfgpack/io_file.h"
 #include "cfgpack/msgpack.h"
 #include "test.h"
 

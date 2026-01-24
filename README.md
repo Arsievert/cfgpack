@@ -160,9 +160,37 @@ typedef struct {
     size_t entry_count;
 } cfgpack_schema_t;
 
+/* Parse schema from .map file */
 cfgpack_err_t cfgpack_parse_schema(const char *path, cfgpack_schema_t *out, cfgpack_entry_t *entries, size_t max_entries, cfgpack_value_t *defaults, cfgpack_parse_error_t *err);
+
+/* Parse schema from JSON file */
+cfgpack_err_t cfgpack_schema_parse_json(const char *path, cfgpack_schema_t *out, cfgpack_entry_t *entries, size_t max_entries, cfgpack_value_t *defaults, cfgpack_parse_error_t *err);
+
 void cfgpack_schema_free(cfgpack_schema_t *schema); /* no-op for caller-owned arrays */
-cfgpack_err_t cfgpack_schema_write_markdown(const cfgpack_schema_t *schema, const char *out_path, cfgpack_parse_error_t *err);
+
+/* Write schema to Markdown */
+cfgpack_err_t cfgpack_schema_write_markdown(const cfgpack_schema_t *schema, const cfgpack_value_t *defaults, const char *out_path, cfgpack_parse_error_t *err);
+
+/* Write schema to JSON */
+cfgpack_err_t cfgpack_schema_write_json(const cfgpack_schema_t *schema, const cfgpack_value_t *defaults, const char *out_path, cfgpack_parse_error_t *err);
+```
+
+#### JSON Schema Format
+Schemas can be read from and written to JSON for interoperability with other tools:
+```json
+{
+  "name": "demo",
+  "version": 1,
+  "entries": [
+    {"index": 0, "name": "speed", "type": "u16", "default": 100},
+    {"index": 1, "name": "label", "type": "fstr", "default": "hello"},
+    {"index": 2, "name": "desc", "type": "str", "default": null}
+  ]
+}
+```
+- `default` is `null` for NIL (no default value)
+- Strings are JSON-escaped
+- Numbers are output as JSON numbers (integers or floats)
 ```
 
 ### Runtime API
@@ -193,6 +221,53 @@ uint32_t cfgpack_get_version(const cfgpack_ctx_t *ctx);
 size_t   cfgpack_get_size(const cfgpack_ctx_t *ctx);
 ```
 
+### Typed Convenience Functions
+For ergonomic access without manually constructing `cfgpack_value_t` structs, use the typed inline functions. All return `cfgpack_err_t` and validate type matches at runtime.
+
+**Setters by index:**
+```c
+cfgpack_set_u8(ctx, index, val)    cfgpack_set_i8(ctx, index, val)
+cfgpack_set_u16(ctx, index, val)   cfgpack_set_i16(ctx, index, val)
+cfgpack_set_u32(ctx, index, val)   cfgpack_set_i32(ctx, index, val)
+cfgpack_set_u64(ctx, index, val)   cfgpack_set_i64(ctx, index, val)
+cfgpack_set_f32(ctx, index, val)   cfgpack_set_f64(ctx, index, val)
+cfgpack_set_str(ctx, index, str, len)
+cfgpack_set_fstr(ctx, index, str, len)
+```
+
+**Setters by name:**
+```c
+cfgpack_set_u8_by_name(ctx, name, val)    cfgpack_set_i8_by_name(ctx, name, val)
+cfgpack_set_u16_by_name(ctx, name, val)   cfgpack_set_i16_by_name(ctx, name, val)
+cfgpack_set_u32_by_name(ctx, name, val)   cfgpack_set_i32_by_name(ctx, name, val)
+cfgpack_set_u64_by_name(ctx, name, val)   cfgpack_set_i64_by_name(ctx, name, val)
+cfgpack_set_f32_by_name(ctx, name, val)   cfgpack_set_f64_by_name(ctx, name, val)
+cfgpack_set_str_by_name(ctx, name, str, len)
+cfgpack_set_fstr_by_name(ctx, name, str, len)
+```
+
+**Getters by index:**
+```c
+cfgpack_get_u8(ctx, index, &out)    cfgpack_get_i8(ctx, index, &out)
+cfgpack_get_u16(ctx, index, &out)   cfgpack_get_i16(ctx, index, &out)
+cfgpack_get_u32(ctx, index, &out)   cfgpack_get_i32(ctx, index, &out)
+cfgpack_get_u64(ctx, index, &out)   cfgpack_get_i64(ctx, index, &out)
+cfgpack_get_f32(ctx, index, &out)   cfgpack_get_f64(ctx, index, &out)
+cfgpack_get_str(ctx, index, &ptr, &len)   // returns pointer + length
+cfgpack_get_fstr(ctx, index, &ptr, &len)  // returns pointer + length
+```
+
+**Getters by name:**
+```c
+cfgpack_get_u8_by_name(ctx, name, &out)    cfgpack_get_i8_by_name(ctx, name, &out)
+cfgpack_get_u16_by_name(ctx, name, &out)   cfgpack_get_i16_by_name(ctx, name, &out)
+cfgpack_get_u32_by_name(ctx, name, &out)   cfgpack_get_i32_by_name(ctx, name, &out)
+cfgpack_get_u64_by_name(ctx, name, &out)   cfgpack_get_i64_by_name(ctx, name, &out)
+cfgpack_get_f32_by_name(ctx, name, &out)   cfgpack_get_f64_by_name(ctx, name, &out)
+cfgpack_get_str_by_name(ctx, name, &ptr, &len)
+cfgpack_get_fstr_by_name(ctx, name, &ptr, &len)
+```
+
 Example (static buffers, max 128 entries):
 ```c
 cfgpack_entry_t entries[128];
@@ -207,10 +282,21 @@ cfgpack_parse_schema("my.map", &schema, entries, 128, defaults, &err);
 cfgpack_init(&ctx, &schema, values, 128, defaults, present, sizeof(present));
 // At this point, entries with defaults are already present and populated
 
+// Using typed convenience functions (recommended):
+uint16_t speed;
+cfgpack_get_u16_by_name(&ctx, "maxsp", &speed);  // may already have default value
+cfgpack_set_u16_by_name(&ctx, "maxsp", 100);
+
+const char *model;
+uint8_t model_len;
+cfgpack_get_fstr_by_name(&ctx, "model", &model, &model_len);
+cfgpack_set_fstr_by_name(&ctx, "model", "MX600", 5);
+
+// Using generic API (for dynamic type handling):
 cfgpack_value_t v;
-cfgpack_get_by_name(&ctx, "speed", &v);  // may already have default value
-v.v.u64 = 42;
-cfgpack_set_by_name(&ctx, "speed", &v);
+cfgpack_get_by_name(&ctx, "maxsp", &v);
+v.v.u64 = 120;
+cfgpack_set_by_name(&ctx, "maxsp", &v);
 
 cfgpack_pageout(&ctx, scratch, sizeof(scratch), &len);
 cfgpack_pagein_buf(&ctx, scratch, len);
@@ -243,7 +329,7 @@ cfgpack_err_t cfgpack_msgpack_decode_map_header(cfgpack_reader_t *r, uint32_t *c
 
 ## Building
 - `make` builds `build/out/libcfgpack.a`.
-- `make tests` builds all test binaries (`build/out/basic`, `build/out/parser`, `build/out/parser_bounds`, `build/out/runtime`).
+- `make tests` builds and runs all test binaries (`build/out/basic`, `build/out/parser`, `build/out/parser_bounds`, `build/out/runtime`).
 
 ## Testing
 - `build/out/basic` exercises set/get/print and type/length checks.
