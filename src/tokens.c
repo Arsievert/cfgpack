@@ -1,7 +1,7 @@
 /* tokens.c
  *
  * Author: Austin Sievert (arsievert1@gmail.com)
- * URL:    https://github.com/arsievert/advent
+ * URL:    https://github.com/arsievert/cfgpack
  *
  * License: MIT
  */
@@ -35,6 +35,13 @@ tokens_create(tokens_t *tokens, uint16_t n, char **provided)
     return -1;
 }
 
+/**
+ * @brief Test whether a character is in the delimiter set.
+ *
+ * @param s Character to test.
+ * @param d NUL-terminated delimiter string.
+ * @return 1 if delimiter, 0 otherwise.
+ */
 static int
 _is_delimeter(char s, const char *d)
 {
@@ -55,6 +62,16 @@ _is_delimeter(char s, const char *d)
     return (0);
 }
 
+/**
+ * @brief Tokenize an input string in-place using delimiters.
+ *
+ * @param tokens       Token container to fill.
+ * @param input        Mutable input string to split (NUL terminators inserted).
+ * @param delimeters   Delimiter characters (string of separators).
+ * @param n_tokens     Maximum tokens to extract.
+ * @param stop_offset  Optional offset where parsing stopped.
+ * @return 0 on success; -1 on invalid args or capacity issues.
+ */
 int
 tokens_find(tokens_t *tokens, char *input, const char *delimeters, uint16_t n_tokens, size_t *stop_offset)
 {

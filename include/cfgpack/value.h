@@ -3,7 +3,9 @@
 
 #include <stdint.h>
 
-/** \brief Supported cfgpack value types. */
+/**
+ * @brief Supported cfgpack value types.
+ */
 typedef enum {
     CFGPACK_TYPE_U8,
     CFGPACK_TYPE_U16,
@@ -19,10 +21,14 @@ typedef enum {
     CFGPACK_TYPE_FSTR
 } cfgpack_type_t;
 
-#define CFGPACK_STR_MAX 64  /**< Maximum variable string length (bytes). */
-#define CFGPACK_FSTR_MAX 16 /**< Maximum fixed string length (bytes). */
+/** Maximum variable string length (bytes). */
+#define CFGPACK_STR_MAX 64
+/** Maximum fixed string length (bytes). */
+#define CFGPACK_FSTR_MAX 16
 
-/** \brief Value container tagged by \c type. */
+/**
+ * @brief Value container tagged by @c type.
+ */
 typedef struct {
     cfgpack_type_t type;
     union {

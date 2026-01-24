@@ -6,17 +6,35 @@
 
 #include "error.h"
 
-/** \brief Fixed-capacity buffer used for msgpack encoding. */
+/**
+ * @brief Fixed-capacity buffer used for MessagePack encoding.
+ */
 typedef struct {
     uint8_t *data;
     size_t len;
     size_t cap;
 } cfgpack_buf_t;
 
+/**
+ * @brief Initialize a fixed-capacity buffer for MessagePack encoding.
+ *
+ * @param buf     Buffer to initialize.
+ * @param storage Caller-provided backing storage.
+ * @param cap     Capacity of @p storage in bytes.
+ */
 void cfgpack_buf_init(cfgpack_buf_t *buf, uint8_t *storage, size_t cap);
+
+/**
+ * @brief Append bytes to a MessagePack buffer.
+ *
+ * @param buf Buffer to append to.
+ * @param src Source bytes to copy.
+ * @param len Number of bytes to append.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_ENCODE if capacity exceeded.
+ */
 cfgpack_err_t cfgpack_buf_append(cfgpack_buf_t *buf, const void *src, size_t len);
 
-/* Encoding helpers (MessagePack subset). */
+/** Encoding helpers (MessagePack subset). */
 cfgpack_err_t cfgpack_msgpack_encode_uint64(cfgpack_buf_t *buf, uint64_t v);
 cfgpack_err_t cfgpack_msgpack_encode_int64(cfgpack_buf_t *buf, int64_t v);
 cfgpack_err_t cfgpack_msgpack_encode_f32(cfgpack_buf_t *buf, float v);
@@ -26,15 +44,25 @@ cfgpack_err_t cfgpack_msgpack_encode_map_header(cfgpack_buf_t *buf, uint32_t cou
 cfgpack_err_t cfgpack_msgpack_encode_uint_key(cfgpack_buf_t *buf, uint64_t v);
 cfgpack_err_t cfgpack_msgpack_encode_str_key(cfgpack_buf_t *buf, const char *s, size_t len);
 
+/**
+ * @brief Reader over a MessagePack buffer.
+ */
 typedef struct {
     const uint8_t *data;
     size_t len;
     size_t pos;
 } cfgpack_reader_t;
 
+/**
+ * @brief Initialize a MessagePack reader.
+ *
+ * @param r    Reader to initialize.
+ * @param data Buffer to read from.
+ * @param len  Length of @p data in bytes.
+ */
 void cfgpack_reader_init(cfgpack_reader_t *r, const uint8_t *data, size_t len);
 
-/* Decoding helpers (MessagePack subset). */
+/** Decoding helpers (MessagePack subset). */
 cfgpack_err_t cfgpack_msgpack_decode_uint64(cfgpack_reader_t *r, uint64_t *out);
 cfgpack_err_t cfgpack_msgpack_decode_int64(cfgpack_reader_t *r, int64_t *out);
 cfgpack_err_t cfgpack_msgpack_decode_f32(cfgpack_reader_t *r, float *out);

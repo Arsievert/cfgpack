@@ -1,7 +1,7 @@
 /* tokens.h
  *
  * Author: Austin Sievert (arsievert1@gmail.com)
- * URL:    https://github.com/arsievert/advent
+ * URL:    https://github.com/arsievert/cfgpack
  *
  * License: MIT
  */

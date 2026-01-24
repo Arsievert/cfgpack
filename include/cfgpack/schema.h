@@ -7,14 +7,18 @@
 #include "value.h"
 #include "error.h"
 
-/** \brief Single entry within a schema. */
+/**
+ * @brief Single entry within a schema.
+ */
 typedef struct {
     uint16_t index;
     char name[6]; /* 5 chars + null */
     cfgpack_type_t type;
 } cfgpack_entry_t;
 
-/** \brief Parsed schema containing metadata and entries. */
+/**
+ * @brief Parsed schema containing metadata and entries.
+ */
 typedef struct {
     char map_name[64];
     uint32_t version;
@@ -22,14 +26,16 @@ typedef struct {
     size_t entry_count;
 } cfgpack_schema_t;
 
-/** \brief Parse error details for schema parsing. */
+/**
+ * @brief Parse error details for schema parsing.
+ */
 typedef struct {
     char message[128];
     size_t line;
 } cfgpack_parse_error_t;
 
 /**
- * \brief Parse a schema file into caller-provided buffers (no heap).
+ * @brief Parse a schema file into caller-provided buffers (no heap).
  *
  * Expected format:
  *   - Header: "<name> <version>" on the first non-comment line.
@@ -41,17 +47,20 @@ typedef struct {
  * @param path        Schema file path to read.
  * @param out_schema  Filled on success; points at caller-owned entries array.
  * @param entries     Caller-owned array to store parsed entries.
- * @param max_entries Capacity of \p entries.
+ * @param max_entries Capacity of @p entries.
  * @param err         Optional parse error info (line/message) on failure.
  * @return CFGPACK_OK on success; CFGPACK_ERR_* on failure.
  */
 cfgpack_err_t cfgpack_parse_schema(const char *path, cfgpack_schema_t *out_schema, cfgpack_entry_t *entries, size_t max_entries, cfgpack_parse_error_t *err);
 
-/** \brief Free schema resources (no-op for caller-owned buffers). */
+/**
+ * @brief Free schema resources (no-op for caller-owned buffers).
+ * @param schema Schema to free.
+ */
 void cfgpack_schema_free(cfgpack_schema_t *schema);
 
 /**
- * \brief Write a simple Markdown table describing the schema.
+ * @brief Write a simple Markdown table describing the schema.
  *
  * @param schema   Schema to describe.
  * @param out_path Output file path for Markdown.
