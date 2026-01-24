@@ -14,6 +14,7 @@ typedef struct {
     uint16_t index;
     char name[6]; /* 5 chars + null */
     cfgpack_type_t type;
+    uint8_t has_default; /* 1 if default value exists, 0 otherwise */
 } cfgpack_entry_t;
 
 /**
@@ -39,7 +40,8 @@ typedef struct {
  *
  * Expected format:
  *   - Header: "<name> <version>" on the first non-comment line.
- *   - Entries: "<index> <name> <type>" on subsequent non-comment lines.
+ *   - Entries: "<index> <name> <type> <default>" on subsequent non-comment lines.
+ *   - Default values: NIL (no default), integer literals, float literals, or "quoted strings".
  * Comments (lines starting with '#') and blank lines are ignored.
  * Fails on duplicates (index or name), name length >5, unsupported type,
  * too many entries, or indices outside 0..65535.
@@ -48,10 +50,11 @@ typedef struct {
  * @param out_schema  Filled on success; points at caller-owned entries array.
  * @param entries     Caller-owned array to store parsed entries.
  * @param max_entries Capacity of @p entries.
+ * @param defaults    Caller-owned array to store default values (parallel to entries).
  * @param err         Optional parse error info (line/message) on failure.
  * @return CFGPACK_OK on success; CFGPACK_ERR_* on failure.
  */
-cfgpack_err_t cfgpack_parse_schema(const char *path, cfgpack_schema_t *out_schema, cfgpack_entry_t *entries, size_t max_entries, cfgpack_parse_error_t *err);
+cfgpack_err_t cfgpack_parse_schema(const char *path, cfgpack_schema_t *out_schema, cfgpack_entry_t *entries, size_t max_entries, cfgpack_value_t *defaults, cfgpack_parse_error_t *err);
 
 /**
  * @brief Free schema resources (no-op for caller-owned buffers).
@@ -63,10 +66,11 @@ void cfgpack_schema_free(cfgpack_schema_t *schema);
  * @brief Write a simple Markdown table describing the schema.
  *
  * @param schema   Schema to describe.
+ * @param defaults Parallel array of default values (same order as schema->entries).
  * @param out_path Output file path for Markdown.
  * @param err      Optional error info on failure.
  * @return CFGPACK_OK on success; CFGPACK_ERR_IO on write failure.
  */
-cfgpack_err_t cfgpack_schema_write_markdown(const cfgpack_schema_t *schema, const char *out_path, cfgpack_parse_error_t *err);
+cfgpack_err_t cfgpack_schema_write_markdown(const cfgpack_schema_t *schema, const cfgpack_value_t *defaults, const char *out_path, cfgpack_parse_error_t *err);
 
 #endif /* CFGPACK_SCHEMA_H */

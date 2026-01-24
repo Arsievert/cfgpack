@@ -8,10 +8,11 @@
 TEST_CASE(test_parse_ok) {
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
+    cfgpack_value_t defaults[128];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
-    rc = cfgpack_parse_schema("tests/data/sample.map", &schema, entries, 128, &err);
+    rc = cfgpack_parse_schema("tests/data/sample.map", &schema, entries, 128, defaults, &err);
     CHECK(rc == CFGPACK_OK);
     CHECK(schema.entry_count == 15);
     CHECK(schema.version == 1);
@@ -29,15 +30,16 @@ TEST_CASE(test_parse_bad_type) {
     FILE *f;
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
+    cfgpack_value_t defaults[128];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
     f = fopen(path, "w");
     CHECK(f != NULL);
-    fprintf(f, "demo 1\n0 foo nope\n");
+    fprintf(f, "demo 1\n0 foo nope NIL  # invalid type should fail\n");
     fclose(f);
 
-    rc = cfgpack_parse_schema(path, &schema, entries, 128, &err);
+    rc = cfgpack_parse_schema(path, &schema, entries, 128, defaults, &err);
     CHECK(rc == CFGPACK_ERR_INVALID_TYPE);
     return (TEST_OK);
 }
@@ -47,15 +49,16 @@ TEST_CASE(test_parse_duplicate_index) {
     FILE *f;
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
+    cfgpack_value_t defaults[128];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
     f = fopen(path, "w");
     CHECK(f != NULL);
-    fprintf(f, "demo 1\n0 foo u8\n0 bar u8\n");
+    fprintf(f, "demo 1\n0 foo u8 0  # first entry\n0 bar u8 0  # duplicate index\n");
     fclose(f);
 
-    rc = cfgpack_parse_schema(path, &schema, entries, 128, &err);
+    rc = cfgpack_parse_schema(path, &schema, entries, 128, defaults, &err);
     CHECK(rc == CFGPACK_ERR_DUPLICATE);
     return (TEST_OK);
 }
@@ -68,9 +71,9 @@ int main(void) {
     overall |= (test_case_result("dup_index", test_parse_duplicate_index()) != TEST_OK);
 
     if (overall == TEST_OK) {
-        printf("ALL PASS\n");
+        printf(COLOR_GREEN "ALL PASS" COLOR_RESET "\n");
     } else {
-        printf("SOME FAIL\n");
+        printf(COLOR_RED "SOME FAIL" COLOR_RESET "\n");
     }
     return (overall);
 }

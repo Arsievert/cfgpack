@@ -17,6 +17,7 @@ static void make_schema(cfgpack_schema_t *schema, cfgpack_entry_t *entries, size
         entries[i].index = (uint16_t)i;
         snprintf(entries[i].name, sizeof(entries[i].name), "e%zu", i);
         entries[i].type = CFGPACK_TYPE_U8;
+        entries[i].has_default = 0;
     }
 }
 
@@ -25,15 +26,16 @@ TEST_CASE(test_init_bounds) {
     cfgpack_entry_t entries[2];
     cfgpack_ctx_t ctx;
     cfgpack_value_t values[2];
+    cfgpack_value_t defaults[2];
     uint8_t present[1];
 
     make_schema(&schema, entries, 2);
 
     /* too few values */
-    CHECK(cfgpack_init(&ctx, &schema, values, 1, present, sizeof(present)) == CFGPACK_ERR_BOUNDS);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults, present, sizeof(present)) == CFGPACK_ERR_BOUNDS);
 
     /* too few present bytes */
-    CHECK(cfgpack_init(&ctx, &schema, values, 2, present, 0) == CFGPACK_ERR_BOUNDS);
+    CHECK(cfgpack_init(&ctx, &schema, values, 2, defaults, present, 0) == CFGPACK_ERR_BOUNDS);
     return (TEST_OK);
 }
 
@@ -42,10 +44,11 @@ TEST_CASE(test_pagein_zero_len) {
     cfgpack_entry_t entries[1];
     cfgpack_ctx_t ctx;
     cfgpack_value_t values[1];
+    cfgpack_value_t defaults[1];
     uint8_t present[1];
 
     make_schema(&schema, entries, 1);
-    CHECK(cfgpack_init(&ctx, &schema, values, 1, present, sizeof(present)) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults, present, sizeof(present)) == CFGPACK_OK);
     CHECK(cfgpack_pagein_buf(&ctx, NULL, 0) == CFGPACK_ERR_DECODE);
     return (TEST_OK);
 }
@@ -55,11 +58,12 @@ TEST_CASE(test_pagein_file_small_scratch) {
     cfgpack_entry_t entries[1];
     cfgpack_ctx_t ctx;
     cfgpack_value_t values[1];
+    cfgpack_value_t defaults[1];
     uint8_t present[1];
     uint8_t scratch[1];
 
     make_schema(&schema, entries, 1);
-    CHECK(cfgpack_init(&ctx, &schema, values, 1, present, sizeof(present)) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults, present, sizeof(present)) == CFGPACK_OK);
     CHECK(cfgpack_pagein_file(&ctx, "tests/data/sample.map", scratch, sizeof(scratch)) == CFGPACK_ERR_IO);
     return (TEST_OK);
 }
@@ -69,13 +73,14 @@ TEST_CASE(test_pageout_too_large) {
     cfgpack_entry_t entries[1];
     cfgpack_ctx_t ctx;
     cfgpack_value_t values[1];
+    cfgpack_value_t defaults[1];
     uint8_t present[1];
     uint8_t out[8];
     cfgpack_value_t v;
     size_t out_len = 0;
 
     make_schema(&schema, entries, 1);
-    CHECK(cfgpack_init(&ctx, &schema, values, 1, present, sizeof(present)) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults, present, sizeof(present)) == CFGPACK_OK);
     v.type = CFGPACK_TYPE_U8;
     v.v.u64 = 1;
     CHECK(cfgpack_set(&ctx, 0, &v) == CFGPACK_OK);
@@ -99,12 +104,13 @@ TEST_CASE(test_decode_unknown_key) {
     cfgpack_entry_t entries[1];
     cfgpack_ctx_t ctx;
     cfgpack_value_t values[1];
+    cfgpack_value_t defaults[1];
     uint8_t present[1];
     uint8_t buf[64];
     size_t len = 0;
 
     make_schema(&schema, entries, 1);
-    CHECK(cfgpack_init(&ctx, &schema, values, 1, present, sizeof(present)) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults, present, sizeof(present)) == CFGPACK_OK);
     craft_map_with_unknown_key(buf, &len);
     CHECK(cfgpack_pagein_buf(&ctx, buf, len) == CFGPACK_ERR_DECODE);
     return (TEST_OK);
@@ -115,13 +121,14 @@ TEST_CASE(test_type_mismatch_and_len) {
     cfgpack_entry_t entries[2];
     cfgpack_ctx_t ctx;
     cfgpack_value_t values[2];
+    cfgpack_value_t defaults[2];
     uint8_t present[(2+7)/8];
     cfgpack_value_t v;
 
     make_schema(&schema, entries, 2);
     entries[1].type = CFGPACK_TYPE_STR;
 
-    CHECK(cfgpack_init(&ctx, &schema, values, 2, present, sizeof(present)) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 2, defaults, present, sizeof(present)) == CFGPACK_OK);
 
     v.type = CFGPACK_TYPE_STR;
     v.v.str.len = CFGPACK_STR_MAX + 1;
@@ -138,13 +145,14 @@ TEST_CASE(test_presence_reset) {
     cfgpack_entry_t entries[2];
     cfgpack_ctx_t ctx;
     cfgpack_value_t values[2];
+    cfgpack_value_t defaults[2];
     uint8_t present[(2+7)/8];
     cfgpack_value_t v;
     uint8_t buf[128];
     size_t len = 0;
 
     make_schema(&schema, entries, 2);
-    CHECK(cfgpack_init(&ctx, &schema, values, 2, present, sizeof(present)) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 2, defaults, present, sizeof(present)) == CFGPACK_OK);
 
     v.type = CFGPACK_TYPE_U8; v.v.u64 = 1; CHECK(cfgpack_set(&ctx, 0, &v) == CFGPACK_OK);
     v.type = CFGPACK_TYPE_U8; v.v.u64 = 2; CHECK(cfgpack_set(&ctx, 1, &v) == CFGPACK_OK);
@@ -168,13 +176,14 @@ TEST_CASE(test_pageout_file_roundtrip_and_io) {
     cfgpack_entry_t entries[1];
     cfgpack_ctx_t ctx;
     cfgpack_value_t values[1];
+    cfgpack_value_t defaults[1];
     uint8_t present[1];
     cfgpack_value_t v;
     uint8_t scratch[64];
     const char *path = "build/runtime_tmp.bin";
 
     make_schema(&schema, entries, 1);
-    CHECK(cfgpack_init(&ctx, &schema, values, 1, present, sizeof(present)) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults, present, sizeof(present)) == CFGPACK_OK);
 
     v.type = CFGPACK_TYPE_U8; v.v.u64 = 9;
     CHECK(cfgpack_set(&ctx, 0, &v) == CFGPACK_OK);
@@ -198,12 +207,13 @@ TEST_CASE(test_pageout_empty_map) {
     cfgpack_entry_t entries[2];
     cfgpack_ctx_t ctx;
     cfgpack_value_t values[2];
+    cfgpack_value_t defaults[2];
     uint8_t present[(2+7)/8];
     uint8_t buf[16];
     size_t len = 0;
 
     make_schema(&schema, entries, 2);
-    CHECK(cfgpack_init(&ctx, &schema, values, 2, present, sizeof(present)) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 2, defaults, present, sizeof(present)) == CFGPACK_OK);
     CHECK(cfgpack_pageout(&ctx, buf, sizeof(buf), &len) == CFGPACK_OK);
     /* Expect a tiny map header: fixmap 0x80 */
     CHECK(len == 1);
@@ -216,6 +226,7 @@ TEST_CASE(test_pageout_min_buffer) {
     cfgpack_entry_t entries[1];
     cfgpack_ctx_t ctx;
     cfgpack_value_t values[1];
+    cfgpack_value_t defaults[1];
     uint8_t present[1];
     uint8_t buf[12]; /* minimum headroom path */
     uint8_t small[11];
@@ -223,7 +234,7 @@ TEST_CASE(test_pageout_min_buffer) {
     size_t len = 0;
 
     make_schema(&schema, entries, 1);
-    CHECK(cfgpack_init(&ctx, &schema, values, 1, present, sizeof(present)) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults, present, sizeof(present)) == CFGPACK_OK);
     v.type = CFGPACK_TYPE_U8; v.v.u64 = 1; CHECK(cfgpack_set(&ctx, 0, &v) == CFGPACK_OK);
 
     CHECK(cfgpack_pageout(&ctx, buf, sizeof(buf), &len) == CFGPACK_OK);
@@ -237,13 +248,14 @@ TEST_CASE(test_pagein_type_mismatch_map_payload) {
     cfgpack_entry_t entries[1];
     cfgpack_ctx_t ctx;
     cfgpack_value_t values[1];
+    cfgpack_value_t defaults[1];
     uint8_t present[1];
     uint8_t buf[8];
     cfgpack_buf_t b;
 
     make_schema(&schema, entries, 1);
     entries[0].type = CFGPACK_TYPE_STR;
-    CHECK(cfgpack_init(&ctx, &schema, values, 1, present, sizeof(present)) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults, present, sizeof(present)) == CFGPACK_OK);
 
     cfgpack_buf_init(&b, buf, sizeof(buf));
     CHECK(cfgpack_msgpack_encode_map_header(&b, 1) == CFGPACK_OK);
@@ -259,11 +271,12 @@ TEST_CASE(test_pagein_declared_pairs_exceeds_payload) {
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[1];
     cfgpack_value_t values[1];
+    cfgpack_value_t defaults[1];
     uint8_t present[1];
     uint8_t buf[] = {0x81, 0x00 /* key missing value */};
 
     make_schema(&schema, entries, 1);
-    CHECK(cfgpack_init(&ctx, &schema, values, 1, present, sizeof(present)) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults, present, sizeof(present)) == CFGPACK_OK);
     CHECK(cfgpack_pagein_buf(&ctx, buf, sizeof(buf)) == CFGPACK_ERR_DECODE);
     return (TEST_OK);
 }
@@ -273,6 +286,7 @@ TEST_CASE(test_pageout_pagein_all_types) {
     cfgpack_entry_t entries[12];
     cfgpack_ctx_t ctx;
     cfgpack_value_t values[12];
+    cfgpack_value_t defaults[12];
     uint8_t present[(12 + 7) / 8];
     uint8_t scratch[512];
     const char *path = "build/runtime_all.bin";
@@ -292,7 +306,7 @@ TEST_CASE(test_pageout_pagein_all_types) {
     entries[10].type = CFGPACK_TYPE_STR;
     entries[11].type = CFGPACK_TYPE_FSTR;
 
-    CHECK(cfgpack_init(&ctx, &schema, values, 12, present, sizeof(present)) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 12, defaults, present, sizeof(present)) == CFGPACK_OK);
 
     cfgpack_value_t v;
     v.type = CFGPACK_TYPE_U8; v.v.u64 = 1; CHECK(cfgpack_set(&ctx, 0, &v) == CFGPACK_OK);
@@ -342,12 +356,16 @@ int main(void) {
     overall |= (test_case_result("type_mismatch_and_len", test_type_mismatch_and_len()) != TEST_OK);
     overall |= (test_case_result("presence_reset", test_presence_reset()) != TEST_OK);
     overall |= (test_case_result("pageout_file_roundtrip_and_io", test_pageout_file_roundtrip_and_io()) != TEST_OK);
+    overall |= (test_case_result("pageout_empty_map", test_pageout_empty_map()) != TEST_OK);
+    overall |= (test_case_result("pageout_min_buffer", test_pageout_min_buffer()) != TEST_OK);
+    overall |= (test_case_result("pagein_type_mismatch_map_payload", test_pagein_type_mismatch_map_payload()) != TEST_OK);
+    overall |= (test_case_result("pagein_declared_pairs_exceeds_payload", test_pagein_declared_pairs_exceeds_payload()) != TEST_OK);
     overall |= (test_case_result("pageout_pagein_all_types", test_pageout_pagein_all_types()) != TEST_OK);
 
     if (overall == TEST_OK) {
-        printf("ALL PASS\n");
+        printf(COLOR_GREEN "ALL PASS" COLOR_RESET "\n");
     } else {
-        printf("SOME FAIL\n");
+        printf(COLOR_RED "SOME FAIL" COLOR_RESET "\n");
     }
     return (overall);
 }

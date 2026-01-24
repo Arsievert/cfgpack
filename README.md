@@ -7,6 +7,7 @@ This repository is the C-first implementation of a MessagePack-based configurati
 ## What It Does
 - Defines a fixed-cap schema (up to 128 entries) with typed values (u/i 8–64, f32/f64, str/fstr) and 5-char names.
 - Parses `.map` specs into caller-owned schema + entries; no heap allocations.
+- Supports **default values** for schema entries, automatically applied at initialization.
 - Initializes runtime with caller-provided value and presence buffers; tracks presence bits and supports set/get/print/size/version.
 - Supports set/get by index and by schema name with type/length validation.
 - Encodes/decodes MessagePack maps; pageout to buffer or file, pagein from buffer or file, with size caps.
@@ -14,12 +15,23 @@ This repository is the C-first implementation of a MessagePack-based configurati
 
 ## Map Format
 - First line: map name/version header saved with the config.
-- Lines follow the format (verbatim): `[INDEX] [NAME] [TYPE] (Description)`
+- Lines follow the format: `INDEX NAME TYPE DEFAULT  # optional description`
   - `INDEX`: 0–65535
   - `NAME`: up to 5 characters
   - `TYPE`: one of the supported numeric/float/string types (str max 64, fstr max 16)
-  - `Description`: optional, not stored in the binary
+  - `DEFAULT`: default value for this entry (see below)
+  - `# description`: optional trailing comment for documentation (not stored in binary)
+- Comments: lines starting with `#` are ignored; inline `#` comments after the default value are also ignored.
 - Hard caps in this profile: 128 entries, 4096-byte page size.
+
+### Default Values
+Each schema entry requires a default value specification:
+- `NIL` — no default; value must be explicitly set before use
+- Integer literals: `0`, `42`, `-5`, `0xFF`, `0b1010`
+- Float literals: `3.14`, `-1.5e-3`, `0.0`
+- Quoted strings: `"hello"`, `""`, `"default value"`
+
+Entries with defaults are automatically marked as present when `cfgpack_init()` is called.
 
 ### Example Schema
 Below is a well-documented example `.map` file demonstrating the schema format:
@@ -33,39 +45,41 @@ vehicle 1
 # ─────────────────────────────────────────────────────────────────────────────
 # IDENTIFICATION
 # ─────────────────────────────────────────────────────────────────────────────
-0  id     u32   (Unique vehicle identifier, assigned at manufacture)
-1  model  fstr  (Model code, e.g. "MX500" - max 16 chars)
-2  vin    str   (Vehicle identification number - max 64 chars)
+0  id     u32   0        # Unique vehicle identifier, assigned at manufacture
+1  model  fstr  "MX500"  # Model code, e.g. "MX500" - max 16 chars
+2  vin    str   NIL      # Vehicle identification number - max 64 chars
 
 # ─────────────────────────────────────────────────────────────────────────────
 # OPERATIONAL LIMITS
 # ─────────────────────────────────────────────────────────────────────────────
-10 maxsp  u16   (Maximum speed in km/h, range 0-65535)
-11 minsp  u16   (Minimum speed in km/h before idle shutdown)
-12 accel  f32   (Acceleration limit in m/s^2)
-13 decel  f32   (Deceleration limit in m/s^2)
+10 maxsp  u16   120      # Maximum speed in km/h, range 0-65535
+11 minsp  u16   5        # Minimum speed in km/h before idle shutdown
+12 accel  f32   2.5      # Acceleration limit in m/s^2
+13 decel  f32   -3.0     # Deceleration limit in m/s^2
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SENSOR CALIBRATION
 # ─────────────────────────────────────────────────────────────────────────────
-20 toff   i8    (Temperature sensor offset in degrees C, -128 to 127)
-21 pscal  f64   (Pressure sensor scale factor, high precision)
-22 flags  u8    (Sensor enable bitmask: bit0=temp, bit1=pressure, bit2=gps)
+20 toff   i8    0        # Temperature sensor offset in degrees C, -128 to 127
+21 pscal  f64   1.0      # Pressure sensor scale factor, high precision
+22 flags  u8    0x07     # Sensor enable bitmask: bit0=temp, bit1=pressure, bit2=gps
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TELEMETRY
 # ─────────────────────────────────────────────────────────────────────────────
-30 tint   u32   (Telemetry reporting interval in milliseconds)
-31 turl   str   (Telemetry endpoint URL - max 64 chars)
-32 tkey   fstr  (Telemetry API key - max 16 chars, stored fixed-length)
+30 tint   u32   1000     # Telemetry reporting interval in milliseconds
+31 turl   str   ""       # Telemetry endpoint URL - max 64 chars
+32 tkey   fstr  NIL      # Telemetry API key - max 16 chars, stored fixed-length
 ```
 
 **Key points illustrated:**
 - **Header line**: `vehicle 1` sets map name to "vehicle" and version to 1.
-- **Comments**: Lines starting with `#` are ignored; use them for documentation.
+- **Comments**: Lines starting with `#` are ignored; use them for section headers and documentation.
+- **Inline comments**: Text after `#` on entry lines documents each field but is not stored in binary output.
 - **Index gaps**: Indices need not be contiguous (0, 1, 2, then 10, 11, ...).
 - **Type variety**: Shows u8/u16/u32, i8, f32/f64, str (variable up to 64), fstr (fixed up to 16).
-- **Descriptions**: Parenthesized text documents each field but is not stored in binary output.
+- **Default values**: Each entry specifies a default—`NIL` for required fields, literals for optional fields with sensible defaults.
+- **Hex literals**: `0x07` shows hexadecimal notation for bitmasks.
 
 
 ## Layout
@@ -133,9 +147,10 @@ typedef struct {
 #include "cfgpack/schema.h"
 
 typedef struct {
-    uint16_t index;      /* 0-65535 */
-    char     name[6];    /* 5 chars + NUL */
-    cfgpack_type_t type; /* one of the supported types */
+    uint16_t index;       /* 0-65535 */
+    char     name[6];     /* 5 chars + NUL */
+    cfgpack_type_t type;  /* one of the supported types */
+    uint8_t  has_default; /* 1 if default value exists, 0 otherwise */
 } cfgpack_entry_t;
 
 typedef struct {
@@ -145,7 +160,7 @@ typedef struct {
     size_t entry_count;
 } cfgpack_schema_t;
 
-cfgpack_err_t cfgpack_parse_schema(const char *path, cfgpack_schema_t *out, cfgpack_entry_t *entries, size_t max_entries, cfgpack_parse_error_t *err);
+cfgpack_err_t cfgpack_parse_schema(const char *path, cfgpack_schema_t *out, cfgpack_entry_t *entries, size_t max_entries, cfgpack_value_t *defaults, cfgpack_parse_error_t *err);
 void cfgpack_schema_free(cfgpack_schema_t *schema); /* no-op for caller-owned arrays */
 cfgpack_err_t cfgpack_schema_write_markdown(const cfgpack_schema_t *schema, const char *out_path, cfgpack_parse_error_t *err);
 ```
@@ -156,8 +171,10 @@ cfgpack_err_t cfgpack_schema_write_markdown(const cfgpack_schema_t *schema, cons
 
 cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx, const cfgpack_schema_t *schema,
                            cfgpack_value_t *values, size_t values_count,
+                           const cfgpack_value_t *defaults,
                            uint8_t *present, size_t present_bytes);
 void          cfgpack_free(cfgpack_ctx_t *ctx);
+void          cfgpack_reset_to_defaults(cfgpack_ctx_t *ctx);
 
 cfgpack_err_t cfgpack_set(cfgpack_ctx_t *ctx, uint16_t index, const cfgpack_value_t *value);
 cfgpack_err_t cfgpack_get(const cfgpack_ctx_t *ctx, uint16_t index, cfgpack_value_t *out_value);
@@ -179,17 +196,19 @@ size_t   cfgpack_get_size(const cfgpack_ctx_t *ctx);
 Example (static buffers, max 128 entries):
 ```c
 cfgpack_entry_t entries[128];
+cfgpack_value_t defaults[128];
 cfgpack_schema_t schema;
 cfgpack_parse_error_t err;
 cfgpack_value_t values[128];
 uint8_t present[(128+7)/8];
 uint8_t scratch[4096];
 
-cfgpack_parse_schema("my.map", &schema, entries, 128, &err);
-cfgpack_init(&ctx, &schema, values, 128, present, sizeof(present));
+cfgpack_parse_schema("my.map", &schema, entries, 128, defaults, &err);
+cfgpack_init(&ctx, &schema, values, 128, defaults, present, sizeof(present));
+// At this point, entries with defaults are already present and populated
 
 cfgpack_value_t v;
-cfgpack_get_by_name(&ctx, "speed", &v);
+cfgpack_get_by_name(&ctx, "speed", &v);  // may already have default value
 v.v.u64 = 42;
 cfgpack_set_by_name(&ctx, "speed", &v);
 

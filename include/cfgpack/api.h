@@ -14,6 +14,7 @@ typedef struct {
     const cfgpack_schema_t *schema; /**< Pointer to schema describing entries. */
     cfgpack_value_t *values;        /**< Caller-provided value slots (size = entry_count). */
     size_t values_count;            /**< Number of value slots available. */
+    const cfgpack_value_t *defaults;/**< Pointer to defaults array (parallel to entries). */
     uint8_t *present;               /**< Presence bitmap (entry_count bits). */
     size_t present_bytes;           /**< Size of presence bitmap in bytes. */
 } cfgpack_ctx_t;
@@ -38,23 +39,37 @@ static inline int cfgpack_presence_get(const cfgpack_ctx_t *ctx, size_t idx) {
 }
 
 /**
- * @brief Initialize context with caller buffers; zeroes values and presence.
+ * @brief Initialize context with caller buffers; applies schema defaults.
+ *
+ * Zeroes values and presence, then applies default values for any
+ * schema entries that have has_default=1 (marking them as present).
  *
  * @param ctx            Context to initialize (output).
  * @param schema         Parsed schema describing entries; must outlive ctx.
  * @param values         Caller-owned array of value slots (>= entry_count).
  * @param values_count   Number of elements in @p values.
+ * @param defaults       Caller-owned array of default values (parallel to schema entries).
  * @param present        Caller-owned bitmap buffer (>= (entry_count+7)/8 bytes).
  * @param present_bytes  Size of @p present in bytes.
  * @return CFGPACK_OK on success; CFGPACK_ERR_BOUNDS if buffers are too small.
  */
-cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx, const cfgpack_schema_t *schema, cfgpack_value_t *values, size_t values_count, uint8_t *present, size_t present_bytes);
+cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx, const cfgpack_schema_t *schema, cfgpack_value_t *values, size_t values_count, const cfgpack_value_t *defaults, uint8_t *present, size_t present_bytes);
 
 /**
  * @brief No-op cleanup (buffers are caller-owned).
  * @param ctx Context to release (no-op).
  */
 void cfgpack_free(cfgpack_ctx_t *ctx);
+
+/**
+ * @brief Reset all values to their defaults.
+ *
+ * Clears all values and presence bits, then re-applies default values
+ * for entries that have has_default=1 (marking them as present).
+ *
+ * @param ctx Initialized context.
+ */
+void cfgpack_reset_to_defaults(cfgpack_ctx_t *ctx);
 
 /**
  * @brief Set a value by schema index; validates type and string lengths.

@@ -42,7 +42,8 @@ $(OBJ)/%.o: %.c
 	@echo "CC $<"
 	@$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -MJ $(JSON)/$(@F).json -c $< -o $@
 
-tests: $(TESTBINS) ## Build all test binaries
+tests: $(TESTBINS) ## Build and run all tests
+	@for t in $(TESTBINS); do ./$$t || exit 1; done
 
 $(OUT)/%: $(OBJ)/tests/%.o $(TESTCOMMON) $(LIB)
 	@mkdir -p $(OUT)

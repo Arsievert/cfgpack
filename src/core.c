@@ -56,13 +56,14 @@ static size_t entry_offset(const cfgpack_schema_t *schema, const cfgpack_entry_t
     return (size_t)(entry - schema->entries);
 }
 
-cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx, const cfgpack_schema_t *schema, cfgpack_value_t *values, size_t values_count, uint8_t *present, size_t present_bytes) {
+cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx, const cfgpack_schema_t *schema, cfgpack_value_t *values, size_t values_count, const cfgpack_value_t *defaults, uint8_t *present, size_t present_bytes) {
     size_t needed_bits = (schema->entry_count + 7) / 8;
 
     memset(ctx, 0, sizeof(*ctx));
     ctx->schema = schema;
     ctx->values = values;
     ctx->values_count = values_count;
+    ctx->defaults = defaults;
     ctx->present = present;
     ctx->present_bytes = present_bytes;
 
@@ -71,11 +72,36 @@ cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx, const cfgpack_schema_t *schema, c
     }
     memset(ctx->values, 0, values_count * sizeof(cfgpack_value_t));
     memset(ctx->present, 0, present_bytes);
+
+    /* Apply default values for entries that have them */
+    for (size_t i = 0; i < schema->entry_count; ++i) {
+        if (schema->entries[i].has_default) {
+            ctx->values[i] = defaults[i];
+            cfgpack_presence_set(ctx, i);
+        }
+    }
+
     return (CFGPACK_OK);
 }
 
 void cfgpack_free(cfgpack_ctx_t *ctx) {
     (void)ctx; /* no-op: caller owns buffers */
+}
+
+void cfgpack_reset_to_defaults(cfgpack_ctx_t *ctx) {
+    const cfgpack_schema_t *schema = ctx->schema;
+
+    /* Clear all values and presence bits */
+    memset(ctx->values, 0, ctx->values_count * sizeof(cfgpack_value_t));
+    memset(ctx->present, 0, ctx->present_bytes);
+
+    /* Re-apply default values for entries that have them */
+    for (size_t i = 0; i < schema->entry_count; ++i) {
+        if (schema->entries[i].has_default) {
+            ctx->values[i] = ctx->defaults[i];
+            cfgpack_presence_set(ctx, i);
+        }
+    }
 }
 
 static int type_matches(cfgpack_type_t expect, const cfgpack_value_t *v) {
