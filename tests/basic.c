@@ -49,6 +49,23 @@ TEST_CASE(test_basic_case) {
     CHECK(rc == CFGPACK_OK);
     CHECK(out.v.str.len == 3);
 
+    /* name-based access */
+    rc = cfgpack_get_by_name(&ctx, "a", &out);
+    CHECK(rc == CFGPACK_OK);
+    CHECK(out.v.u64 == 5);
+
+    rc = cfgpack_get_by_name(&ctx, "b", &out);
+    CHECK(rc == CFGPACK_OK);
+    CHECK(out.v.str.len == 3);
+
+    /* name-based set */
+    v1.v.u64 = 9;
+    rc = cfgpack_set_by_name(&ctx, "a", &v1);
+    CHECK(rc == CFGPACK_OK);
+    rc = cfgpack_get(&ctx, 1, &out);
+    CHECK(rc == CFGPACK_OK);
+    CHECK(out.v.u64 == 9);
+
     rc = cfgpack_pageout(&ctx, buf, sizeof(buf), &out_len);
     CHECK(rc == CFGPACK_OK);
 
@@ -59,7 +76,11 @@ TEST_CASE(test_basic_case) {
     CHECK(rc == CFGPACK_OK);
     rc = cfgpack_get(&ctx, 1, &out);
     CHECK(rc == CFGPACK_OK);
-    CHECK(out.v.u64 == 5);
+    CHECK(out.v.u64 == 9);
+
+    rc = cfgpack_get_by_name(&ctx, "a", &out);
+    CHECK(rc == CFGPACK_OK);
+    CHECK(out.v.u64 == 9);
 
     cfgpack_free(&ctx);
     return (TEST_OK);

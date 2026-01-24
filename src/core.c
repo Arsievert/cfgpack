@@ -1,11 +1,15 @@
 #include "cfgpack/api.h"
-#include "cfgpack/error.h"
-#include "cfgpack/value.h"
-#include "cfgpack/schema.h"
 
 #include <string.h>
 #include <stdio.h>
 
+/**
+ * @brief Find a schema entry by index using binary search.
+ *
+ * @param schema Schema containing sorted entries.
+ * @param index  Entry index to locate.
+ * @return Pointer to entry or NULL if not found.
+ */
 static const cfgpack_entry_t *find_entry(const cfgpack_schema_t *schema, uint16_t index) {
     size_t lo = 0;
     size_t hi = schema->entry_count;
@@ -25,6 +29,29 @@ static const cfgpack_entry_t *find_entry(const cfgpack_schema_t *schema, uint16_
     return NULL;
 }
 
+/**
+ * @brief Find a schema entry by name using linear search.
+ *
+ * @param schema Schema containing entries.
+ * @param name   Entry name to locate (NUL-terminated).
+ * @return Pointer to entry or NULL if not found.
+ */
+static const cfgpack_entry_t *find_entry_by_name(const cfgpack_schema_t *schema, const char *name) {
+    for (size_t i = 0; i < schema->entry_count; ++i) {
+        if (strcmp(schema->entries[i].name, name) == 0) {
+            return &schema->entries[i];
+        }
+    }
+    return NULL;
+}
+
+/**
+ * @brief Compute offset of an entry within the schema entries array.
+ *
+ * @param schema Schema containing the entry.
+ * @param entry  Entry pointer inside @p schema.
+ * @return Zero-based offset for the entry.
+ */
 static size_t entry_offset(const cfgpack_schema_t *schema, const cfgpack_entry_t *entry) {
     return (size_t)(entry - schema->entries);
 }
@@ -79,6 +106,61 @@ cfgpack_err_t cfgpack_set(cfgpack_ctx_t *ctx, uint16_t index, const cfgpack_valu
 
 cfgpack_err_t cfgpack_get(const cfgpack_ctx_t *ctx, uint16_t index, cfgpack_value_t *out_value) {
     const cfgpack_entry_t *entry = find_entry(ctx->schema, index);
+    size_t off;
+
+    if (!entry) {
+        return (CFGPACK_ERR_MISSING);
+    }
+    off = entry_offset(ctx->schema, entry);
+    if (!cfgpack_presence_get(ctx, off)) {
+        return (CFGPACK_ERR_MISSING);
+    }
+    *out_value = ctx->values[off];
+    return (CFGPACK_OK);
+}
+
+/**
+ * @brief Set a value by schema name; validates type and string lengths.
+ *
+ * @param ctx   Initialized context.
+ * @param name  Schema name to set (NUL-terminated, up to 5 chars).
+ * @param value Value to store (type must match schema entry).
+ * @return CFGPACK_OK on success; CFGPACK_ERR_MISSING if name not in schema;
+ *         CFGPACK_ERR_TYPE_MISMATCH for wrong type; CFGPACK_ERR_STR_TOO_LONG
+ *         if string exceeds limits.
+ */
+cfgpack_err_t cfgpack_set_by_name(cfgpack_ctx_t *ctx, const char *name, const cfgpack_value_t *value) {
+    const cfgpack_entry_t *entry = find_entry_by_name(ctx->schema, name);
+    size_t off;
+
+    if (!entry) {
+        return (CFGPACK_ERR_MISSING);
+    }
+    if (!type_matches(entry->type, value)) {
+        return (CFGPACK_ERR_TYPE_MISMATCH);
+    }
+    if (value->type == CFGPACK_TYPE_STR && value->v.str.len > CFGPACK_STR_MAX) {
+        return (CFGPACK_ERR_STR_TOO_LONG);
+    }
+    if (value->type == CFGPACK_TYPE_FSTR && value->v.fstr.len > CFGPACK_FSTR_MAX) {
+        return (CFGPACK_ERR_STR_TOO_LONG);
+    }
+    off = entry_offset(ctx->schema, entry);
+    ctx->values[off] = *value;
+    cfgpack_presence_set(ctx, off);
+    return (CFGPACK_OK);
+}
+
+/**
+ * @brief Get a value by schema name; fails if not present.
+ *
+ * @param ctx       Initialized context.
+ * @param name      Schema name to retrieve (NUL-terminated, up to 5 chars).
+ * @param out_value Filled on success.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_MISSING if absent or unknown.
+ */
+cfgpack_err_t cfgpack_get_by_name(const cfgpack_ctx_t *ctx, const char *name, cfgpack_value_t *out_value) {
+    const cfgpack_entry_t *entry = find_entry_by_name(ctx->schema, name);
     size_t off;
 
     if (!entry) {

@@ -8,6 +8,7 @@ This repository is the C-first implementation of a MessagePack-based configurati
 - Defines a fixed-cap schema (up to 128 entries) with typed values (u/i 8–64, f32/f64, str/fstr) and 5-char names.
 - Parses `.map` specs into caller-owned schema + entries; no heap allocations.
 - Initializes runtime with caller-provided value and presence buffers; tracks presence bits and supports set/get/print/size/version.
+- Supports set/get by index and by schema name with type/length validation.
 - Encodes/decodes MessagePack maps; pageout to buffer or file, pagein from buffer or file, with size caps.
 - Returns explicit errors for parse/encode/decode/type/bounds/IO issues.
 
@@ -113,6 +114,8 @@ void          cfgpack_free(cfgpack_ctx_t *ctx);
 
 cfgpack_err_t cfgpack_set(cfgpack_ctx_t *ctx, uint16_t index, const cfgpack_value_t *value);
 cfgpack_err_t cfgpack_get(const cfgpack_ctx_t *ctx, uint16_t index, cfgpack_value_t *out_value);
+cfgpack_err_t cfgpack_set_by_name(cfgpack_ctx_t *ctx, const char *name, const cfgpack_value_t *value);
+cfgpack_err_t cfgpack_get_by_name(const cfgpack_ctx_t *ctx, const char *name, cfgpack_value_t *out_value);
 
 cfgpack_err_t cfgpack_pageout(const cfgpack_ctx_t *ctx, uint8_t *out, size_t out_cap, size_t *out_len);
 cfgpack_err_t cfgpack_pageout_file(const cfgpack_ctx_t *ctx, const char *path, uint8_t *scratch, size_t scratch_cap);
@@ -137,6 +140,12 @@ uint8_t scratch[4096];
 
 cfgpack_parse_schema("my.map", &schema, entries, 128, &err);
 cfgpack_init(&ctx, &schema, values, 128, present, sizeof(present));
+
+cfgpack_value_t v;
+cfgpack_get_by_name(&ctx, "speed", &v);
+v.v.u64 = 42;
+cfgpack_set_by_name(&ctx, "speed", &v);
+
 cfgpack_pageout(&ctx, scratch, sizeof(scratch), &len);
 cfgpack_pagein_buf(&ctx, scratch, len);
 ```
