@@ -2,6 +2,11 @@
 #define CFGPACK_ERROR_H
 
 /**
+ * @file error.h
+ * @brief Error codes for cfgpack APIs.
+ */
+
+/**
  * @brief Error codes returned by cfgpack APIs.
  */
 typedef enum {

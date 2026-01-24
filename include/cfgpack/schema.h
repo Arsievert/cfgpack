@@ -1,6 +1,15 @@
 #ifndef CFGPACK_SCHEMA_H
 #define CFGPACK_SCHEMA_H
 
+/**
+ * @file schema.h
+ * @brief Schema parsing and serialization for cfgpack.
+ *
+ * Provides functions to parse schemas from .map and JSON formats,
+ * and to serialize schemas to Markdown and JSON formats.
+ * All functions use caller-provided buffers (no heap allocation).
+ */
+
 #include <stddef.h>
 #include <stdint.h>
 

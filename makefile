@@ -61,16 +61,22 @@ $(OUT)/%: $(OBJ)/tests/%.o $(TESTCOMMON) $(LIB) $(IOFILEOBJ)
 clean: ## Remove build artifacts
 	-@$(RM) -rvf -- $(BUILD) compile_commands.json .cache
 
-help: ## List targets with descriptions
-	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9][^:]*:.*##/ {printf "%-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+clean-docs: ## Remove generated documentation
+	-@$(RM) -rf -- $(BUILD)/docs
 
-# Generate compile_commands.json from dep JSON
-compile_commands.json: $(OBJECTS)
+help: ## List targets with descriptions
+	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9][^:]*:.*##/ {printf "%-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+compile_commands: $(OBJECTS) ## Generate compile_commands.json from dep JSON
 	@mkdir -p $(OUT)
 	@cat $(JSON)/* > $(JSON)/temp.json
 	@sed -e '1s/^/[\n/' -e '$$s/,$$/\n]/' $(JSON)/temp.json > compile_commands.json
 	@rm $(JSON)/temp.json
 
-.PHONY: all tests clean help
+docs: ## Generate Doxygen documentation
+	@mkdir -p $(BUILD)/docs
+	doxygen Doxyfile
+
+.PHONY: all tests clean clean-docs help doxygen
 
 -include $(DEPS)

@@ -1,6 +1,14 @@
 #ifndef CFGPACK_VALUE_H
 #define CFGPACK_VALUE_H
 
+/**
+ * @file value.h
+ * @brief Value types and containers for cfgpack.
+ *
+ * Defines the supported data types and the tagged union container
+ * used to store configuration values.
+ */
+
 #include <stdint.h>
 
 /**

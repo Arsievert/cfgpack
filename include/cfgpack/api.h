@@ -1,6 +1,19 @@
 #ifndef CFGPACK_API_H
 #define CFGPACK_API_H
 
+/**
+ * @file api.h
+ * @brief Runtime context and value access API for cfgpack.
+ *
+ * This header provides the runtime context structure and functions for:
+ * - Initializing and managing configuration contexts
+ * - Getting and setting values by index or name
+ * - Typed convenience functions for all supported types
+ * - Serializing/deserializing to MessagePack format
+ *
+ * All functions use caller-provided buffers (no heap allocation).
+ */
+
 #include <stddef.h>
 #include <string.h>
 
@@ -120,56 +133,67 @@ cfgpack_err_t cfgpack_get_by_name(const cfgpack_ctx_t *ctx, const char *name, cf
  * Typed Setter Convenience Functions (by index)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
+/** @brief Set a uint8_t value by index. @see cfgpack_set */
 static inline cfgpack_err_t cfgpack_set_u8(cfgpack_ctx_t *ctx, uint16_t index, uint8_t val) {
     cfgpack_value_t v = { .type = CFGPACK_TYPE_U8, .v.u64 = val };
     return cfgpack_set(ctx, index, &v);
 }
 
+/** @brief Set a uint16_t value by index. @see cfgpack_set */
 static inline cfgpack_err_t cfgpack_set_u16(cfgpack_ctx_t *ctx, uint16_t index, uint16_t val) {
     cfgpack_value_t v = { .type = CFGPACK_TYPE_U16, .v.u64 = val };
     return cfgpack_set(ctx, index, &v);
 }
 
+/** @brief Set a uint32_t value by index. @see cfgpack_set */
 static inline cfgpack_err_t cfgpack_set_u32(cfgpack_ctx_t *ctx, uint16_t index, uint32_t val) {
     cfgpack_value_t v = { .type = CFGPACK_TYPE_U32, .v.u64 = val };
     return cfgpack_set(ctx, index, &v);
 }
 
+/** @brief Set a uint64_t value by index. @see cfgpack_set */
 static inline cfgpack_err_t cfgpack_set_u64(cfgpack_ctx_t *ctx, uint16_t index, uint64_t val) {
     cfgpack_value_t v = { .type = CFGPACK_TYPE_U64, .v.u64 = val };
     return cfgpack_set(ctx, index, &v);
 }
 
+/** @brief Set an int8_t value by index. @see cfgpack_set */
 static inline cfgpack_err_t cfgpack_set_i8(cfgpack_ctx_t *ctx, uint16_t index, int8_t val) {
     cfgpack_value_t v = { .type = CFGPACK_TYPE_I8, .v.i64 = val };
     return cfgpack_set(ctx, index, &v);
 }
 
+/** @brief Set an int16_t value by index. @see cfgpack_set */
 static inline cfgpack_err_t cfgpack_set_i16(cfgpack_ctx_t *ctx, uint16_t index, int16_t val) {
     cfgpack_value_t v = { .type = CFGPACK_TYPE_I16, .v.i64 = val };
     return cfgpack_set(ctx, index, &v);
 }
 
+/** @brief Set an int32_t value by index. @see cfgpack_set */
 static inline cfgpack_err_t cfgpack_set_i32(cfgpack_ctx_t *ctx, uint16_t index, int32_t val) {
     cfgpack_value_t v = { .type = CFGPACK_TYPE_I32, .v.i64 = val };
     return cfgpack_set(ctx, index, &v);
 }
 
+/** @brief Set an int64_t value by index. @see cfgpack_set */
 static inline cfgpack_err_t cfgpack_set_i64(cfgpack_ctx_t *ctx, uint16_t index, int64_t val) {
     cfgpack_value_t v = { .type = CFGPACK_TYPE_I64, .v.i64 = val };
     return cfgpack_set(ctx, index, &v);
 }
 
+/** @brief Set a float value by index. @see cfgpack_set */
 static inline cfgpack_err_t cfgpack_set_f32(cfgpack_ctx_t *ctx, uint16_t index, float val) {
     cfgpack_value_t v = { .type = CFGPACK_TYPE_F32, .v.f32 = val };
     return cfgpack_set(ctx, index, &v);
 }
 
+/** @brief Set a double value by index. @see cfgpack_set */
 static inline cfgpack_err_t cfgpack_set_f64(cfgpack_ctx_t *ctx, uint16_t index, double val) {
     cfgpack_value_t v = { .type = CFGPACK_TYPE_F64, .v.f64 = val };
     return cfgpack_set(ctx, index, &v);
 }
 
+/** @brief Set a variable-length string by index. @see cfgpack_set */
 static inline cfgpack_err_t cfgpack_set_str(cfgpack_ctx_t *ctx, uint16_t index, const char *str) {
     cfgpack_value_t v;
     size_t len = strlen(str);
@@ -180,6 +204,7 @@ static inline cfgpack_err_t cfgpack_set_str(cfgpack_ctx_t *ctx, uint16_t index, 
     return cfgpack_set(ctx, index, &v);
 }
 
+/** @brief Set a fixed-length string by index. @see cfgpack_set */
 static inline cfgpack_err_t cfgpack_set_fstr(cfgpack_ctx_t *ctx, uint16_t index, const char *str) {
     cfgpack_value_t v;
     size_t len = strlen(str);
@@ -194,56 +219,67 @@ static inline cfgpack_err_t cfgpack_set_fstr(cfgpack_ctx_t *ctx, uint16_t index,
  * Typed Setter Convenience Functions (by name)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
+/** @brief Set a uint8_t value by name. @see cfgpack_set_by_name */
 static inline cfgpack_err_t cfgpack_set_u8_by_name(cfgpack_ctx_t *ctx, const char *name, uint8_t val) {
     cfgpack_value_t v = { .type = CFGPACK_TYPE_U8, .v.u64 = val };
     return cfgpack_set_by_name(ctx, name, &v);
 }
 
+/** @brief Set a uint16_t value by name. @see cfgpack_set_by_name */
 static inline cfgpack_err_t cfgpack_set_u16_by_name(cfgpack_ctx_t *ctx, const char *name, uint16_t val) {
     cfgpack_value_t v = { .type = CFGPACK_TYPE_U16, .v.u64 = val };
     return cfgpack_set_by_name(ctx, name, &v);
 }
 
+/** @brief Set a uint32_t value by name. @see cfgpack_set_by_name */
 static inline cfgpack_err_t cfgpack_set_u32_by_name(cfgpack_ctx_t *ctx, const char *name, uint32_t val) {
     cfgpack_value_t v = { .type = CFGPACK_TYPE_U32, .v.u64 = val };
     return cfgpack_set_by_name(ctx, name, &v);
 }
 
+/** @brief Set a uint64_t value by name. @see cfgpack_set_by_name */
 static inline cfgpack_err_t cfgpack_set_u64_by_name(cfgpack_ctx_t *ctx, const char *name, uint64_t val) {
     cfgpack_value_t v = { .type = CFGPACK_TYPE_U64, .v.u64 = val };
     return cfgpack_set_by_name(ctx, name, &v);
 }
 
+/** @brief Set an int8_t value by name. @see cfgpack_set_by_name */
 static inline cfgpack_err_t cfgpack_set_i8_by_name(cfgpack_ctx_t *ctx, const char *name, int8_t val) {
     cfgpack_value_t v = { .type = CFGPACK_TYPE_I8, .v.i64 = val };
     return cfgpack_set_by_name(ctx, name, &v);
 }
 
+/** @brief Set an int16_t value by name. @see cfgpack_set_by_name */
 static inline cfgpack_err_t cfgpack_set_i16_by_name(cfgpack_ctx_t *ctx, const char *name, int16_t val) {
     cfgpack_value_t v = { .type = CFGPACK_TYPE_I16, .v.i64 = val };
     return cfgpack_set_by_name(ctx, name, &v);
 }
 
+/** @brief Set an int32_t value by name. @see cfgpack_set_by_name */
 static inline cfgpack_err_t cfgpack_set_i32_by_name(cfgpack_ctx_t *ctx, const char *name, int32_t val) {
     cfgpack_value_t v = { .type = CFGPACK_TYPE_I32, .v.i64 = val };
     return cfgpack_set_by_name(ctx, name, &v);
 }
 
+/** @brief Set an int64_t value by name. @see cfgpack_set_by_name */
 static inline cfgpack_err_t cfgpack_set_i64_by_name(cfgpack_ctx_t *ctx, const char *name, int64_t val) {
     cfgpack_value_t v = { .type = CFGPACK_TYPE_I64, .v.i64 = val };
     return cfgpack_set_by_name(ctx, name, &v);
 }
 
+/** @brief Set a float value by name. @see cfgpack_set_by_name */
 static inline cfgpack_err_t cfgpack_set_f32_by_name(cfgpack_ctx_t *ctx, const char *name, float val) {
     cfgpack_value_t v = { .type = CFGPACK_TYPE_F32, .v.f32 = val };
     return cfgpack_set_by_name(ctx, name, &v);
 }
 
+/** @brief Set a double value by name. @see cfgpack_set_by_name */
 static inline cfgpack_err_t cfgpack_set_f64_by_name(cfgpack_ctx_t *ctx, const char *name, double val) {
     cfgpack_value_t v = { .type = CFGPACK_TYPE_F64, .v.f64 = val };
     return cfgpack_set_by_name(ctx, name, &v);
 }
 
+/** @brief Set a variable-length string by name. @see cfgpack_set_by_name */
 static inline cfgpack_err_t cfgpack_set_str_by_name(cfgpack_ctx_t *ctx, const char *name, const char *str) {
     cfgpack_value_t v;
     size_t len = strlen(str);
@@ -254,6 +290,7 @@ static inline cfgpack_err_t cfgpack_set_str_by_name(cfgpack_ctx_t *ctx, const ch
     return cfgpack_set_by_name(ctx, name, &v);
 }
 
+/** @brief Set a fixed-length string by name. @see cfgpack_set_by_name */
 static inline cfgpack_err_t cfgpack_set_fstr_by_name(cfgpack_ctx_t *ctx, const char *name, const char *str) {
     cfgpack_value_t v;
     size_t len = strlen(str);
@@ -268,6 +305,7 @@ static inline cfgpack_err_t cfgpack_set_fstr_by_name(cfgpack_ctx_t *ctx, const c
  * Typed Getter Convenience Functions (by index)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
+/** @brief Get a uint8_t value by index. @see cfgpack_get */
 static inline cfgpack_err_t cfgpack_get_u8(const cfgpack_ctx_t *ctx, uint16_t index, uint8_t *out) {
     cfgpack_value_t v;
     cfgpack_err_t rc = cfgpack_get(ctx, index, &v);
@@ -277,6 +315,7 @@ static inline cfgpack_err_t cfgpack_get_u8(const cfgpack_ctx_t *ctx, uint16_t in
     return CFGPACK_OK;
 }
 
+/** @brief Get a uint16_t value by index. @see cfgpack_get */
 static inline cfgpack_err_t cfgpack_get_u16(const cfgpack_ctx_t *ctx, uint16_t index, uint16_t *out) {
     cfgpack_value_t v;
     cfgpack_err_t rc = cfgpack_get(ctx, index, &v);
@@ -286,6 +325,7 @@ static inline cfgpack_err_t cfgpack_get_u16(const cfgpack_ctx_t *ctx, uint16_t i
     return CFGPACK_OK;
 }
 
+/** @brief Get a uint32_t value by index. @see cfgpack_get */
 static inline cfgpack_err_t cfgpack_get_u32(const cfgpack_ctx_t *ctx, uint16_t index, uint32_t *out) {
     cfgpack_value_t v;
     cfgpack_err_t rc = cfgpack_get(ctx, index, &v);
@@ -295,6 +335,7 @@ static inline cfgpack_err_t cfgpack_get_u32(const cfgpack_ctx_t *ctx, uint16_t i
     return CFGPACK_OK;
 }
 
+/** @brief Get a uint64_t value by index. @see cfgpack_get */
 static inline cfgpack_err_t cfgpack_get_u64(const cfgpack_ctx_t *ctx, uint16_t index, uint64_t *out) {
     cfgpack_value_t v;
     cfgpack_err_t rc = cfgpack_get(ctx, index, &v);
@@ -304,6 +345,7 @@ static inline cfgpack_err_t cfgpack_get_u64(const cfgpack_ctx_t *ctx, uint16_t i
     return CFGPACK_OK;
 }
 
+/** @brief Get an int8_t value by index. @see cfgpack_get */
 static inline cfgpack_err_t cfgpack_get_i8(const cfgpack_ctx_t *ctx, uint16_t index, int8_t *out) {
     cfgpack_value_t v;
     cfgpack_err_t rc = cfgpack_get(ctx, index, &v);
@@ -313,6 +355,7 @@ static inline cfgpack_err_t cfgpack_get_i8(const cfgpack_ctx_t *ctx, uint16_t in
     return CFGPACK_OK;
 }
 
+/** @brief Get an int16_t value by index. @see cfgpack_get */
 static inline cfgpack_err_t cfgpack_get_i16(const cfgpack_ctx_t *ctx, uint16_t index, int16_t *out) {
     cfgpack_value_t v;
     cfgpack_err_t rc = cfgpack_get(ctx, index, &v);
@@ -322,6 +365,7 @@ static inline cfgpack_err_t cfgpack_get_i16(const cfgpack_ctx_t *ctx, uint16_t i
     return CFGPACK_OK;
 }
 
+/** @brief Get an int32_t value by index. @see cfgpack_get */
 static inline cfgpack_err_t cfgpack_get_i32(const cfgpack_ctx_t *ctx, uint16_t index, int32_t *out) {
     cfgpack_value_t v;
     cfgpack_err_t rc = cfgpack_get(ctx, index, &v);
@@ -331,6 +375,7 @@ static inline cfgpack_err_t cfgpack_get_i32(const cfgpack_ctx_t *ctx, uint16_t i
     return CFGPACK_OK;
 }
 
+/** @brief Get an int64_t value by index. @see cfgpack_get */
 static inline cfgpack_err_t cfgpack_get_i64(const cfgpack_ctx_t *ctx, uint16_t index, int64_t *out) {
     cfgpack_value_t v;
     cfgpack_err_t rc = cfgpack_get(ctx, index, &v);
@@ -340,6 +385,7 @@ static inline cfgpack_err_t cfgpack_get_i64(const cfgpack_ctx_t *ctx, uint16_t i
     return CFGPACK_OK;
 }
 
+/** @brief Get a float value by index. @see cfgpack_get */
 static inline cfgpack_err_t cfgpack_get_f32(const cfgpack_ctx_t *ctx, uint16_t index, float *out) {
     cfgpack_value_t v;
     cfgpack_err_t rc = cfgpack_get(ctx, index, &v);
@@ -349,6 +395,7 @@ static inline cfgpack_err_t cfgpack_get_f32(const cfgpack_ctx_t *ctx, uint16_t i
     return CFGPACK_OK;
 }
 
+/** @brief Get a double value by index. @see cfgpack_get */
 static inline cfgpack_err_t cfgpack_get_f64(const cfgpack_ctx_t *ctx, uint16_t index, double *out) {
     cfgpack_value_t v;
     cfgpack_err_t rc = cfgpack_get(ctx, index, &v);
@@ -358,6 +405,7 @@ static inline cfgpack_err_t cfgpack_get_f64(const cfgpack_ctx_t *ctx, uint16_t i
     return CFGPACK_OK;
 }
 
+/** @brief Get a heap string pointer and length by index. @see cfgpack_get */
 static inline cfgpack_err_t cfgpack_get_str(const cfgpack_ctx_t *ctx, uint16_t index, const char **out, uint16_t *len) {
     cfgpack_value_t v;
     cfgpack_err_t rc = cfgpack_get(ctx, index, &v);
@@ -374,6 +422,7 @@ static inline cfgpack_err_t cfgpack_get_str(const cfgpack_ctx_t *ctx, uint16_t i
     return CFGPACK_ERR_MISSING;
 }
 
+/** @brief Get a fixed-length string pointer and length by index. @see cfgpack_get */
 static inline cfgpack_err_t cfgpack_get_fstr(const cfgpack_ctx_t *ctx, uint16_t index, const char **out, uint8_t *len) {
     cfgpack_value_t v;
     cfgpack_err_t rc = cfgpack_get(ctx, index, &v);
@@ -394,6 +443,7 @@ static inline cfgpack_err_t cfgpack_get_fstr(const cfgpack_ctx_t *ctx, uint16_t 
  * Typed Getter Convenience Functions (by name)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
+/** @brief Get a uint8_t value by name. @see cfgpack_get_by_name */
 static inline cfgpack_err_t cfgpack_get_u8_by_name(const cfgpack_ctx_t *ctx, const char *name, uint8_t *out) {
     cfgpack_value_t v;
     cfgpack_err_t rc = cfgpack_get_by_name(ctx, name, &v);
@@ -403,6 +453,7 @@ static inline cfgpack_err_t cfgpack_get_u8_by_name(const cfgpack_ctx_t *ctx, con
     return CFGPACK_OK;
 }
 
+/** @brief Get a uint16_t value by name. @see cfgpack_get_by_name */
 static inline cfgpack_err_t cfgpack_get_u16_by_name(const cfgpack_ctx_t *ctx, const char *name, uint16_t *out) {
     cfgpack_value_t v;
     cfgpack_err_t rc = cfgpack_get_by_name(ctx, name, &v);
@@ -412,6 +463,7 @@ static inline cfgpack_err_t cfgpack_get_u16_by_name(const cfgpack_ctx_t *ctx, co
     return CFGPACK_OK;
 }
 
+/** @brief Get a uint32_t value by name. @see cfgpack_get_by_name */
 static inline cfgpack_err_t cfgpack_get_u32_by_name(const cfgpack_ctx_t *ctx, const char *name, uint32_t *out) {
     cfgpack_value_t v;
     cfgpack_err_t rc = cfgpack_get_by_name(ctx, name, &v);
@@ -421,6 +473,7 @@ static inline cfgpack_err_t cfgpack_get_u32_by_name(const cfgpack_ctx_t *ctx, co
     return CFGPACK_OK;
 }
 
+/** @brief Get a uint64_t value by name. @see cfgpack_get_by_name */
 static inline cfgpack_err_t cfgpack_get_u64_by_name(const cfgpack_ctx_t *ctx, const char *name, uint64_t *out) {
     cfgpack_value_t v;
     cfgpack_err_t rc = cfgpack_get_by_name(ctx, name, &v);
@@ -430,6 +483,7 @@ static inline cfgpack_err_t cfgpack_get_u64_by_name(const cfgpack_ctx_t *ctx, co
     return CFGPACK_OK;
 }
 
+/** @brief Get an int8_t value by name. @see cfgpack_get_by_name */
 static inline cfgpack_err_t cfgpack_get_i8_by_name(const cfgpack_ctx_t *ctx, const char *name, int8_t *out) {
     cfgpack_value_t v;
     cfgpack_err_t rc = cfgpack_get_by_name(ctx, name, &v);
@@ -439,6 +493,7 @@ static inline cfgpack_err_t cfgpack_get_i8_by_name(const cfgpack_ctx_t *ctx, con
     return CFGPACK_OK;
 }
 
+/** @brief Get an int16_t value by name. @see cfgpack_get_by_name */
 static inline cfgpack_err_t cfgpack_get_i16_by_name(const cfgpack_ctx_t *ctx, const char *name, int16_t *out) {
     cfgpack_value_t v;
     cfgpack_err_t rc = cfgpack_get_by_name(ctx, name, &v);
@@ -448,6 +503,7 @@ static inline cfgpack_err_t cfgpack_get_i16_by_name(const cfgpack_ctx_t *ctx, co
     return CFGPACK_OK;
 }
 
+/** @brief Get an int32_t value by name. @see cfgpack_get_by_name */
 static inline cfgpack_err_t cfgpack_get_i32_by_name(const cfgpack_ctx_t *ctx, const char *name, int32_t *out) {
     cfgpack_value_t v;
     cfgpack_err_t rc = cfgpack_get_by_name(ctx, name, &v);
@@ -457,6 +513,7 @@ static inline cfgpack_err_t cfgpack_get_i32_by_name(const cfgpack_ctx_t *ctx, co
     return CFGPACK_OK;
 }
 
+/** @brief Get an int64_t value by name. @see cfgpack_get_by_name */
 static inline cfgpack_err_t cfgpack_get_i64_by_name(const cfgpack_ctx_t *ctx, const char *name, int64_t *out) {
     cfgpack_value_t v;
     cfgpack_err_t rc = cfgpack_get_by_name(ctx, name, &v);
@@ -466,6 +523,7 @@ static inline cfgpack_err_t cfgpack_get_i64_by_name(const cfgpack_ctx_t *ctx, co
     return CFGPACK_OK;
 }
 
+/** @brief Get a float value by name. @see cfgpack_get_by_name */
 static inline cfgpack_err_t cfgpack_get_f32_by_name(const cfgpack_ctx_t *ctx, const char *name, float *out) {
     cfgpack_value_t v;
     cfgpack_err_t rc = cfgpack_get_by_name(ctx, name, &v);
@@ -475,6 +533,7 @@ static inline cfgpack_err_t cfgpack_get_f32_by_name(const cfgpack_ctx_t *ctx, co
     return CFGPACK_OK;
 }
 
+/** @brief Get a double value by name. @see cfgpack_get_by_name */
 static inline cfgpack_err_t cfgpack_get_f64_by_name(const cfgpack_ctx_t *ctx, const char *name, double *out) {
     cfgpack_value_t v;
     cfgpack_err_t rc = cfgpack_get_by_name(ctx, name, &v);
@@ -484,6 +543,7 @@ static inline cfgpack_err_t cfgpack_get_f64_by_name(const cfgpack_ctx_t *ctx, co
     return CFGPACK_OK;
 }
 
+/** @brief Get a heap string pointer and length by name. @see cfgpack_get_by_name */
 static inline cfgpack_err_t cfgpack_get_str_by_name(const cfgpack_ctx_t *ctx, const char *name, const char **out, uint16_t *len) {
     cfgpack_value_t v;
     cfgpack_err_t rc = cfgpack_get_by_name(ctx, name, &v);
@@ -500,6 +560,7 @@ static inline cfgpack_err_t cfgpack_get_str_by_name(const cfgpack_ctx_t *ctx, co
     return CFGPACK_ERR_MISSING;
 }
 
+/** @brief Get a fixed-length string pointer and length by name. @see cfgpack_get_by_name */
 static inline cfgpack_err_t cfgpack_get_fstr_by_name(const cfgpack_ctx_t *ctx, const char *name, const char **out, uint8_t *len) {
     cfgpack_value_t v;
     cfgpack_err_t rc = cfgpack_get_by_name(ctx, name, &v);
