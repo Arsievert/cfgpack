@@ -27,7 +27,7 @@ TEST_CASE(test_duplicate_name) {
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
-    CHECK(write_file(path, "demo 1\n0 foo u8 0  # first foo\n1 foo u8 0  # duplicate name\n") == TEST_OK);
+    CHECK(write_file(path, "demo 1\n1 foo u8 0  # first foo\n2 foo u8 0  # duplicate name\n") == TEST_OK);
     rc = cfgpack_parse_schema_file(path, &schema, entries, 128, defaults, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_ERR_DUPLICATE);
     return (TEST_OK);
@@ -41,7 +41,7 @@ TEST_CASE(test_name_too_long) {
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
-    CHECK(write_file(path, "demo 1\n0 toolong u8 0  # name exceeds 5 chars\n") == TEST_OK);
+    CHECK(write_file(path, "demo 1\n1 toolong u8 0  # name exceeds 5 chars\n") == TEST_OK);
     rc = cfgpack_parse_schema_file(path, &schema, entries, 128, defaults, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_ERR_BOUNDS);
     return (TEST_OK);
@@ -69,7 +69,7 @@ TEST_CASE(test_missing_header) {
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
-    CHECK(write_file(path, "0 foo u8 0\n") == TEST_OK);
+    CHECK(write_file(path, "1 foo u8 0\n") == TEST_OK);
     rc = cfgpack_parse_schema_file(path, &schema, entries, 128, defaults, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_ERR_PARSE);
     return (TEST_OK);
@@ -83,7 +83,7 @@ TEST_CASE(test_missing_fields) {
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
-    CHECK(write_file(path, "demo 1\n0 foo\n") == TEST_OK);
+    CHECK(write_file(path, "demo 1\n1 foo\n") == TEST_OK);
     rc = cfgpack_parse_schema_file(path, &schema, entries, 128, defaults, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_ERR_PARSE);
     return (TEST_OK);
@@ -100,7 +100,7 @@ TEST_CASE(test_too_many_entries) {
     FILE *f = fopen(path, "w");
     CHECK(f != NULL);
     fputs("demo 1\n", f);
-    for (int i = 0; i < 129; ++i) {
+    for (int i = 1; i <= 129; ++i) {
         fprintf(f, "%d e%d u8 0\n", i, i);
     }
     fclose(f);
@@ -121,7 +121,7 @@ TEST_CASE(test_accept_128_entries) {
     FILE *f = fopen(path, "w");
     CHECK(f != NULL);
     fputs("demo 1\n", f);
-    for (int i = 0; i < 128; ++i) {
+    for (int i = 1; i <= 128; ++i) {
         fprintf(f, "%d e%d u8 0\n", i, i);
     }
     fclose(f);
@@ -140,7 +140,7 @@ TEST_CASE(test_unknown_type) {
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
-    CHECK(write_file(path, "demo 1\n0 foo nope NIL\n") == TEST_OK);
+    CHECK(write_file(path, "demo 1\n1 foo nope NIL\n") == TEST_OK);
     rc = cfgpack_parse_schema_file(path, &schema, entries, 128, defaults, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_ERR_INVALID_TYPE);
     return (TEST_OK);
@@ -154,7 +154,7 @@ TEST_CASE(test_header_non_numeric_version) {
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
-    CHECK(write_file(path, "demo x\n0 a u8 0\n") == TEST_OK);
+    CHECK(write_file(path, "demo x\n1 a u8 0\n") == TEST_OK);
     rc = cfgpack_parse_schema_file(path, &schema, entries, 8, defaults, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_ERR_PARSE);
     return (TEST_OK);
@@ -169,12 +169,12 @@ TEST_CASE(test_name_length_edges) {
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
-    CHECK(write_file(ok_path, "demo 1\n0 abcde u8 0  # exactly 5 chars - OK\n") == TEST_OK);
+    CHECK(write_file(ok_path, "demo 1\n1 abcde u8 0  # exactly 5 chars - OK\n") == TEST_OK);
     rc = cfgpack_parse_schema_file(ok_path, &schema, entries, 8, defaults, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_OK);
     CHECK(schema.entry_count == 1);
 
-    CHECK(write_file(bad_path, "demo 1\n0 abcdef u8 0  # 6 chars - too long\n") == TEST_OK);
+    CHECK(write_file(bad_path, "demo 1\n1 abcdef u8 0  # 6 chars - too long\n") == TEST_OK);
     rc = cfgpack_parse_schema_file(bad_path, &schema, entries, 8, defaults, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_ERR_BOUNDS);
     return (TEST_OK);
@@ -208,13 +208,13 @@ TEST_CASE(test_unsorted_input_sorted_output) {
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
-    CHECK(write_file(path, "demo 1\n2 c u8 0  # third by index\n0 a u8 0  # first by index\n1 b u8 0  # second by index\n") == TEST_OK);
+    CHECK(write_file(path, "demo 1\n3 c u8 0  # third by index\n1 a u8 0  # first by index\n2 b u8 0  # second by index\n") == TEST_OK);
     rc = cfgpack_parse_schema_file(path, &schema, entries, 4, defaults, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_OK);
     CHECK(schema.entry_count == 3);
-    CHECK(schema.entries[0].index == 0);
-    CHECK(schema.entries[1].index == 1);
-    CHECK(schema.entries[2].index == 2);
+    CHECK(schema.entries[0].index == 1);
+    CHECK(schema.entries[1].index == 2);
+    CHECK(schema.entries[2].index == 3);
     return (TEST_OK);
 }
 
@@ -250,12 +250,12 @@ TEST_CASE(test_default_u8_out_of_range) {
     cfgpack_err_t rc;
 
     /* 256 exceeds u8 max (255) */
-    CHECK(write_file(path, "demo 1\n0 foo u8 256\n") == TEST_OK);
+    CHECK(write_file(path, "demo 1\n1 foo u8 256\n") == TEST_OK);
     rc = cfgpack_parse_schema_file(path, &schema, entries, 8, defaults, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_ERR_BOUNDS);
 
     /* 255 is valid max u8 */
-    CHECK(write_file(path, "demo 1\n0 foo u8 255\n") == TEST_OK);
+    CHECK(write_file(path, "demo 1\n1 foo u8 255\n") == TEST_OK);
     rc = cfgpack_parse_schema_file(path, &schema, entries, 8, defaults, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_OK);
     CHECK(defaults[0].v.u64 == 255);
@@ -271,17 +271,17 @@ TEST_CASE(test_default_i8_out_of_range) {
     cfgpack_err_t rc;
 
     /* 128 exceeds i8 max (127) */
-    CHECK(write_file(path, "demo 1\n0 foo i8 128\n") == TEST_OK);
+    CHECK(write_file(path, "demo 1\n1 foo i8 128\n") == TEST_OK);
     rc = cfgpack_parse_schema_file(path, &schema, entries, 8, defaults, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_ERR_BOUNDS);
 
     /* -129 is below i8 min (-128) */
-    CHECK(write_file(path, "demo 1\n0 foo i8 -129\n") == TEST_OK);
+    CHECK(write_file(path, "demo 1\n1 foo i8 -129\n") == TEST_OK);
     rc = cfgpack_parse_schema_file(path, &schema, entries, 8, defaults, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_ERR_BOUNDS);
 
     /* -128 and 127 are valid */
-    CHECK(write_file(path, "demo 1\n0 foo i8 -128\n1 bar i8 127\n") == TEST_OK);
+    CHECK(write_file(path, "demo 1\n1 foo i8 -128\n2 bar i8 127\n") == TEST_OK);
     rc = cfgpack_parse_schema_file(path, &schema, entries, 8, defaults, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_OK);
     CHECK(defaults[0].v.i64 == -128);
@@ -298,12 +298,12 @@ TEST_CASE(test_default_fstr_too_long) {
     cfgpack_err_t rc;
 
     /* fstr max is 16 chars; 17 chars should fail */
-    CHECK(write_file(path, "demo 1\n0 foo fstr \"12345678901234567\"\n") == TEST_OK);
+    CHECK(write_file(path, "demo 1\n1 foo fstr \"12345678901234567\"\n") == TEST_OK);
     rc = cfgpack_parse_schema_file(path, &schema, entries, 8, defaults, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_ERR_STR_TOO_LONG);
 
     /* 16 chars should be OK */
-    CHECK(write_file(path, "demo 1\n0 foo fstr \"1234567890123456\"\n") == TEST_OK);
+    CHECK(write_file(path, "demo 1\n1 foo fstr \"1234567890123456\"\n") == TEST_OK);
     rc = cfgpack_parse_schema_file(path, &schema, entries, 8, defaults, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_OK);
     CHECK(defaults[0].v.fstr.len == 16);
@@ -319,14 +319,14 @@ TEST_CASE(test_default_hex_binary_literals) {
     cfgpack_err_t rc;
 
     /* Test hex and binary literals */
-    CHECK(write_file(path, "demo 1\n0 foo u8 0xFF\n1 bar u16 0xABCD\n") == TEST_OK);
+    CHECK(write_file(path, "demo 1\n1 foo u8 0xFF\n2 bar u16 0xABCD\n") == TEST_OK);
     rc = cfgpack_parse_schema_file(path, &schema, entries, 8, defaults, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_OK);
     CHECK(defaults[0].v.u64 == 0xFF);
     CHECK(defaults[1].v.u64 == 0xABCD);
 
     /* Hex value out of range for u8 */
-    CHECK(write_file(path, "demo 1\n0 foo u8 0x100\n") == TEST_OK);
+    CHECK(write_file(path, "demo 1\n1 foo u8 0x100\n") == TEST_OK);
     rc = cfgpack_parse_schema_file(path, &schema, entries, 8, defaults, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_ERR_BOUNDS);
     return (TEST_OK);
@@ -341,17 +341,17 @@ TEST_CASE(test_default_invalid_format) {
     cfgpack_err_t rc;
 
     /* Non-numeric value for integer type */
-    CHECK(write_file(path, "demo 1\n0 foo u8 abc\n") == TEST_OK);
+    CHECK(write_file(path, "demo 1\n1 foo u8 abc\n") == TEST_OK);
     rc = cfgpack_parse_schema_file(path, &schema, entries, 8, defaults, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_ERR_PARSE);
 
     /* Non-quoted string for string type */
-    CHECK(write_file(path, "demo 1\n0 foo str hello\n") == TEST_OK);
+    CHECK(write_file(path, "demo 1\n1 foo str hello\n") == TEST_OK);
     rc = cfgpack_parse_schema_file(path, &schema, entries, 8, defaults, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_ERR_PARSE);
 
     /* Unterminated string */
-    CHECK(write_file(path, "demo 1\n0 foo str \"hello\n") == TEST_OK);
+    CHECK(write_file(path, "demo 1\n1 foo str \"hello\n") == TEST_OK);
     rc = cfgpack_parse_schema_file(path, &schema, entries, 8, defaults, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_ERR_PARSE);
     return (TEST_OK);
@@ -366,7 +366,7 @@ TEST_CASE(test_default_escape_sequences) {
     cfgpack_err_t rc;
 
     /* Test escape sequences in strings */
-    CHECK(write_file(path, "demo 1\n0 foo fstr \"a\\nb\\tc\"\n") == TEST_OK);
+    CHECK(write_file(path, "demo 1\n1 foo fstr \"a\\nb\\tc\"\n") == TEST_OK);
     rc = cfgpack_parse_schema_file(path, &schema, entries, 8, defaults, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_OK);
     CHECK(defaults[0].v.fstr.len == 5);
@@ -523,11 +523,11 @@ TEST_CASE(test_json_parse_direct) {
         "  \"name\": \"test\",\n"
         "  \"version\": 42,\n"
         "  \"entries\": [\n"
-        "    {\"index\": 0, \"name\": \"speed\", \"type\": \"u16\", \"value\": 100},\n"
-        "    {\"index\": 1, \"name\": \"name\", \"type\": \"fstr\", \"value\": \"hello\"},\n"
-        "    {\"index\": 2, \"name\": \"temp\", \"type\": \"i8\", \"value\": -10},\n"
-        "    {\"index\": 3, \"name\": \"ratio\", \"type\": \"f32\", \"value\": 3.14},\n"
-        "    {\"index\": 4, \"name\": \"desc\", \"type\": \"str\", \"value\": null}\n"
+        "    {\"index\": 1, \"name\": \"speed\", \"type\": \"u16\", \"value\": 100},\n"
+        "    {\"index\": 2, \"name\": \"name\", \"type\": \"fstr\", \"value\": \"hello\"},\n"
+        "    {\"index\": 3, \"name\": \"temp\", \"type\": \"i8\", \"value\": -10},\n"
+        "    {\"index\": 4, \"name\": \"ratio\", \"type\": \"f32\", \"value\": 3.14},\n"
+        "    {\"index\": 5, \"name\": \"desc\", \"type\": \"str\", \"value\": null}\n"
         "  ]\n"
         "}\n";
 
@@ -549,39 +549,78 @@ TEST_CASE(test_json_parse_direct) {
     CHECK(schema.entry_count == 5);
 
     /* Entry 0: speed u16 100 */
-    CHECK(entries[0].index == 0);
+    CHECK(entries[0].index == 1);
     CHECK(strcmp(entries[0].name, "speed") == 0);
     CHECK(entries[0].type == CFGPACK_TYPE_U16);
     CHECK(entries[0].has_default == 1);
     CHECK(defaults[0].v.u64 == 100);
 
     /* Entry 1: name fstr "hello" */
-    CHECK(entries[1].index == 1);
+    CHECK(entries[1].index == 2);
     CHECK(strcmp(entries[1].name, "name") == 0);
     CHECK(entries[1].type == CFGPACK_TYPE_FSTR);
     CHECK(entries[1].has_default == 1);
     CHECK(strcmp(defaults[1].v.fstr.data, "hello") == 0);
 
     /* Entry 2: temp i8 -10 */
-    CHECK(entries[2].index == 2);
+    CHECK(entries[2].index == 3);
     CHECK(strcmp(entries[2].name, "temp") == 0);
     CHECK(entries[2].type == CFGPACK_TYPE_I8);
     CHECK(entries[2].has_default == 1);
     CHECK(defaults[2].v.i64 == -10);
 
     /* Entry 3: ratio f32 3.14 */
-    CHECK(entries[3].index == 3);
+    CHECK(entries[3].index == 4);
     CHECK(strcmp(entries[3].name, "ratio") == 0);
     CHECK(entries[3].type == CFGPACK_TYPE_F32);
     CHECK(entries[3].has_default == 1);
     CHECK(defaults[3].v.f32 > 3.13f && defaults[3].v.f32 < 3.15f);
 
     /* Entry 4: desc str null */
-    CHECK(entries[4].index == 4);
+    CHECK(entries[4].index == 5);
     CHECK(strcmp(entries[4].name, "desc") == 0);
     CHECK(entries[4].type == CFGPACK_TYPE_STR);
     CHECK(entries[4].has_default == 0);
 
+    return (TEST_OK);
+}
+
+TEST_CASE(test_reserved_index_zero_map) {
+    const char *path = "tests/data/reserved_index.map";
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[8];
+    cfgpack_value_t defaults[8];
+    cfgpack_parse_error_t err;
+    cfgpack_err_t rc;
+
+    /* Index 0 is reserved for schema name - should fail */
+    CHECK(write_file(path, "test 1\n0 foo u8 0\n") == TEST_OK);
+    rc = cfgpack_parse_schema_file(path, &schema, entries, 8, defaults, scratch, sizeof(scratch), &err);
+    CHECK(rc == CFGPACK_ERR_RESERVED_INDEX);
+    return (TEST_OK);
+}
+
+TEST_CASE(test_reserved_index_zero_json) {
+    const char *json_path = "tests/data/reserved_index.json";
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[8];
+    cfgpack_value_t defaults[8];
+    cfgpack_parse_error_t err;
+    cfgpack_err_t rc;
+
+    /* Index 0 is reserved for schema name - should fail */
+    const char *json_content =
+        "{\n"
+        "  \"name\": \"test\",\n"
+        "  \"version\": 1,\n"
+        "  \"entries\": [\n"
+        "    {\"index\": 0, \"name\": \"foo\", \"type\": \"u8\", \"value\": 0}\n"
+        "  ]\n"
+        "}\n";
+
+    CHECK(write_file(json_path, json_content) == TEST_OK);
+    rc = cfgpack_schema_parse_json_file(json_path, &schema, entries, 8, defaults, scratch, sizeof(scratch), &err);
+    CHECK(rc == CFGPACK_ERR_RESERVED_INDEX);
     return (TEST_OK);
 }
 
@@ -610,6 +649,8 @@ int main(void) {
     overall |= (test_case_result("json_writer_basic", test_json_writer_basic()) != TEST_OK);
     overall |= (test_case_result("json_roundtrip", test_json_roundtrip()) != TEST_OK);
     overall |= (test_case_result("json_parse_direct", test_json_parse_direct()) != TEST_OK);
+    overall |= (test_case_result("reserved_index_zero_map", test_reserved_index_zero_map()) != TEST_OK);
+    overall |= (test_case_result("reserved_index_zero_json", test_reserved_index_zero_json()) != TEST_OK);
 
     if (overall == TEST_OK) {
         printf(COLOR_GREEN "ALL PASS" COLOR_RESET "\n");

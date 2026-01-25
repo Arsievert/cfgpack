@@ -1,2 +1,2 @@
 demo 1
-0 foo nope NIL  # invalid type should fail
+1 foo nope NIL  # invalid type should fail

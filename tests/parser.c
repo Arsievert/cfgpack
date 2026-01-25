@@ -19,9 +19,9 @@ TEST_CASE(test_parse_ok) {
     CHECK(rc == CFGPACK_OK);
     CHECK(schema.entry_count == 15);
     CHECK(schema.version == 1);
-    CHECK(schema.entries[0].index == 0);
+    CHECK(schema.entries[0].index == 1);  /* Index 0 is reserved for schema name */
     CHECK(schema.entries[0].type == CFGPACK_TYPE_U8);
-    CHECK(schema.entries[14].index == 14);
+    CHECK(schema.entries[14].index == 15);
     CHECK(schema.entries[14].type == CFGPACK_TYPE_STR);
     printf("parsed: name=%s version=%u entries=%zu\n", schema.map_name, schema.version, schema.entry_count);
     cfgpack_schema_free(&schema);
@@ -39,7 +39,7 @@ TEST_CASE(test_parse_bad_type) {
 
     f = fopen(path, "w");
     CHECK(f != NULL);
-    fprintf(f, "demo 1\n0 foo nope NIL  # invalid type should fail\n");
+    fprintf(f, "demo 1\n1 foo nope NIL  # invalid type should fail\n");
     fclose(f);
 
     rc = cfgpack_parse_schema_file(path, &schema, entries, 128, defaults, scratch, sizeof(scratch), &err);
@@ -58,7 +58,7 @@ TEST_CASE(test_parse_duplicate_index) {
 
     f = fopen(path, "w");
     CHECK(f != NULL);
-    fprintf(f, "demo 1\n0 foo u8 0  # first entry\n0 bar u8 0  # duplicate index\n");
+    fprintf(f, "demo 1\n1 foo u8 0  # first entry\n1 bar u8 0  # duplicate index\n");
     fclose(f);
 
     rc = cfgpack_parse_schema_file(path, &schema, entries, 128, defaults, scratch, sizeof(scratch), &err);

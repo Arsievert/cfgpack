@@ -511,6 +511,11 @@ cfgpack_err_t cfgpack_parse_schema(const char *data, size_t data_len, cfgpack_sc
             tokens_destroy(&tok);
             return CFGPACK_ERR_BOUNDS;
         }
+        if (idx_ul == 0) {
+            set_err(err, line_no, "index 0 is reserved for schema name");
+            tokens_destroy(&tok);
+            return CFGPACK_ERR_RESERVED_INDEX;
+        }
         cfgpack_type_t type;
         cfgpack_err_t trc = parse_type(tok.index[2], &type);
         if (trc != CFGPACK_OK) {
@@ -1088,6 +1093,11 @@ cfgpack_err_t cfgpack_schema_parse_json(const char *data, size_t data_len, cfgpa
                 if (!got_index || !got_ename || !got_type || !got_default) {
                     set_err(err, p->line, "missing entry field");
                     return CFGPACK_ERR_PARSE;
+                }
+
+                if (e->index == 0) {
+                    set_err(err, p->line, "index 0 is reserved for schema name");
+                    return CFGPACK_ERR_RESERVED_INDEX;
                 }
 
                 /* Now assign the default value based on the type */

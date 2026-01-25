@@ -109,9 +109,13 @@ static int type_matches(cfgpack_type_t expect, const cfgpack_value_t *v) {
 }
 
 cfgpack_err_t cfgpack_set(cfgpack_ctx_t *ctx, uint16_t index, const cfgpack_value_t *value) {
-    const cfgpack_entry_t *entry = find_entry(ctx->schema, index);
+    const cfgpack_entry_t *entry;
     size_t off;
 
+    if (index == 0) {
+        return (CFGPACK_ERR_RESERVED_INDEX);
+    }
+    entry = find_entry(ctx->schema, index);
     if (!entry) {
         return (CFGPACK_ERR_MISSING);
     }
@@ -131,9 +135,13 @@ cfgpack_err_t cfgpack_set(cfgpack_ctx_t *ctx, uint16_t index, const cfgpack_valu
 }
 
 cfgpack_err_t cfgpack_get(const cfgpack_ctx_t *ctx, uint16_t index, cfgpack_value_t *out_value) {
-    const cfgpack_entry_t *entry = find_entry(ctx->schema, index);
+    const cfgpack_entry_t *entry;
     size_t off;
 
+    if (index == 0) {
+        return (CFGPACK_ERR_RESERVED_INDEX);
+    }
+    entry = find_entry(ctx->schema, index);
     if (!entry) {
         return (CFGPACK_ERR_MISSING);
     }

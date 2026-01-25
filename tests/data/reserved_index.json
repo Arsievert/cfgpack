@@ -1,0 +1,7 @@
+{
+  "name": "test",
+  "version": 1,
+  "entries": [
+    {"index": 0, "name": "foo", "type": "u8", "value": 0}
+  ]
+}

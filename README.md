@@ -16,7 +16,7 @@ This repository is the C-first implementation of a MessagePack-based configurati
 - Returns explicit errors for parse/encode/decode/type/bounds/IO issues.
 
 ## Map Format
-- First line: map name/version header saved with the config.
+- First line: `<name> <version>` header (e.g., `vehicle 1` where `vehicle` is the schema name and `1` is the version). The schema name is embedded at reserved index 0 in serialized blobs for version detection during firmware upgrades.
 - Lines follow the format: `INDEX NAME TYPE DEFAULT  # optional description`
   - `INDEX`: 0–65535
   - `NAME`: up to 5 characters
@@ -41,15 +41,16 @@ Below is a well-documented example `.map` file demonstrating the schema format:
 ```
 # vehicle.map - Configuration schema for a vehicle control system
 # Comments start with '#' and are ignored by the parser.
+# NOTE: Index 0 is reserved for schema name embedding; user entries start at 1.
 
 vehicle 1
 
 # ─────────────────────────────────────────────────────────────────────────────
 # IDENTIFICATION
 # ─────────────────────────────────────────────────────────────────────────────
-0  id     u32   0        # Unique vehicle identifier, assigned at manufacture
-1  model  fstr  "MX500"  # Model code, e.g. "MX500" - max 16 chars
-2  vin    str   NIL      # Vehicle identification number - max 64 chars
+1  id     u32   0        # Unique vehicle identifier, assigned at manufacture
+2  model  fstr  "MX500"  # Model code, e.g. "MX500" - max 16 chars
+3  vin    str   NIL      # Vehicle identification number - max 64 chars
 
 # ─────────────────────────────────────────────────────────────────────────────
 # OPERATIONAL LIMITS
@@ -78,7 +79,8 @@ vehicle 1
 - **Header line**: `vehicle 1` sets map name to "vehicle" and version to 1.
 - **Comments**: Lines starting with `#` are ignored; use them for section headers and documentation.
 - **Inline comments**: Text after `#` on entry lines documents each field but is not stored in binary output.
-- **Index gaps**: Indices need not be contiguous (0, 1, 2, then 10, 11, ...).
+- **Reserved index**: Index 0 is reserved for schema name; user-defined entries should start at index 1.
+- **Index gaps**: Indices need not be contiguous (1, 2, 3, then 10, 11, ...).
 - **Type variety**: Shows u8/u16/u32, i8, f32/f64, str (variable up to 64), fstr (fixed up to 16).
 - **Default values**: Each entry specifies a default—`NIL` for required fields, literals for optional fields with sensible defaults.
 - **Hex literals**: `0x07` shows hexadecimal notation for bitmasks.
@@ -113,7 +115,8 @@ typedef enum {
     CFGPACK_ERR_STR_TOO_LONG = -7,
     CFGPACK_ERR_IO = -8,
     CFGPACK_ERR_ENCODE = -9,
-    CFGPACK_ERR_DECODE = -10
+    CFGPACK_ERR_DECODE = -10,
+    CFGPACK_ERR_RESERVED_INDEX = -11
 } cfgpack_err_t;
 ```
 
@@ -184,15 +187,16 @@ Schemas can be read from and written to JSON for interoperability with other too
   "name": "demo",
   "version": 1,
   "entries": [
-    {"index": 0, "name": "speed", "type": "u16", "default": 100},
-    {"index": 1, "name": "label", "type": "fstr", "default": "hello"},
-    {"index": 2, "name": "desc", "type": "str", "default": null}
+    {"index": 1, "name": "speed", "type": "u16", "default": 100},
+    {"index": 2, "name": "label", "type": "fstr", "default": "hello"},
+    {"index": 3, "name": "desc", "type": "str", "default": null}
   ]
 }
 ```
 - `default` is `null` for NIL (no default value)
 - Strings are JSON-escaped
 - Numbers are output as JSON numbers (integers or floats)
+- Note: Index 0 is reserved for schema name; user entries should start at 1
 ```
 
 ### Runtime API
