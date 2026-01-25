@@ -14,6 +14,7 @@
  * For file-based convenience wrappers, also include io_file.h.
  * For decompression support (LZ4/heatshrink), also include decompress.h.
  */
+#include "config.h"
 #include "error.h"
 #include "value.h"
 #include "schema.h"

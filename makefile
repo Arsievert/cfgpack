@@ -2,6 +2,7 @@ CC       := clang
 AR       := ar
 CPPFLAGS := -Iinclude -Iinclude/cfgpack -Ithird_party/lz4 -Ithird_party/heatshrink
 CFLAGS   := -Wall -Wextra -std=c99 -DCFGPACK_LZ4 -DCFGPACK_HEATSHRINK
+CFLAGS_HOSTED := $(CFLAGS) -DCFGPACK_HOSTED
 LDFLAGS  :=
 LDLIBS   :=
 
@@ -60,6 +61,18 @@ $(OBJ)/%.o: %.c
 	@echo "CC $<"
 	@$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -MJ $(JSON)/$(@F).json -c $< -o $@
 
+# Test objects need CFLAGS_HOSTED for printf support
+$(OBJ)/tests/%.o: tests/%.c
+	@mkdir -p $(@D) $(JSON)
+	@echo "CC (hosted) $<"
+	@$(CC) $(CPPFLAGS) $(CFLAGS_HOSTED) -MMD -MP -MJ $(JSON)/$(@F).json -c $< -o $@
+
+# io_file.c needs CFLAGS_HOSTED for stdio
+$(OBJ)/src/io_file.o: src/io_file.c
+	@mkdir -p $(@D) $(JSON)
+	@echo "CC (hosted) $<"
+	@$(CC) $(CPPFLAGS) $(CFLAGS_HOSTED) -MMD -MP -MJ $(JSON)/$(@F).json -c $< -o $@
+
 tests: $(TESTBINS) ## Build all test binaries
 
 # Tests link against core lib + io_file.o + encoder (for decompression tests)
@@ -92,7 +105,7 @@ tools: $(COMPRESS_TOOL) ## Build compression tool
 $(COMPRESS_TOOL): $(COMPRESS_SRC) $(COMPRESS_DEPS)
 	@mkdir -p $(OUT)
 	@echo "CC $(COMPRESS_TOOL)"
-	@$(CC) $(CFLAGS) -Ithird_party/lz4 -Ithird_party/heatshrink -o $@ $(COMPRESS_SRC) $(COMPRESS_DEPS)
+	@$(CC) $(CFLAGS_HOSTED) -Ithird_party/lz4 -Ithird_party/heatshrink -o $@ $(COMPRESS_SRC) $(COMPRESS_DEPS)
 
 .PHONY: all tests clean clean-docs help doxygen tools
 

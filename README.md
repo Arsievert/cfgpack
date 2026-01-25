@@ -88,6 +88,7 @@ vehicle 1
 
 ## Layout
 - `include/cfgpack/` — public headers
+  - `config.h` — build configuration (`CFGPACK_EMBEDDED`/`CFGPACK_HOSTED` modes).
   - `error.h` — error codes enum.
   - `value.h` — value types and limits (`CFGPACK_STR_MAX`, `CFGPACK_FSTR_MAX`).
   - `schema.h` — schema structs and parser/doc APIs.
@@ -488,6 +489,34 @@ The sensor_hub example shows a typical embedded workflow where configuration sch
 - `make` builds `build/out/libcfgpack.a`.
 - `make tests` builds all test binaries.
 - `make tools` builds the compression tool (`build/out/cfgpack-compress`).
+
+### Build Modes
+
+CFGPack supports two build modes to balance embedded constraints with desktop development convenience:
+
+| Mode | Default | stdio | Print Functions | Float Formatting |
+|------|---------|-------|-----------------|------------------|
+| `CFGPACK_EMBEDDED` | Yes | Not linked | Silent no-ops | Minimal (9 digits) |
+| `CFGPACK_HOSTED` | No | Linked | Full printf | snprintf (%.17g) |
+
+**Embedded mode** (default):
+- No `<stdio.h>` dependency in the core library
+- `cfgpack_print()` and `cfgpack_print_all()` return `CFGPACK_OK` without output
+- Float-to-string uses a minimal formatter (integer + 9 fractional digits, no scientific notation)
+- Ideal for microcontrollers where stdio is unavailable or expensive
+
+**Hosted mode** (`-DCFGPACK_HOSTED`):
+- Full `printf` support for debug output
+- `cfgpack_print()` and `cfgpack_print_all()` write to stdout
+- Float formatting uses `snprintf` with full precision
+- Used automatically for tests and tools
+
+To compile your application in hosted mode:
+```bash
+$(CC) -DCFGPACK_HOSTED -Iinclude myapp.c -Lbuild/out -lcfgpack
+```
+
+Note: Applications can still use their own `printf` in embedded mode by including `<stdio.h>` directly in their source files. The library itself simply doesn't depend on stdio.
 
 ## Testing
 

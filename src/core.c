@@ -1,7 +1,7 @@
 #include "cfgpack/api.h"
+#include "cfgpack/config.h"
 
 #include <string.h>
-#include <stdio.h>
 
 /**
  * @brief Find a schema entry by index using binary search.
@@ -220,6 +220,7 @@ size_t cfgpack_get_size(const cfgpack_ctx_t *ctx) {
     return count;
 }
 
+#ifdef CFGPACK_HOSTED
 static void print_value(const cfgpack_value_t *v) {
     switch (v->type) {
         case CFGPACK_TYPE_U8: printf("%u", (unsigned)v->v.u64); break;
@@ -264,3 +265,18 @@ cfgpack_err_t cfgpack_print_all(const cfgpack_ctx_t *ctx) {
     }
     return (CFGPACK_OK);
 }
+
+#else /* CFGPACK_EMBEDDED */
+
+cfgpack_err_t cfgpack_print(const cfgpack_ctx_t *ctx, uint16_t index) {
+    (void)ctx;
+    (void)index;
+    return (CFGPACK_OK);
+}
+
+cfgpack_err_t cfgpack_print_all(const cfgpack_ctx_t *ctx) {
+    (void)ctx;
+    return (CFGPACK_OK);
+}
+
+#endif /* CFGPACK_HOSTED */

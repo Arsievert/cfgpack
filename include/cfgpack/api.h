@@ -670,14 +670,25 @@ cfgpack_err_t cfgpack_pagein_buf(cfgpack_ctx_t *ctx, const uint8_t *data, size_t
 
 /**
  * @brief Print a single present value by index to stdout.
+ *
+ * @note In embedded mode (CFGPACK_EMBEDDED, the default), this function
+ *       is a silent no-op that returns CFGPACK_OK. Compile with
+ *       -DCFGPACK_HOSTED to enable actual printf output.
+ *
  * @param ctx   Initialized context.
  * @param index Schema index to print.
- * @return CFGPACK_OK on success; CFGPACK_ERR_MISSING if absent or unknown.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_MISSING if absent or unknown
+ *         (hosted mode only).
  */
 cfgpack_err_t cfgpack_print(const cfgpack_ctx_t *ctx, uint16_t index);
 
 /**
  * @brief Print all present values to stdout.
+ *
+ * @note In embedded mode (CFGPACK_EMBEDDED, the default), this function
+ *       is a silent no-op that returns CFGPACK_OK. Compile with
+ *       -DCFGPACK_HOSTED to enable actual printf output.
+ *
  * @param ctx Initialized context.
  * @return CFGPACK_OK on success.
  */
