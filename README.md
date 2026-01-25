@@ -1,6 +1,6 @@
 # CFGPack
 
-This repository is the C-first implementation of a MessagePack-based configuration library. The map/spec idea lives in `cfgpack.org`; this README summarizes the code layout and key APIs.
+This repository is the C-first implementation of a MessagePack-based configuration library.
 
 **Embedded profile (current):** no heap allocation. All buffers are caller-owned. Hard caps: max 128 schema entries; max pagein/pageout size 4096 bytes. Schema descriptions are ignored/dropped.
 

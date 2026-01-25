@@ -11,6 +11,11 @@ OUT      := $(BUILD)/out
 OBJ      := $(BUILD)/obj
 JSON     := $(BUILD)/json
 
+# Documentation
+DOCS_VENV   := docs/.venv
+DOCS_PIP    := $(DOCS_VENV)/bin/pip
+DOCS_SPHINX := $(DOCS_VENV)/bin/sphinx-build
+
 LIB      := $(OUT)/libcfgpack.a
 TESTBIN  := $(OUT)/tests
 
@@ -85,7 +90,7 @@ clean: ## Remove build artifacts
 	-@$(RM) -rvf -- $(BUILD) compile_commands.json .cache
 
 clean-docs: ## Remove generated documentation
-	-@$(RM) -rf -- $(BUILD)/docs
+	-@$(RM) -rf -- $(BUILD)/docs docs/.venv
 
 help: ## List targets with descriptions
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9][^:]*:.*##/ {printf "%-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -96,9 +101,13 @@ compile_commands: $(OBJECTS) ## Generate compile_commands.json from dep JSON
 	@sed -e '1s/^/[\n/' -e '$$s/,$$/\n]/' $(JSON)/temp.json > compile_commands.json
 	@rm $(JSON)/temp.json
 
-docs: ## Generate Doxygen documentation
-	@mkdir -p $(BUILD)/docs
-	doxygen Doxyfile
+docs: ## Generate Sphinx documentation
+	@mkdir -p $(BUILD)/docs/doxygen
+	@test -d $(DOCS_VENV) || python3 -m venv $(DOCS_VENV)
+	@$(DOCS_PIP) install -q -r docs/requirements.txt
+	@doxygen Doxyfile
+	@$(DOCS_SPHINX) -q -b html docs/source $(BUILD)/docs/html
+	@echo "Documentation: $(BUILD)/docs/html/index.html"
 
 tools: $(COMPRESS_TOOL) ## Build compression tool
 
@@ -107,6 +116,6 @@ $(COMPRESS_TOOL): $(COMPRESS_SRC) $(COMPRESS_DEPS)
 	@echo "CC $(COMPRESS_TOOL)"
 	@$(CC) $(CFLAGS_HOSTED) -Ithird_party/lz4 -Ithird_party/heatshrink -o $@ $(COMPRESS_SRC) $(COMPRESS_DEPS)
 
-.PHONY: all tests clean clean-docs help doxygen tools
+.PHONY: all tests clean clean-docs help docs tools
 
 -include $(DEPS)

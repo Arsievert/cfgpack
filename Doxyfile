@@ -59,15 +59,7 @@ ALPHABETICAL_INDEX     = YES
 #---------------------------------------------------------------------------
 # HTML output configuration
 #---------------------------------------------------------------------------
-GENERATE_HTML          = YES
-HTML_OUTPUT            = html
-HTML_FILE_EXTENSION    = .html
-HTML_COLORSTYLE        = DARK
-HTML_DYNAMIC_SECTIONS  = NO
-GENERATE_TREEVIEW      = YES
-TREEVIEW_WIDTH         = 250
-SEARCHENGINE           = YES
-SERVER_BASED_SEARCH    = NO
+GENERATE_HTML          = NO
 
 #---------------------------------------------------------------------------
 # LaTeX output configuration
@@ -85,9 +77,11 @@ GENERATE_RTF           = NO
 GENERATE_MAN           = NO
 
 #---------------------------------------------------------------------------
-# XML output configuration
+# XML output configuration (for Sphinx/Breathe)
 #---------------------------------------------------------------------------
-GENERATE_XML           = NO
+GENERATE_XML           = YES
+XML_OUTPUT             = doxygen/xml
+XML_PROGRAMLISTING     = NO
 
 #---------------------------------------------------------------------------
 # Preprocessor configuration
@@ -97,13 +91,13 @@ MACRO_EXPANSION        = NO
 EXPAND_ONLY_PREDEF     = NO
 SEARCH_INCLUDES        = YES
 INCLUDE_PATH           = include
-PREDEFINED             =
+PREDEFINED             = CFGPACK_LZ4 CFGPACK_HEATSHRINK
 
 #---------------------------------------------------------------------------
 # Graph configuration (requires Graphviz)
 #---------------------------------------------------------------------------
 HAVE_DOT               = NO
-CLASS_DIAGRAMS         = NO
+CLASS_GRAPH            = NO
 COLLABORATION_GRAPH    = NO
 INCLUDE_GRAPH          = NO
 INCLUDED_BY_GRAPH      = NO

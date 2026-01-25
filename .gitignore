@@ -2,3 +2,4 @@ build/
 examples/build/
 compile_commands.json
 .cache/
+docs/.venv/
