@@ -179,4 +179,16 @@ cfgpack_err_t cfgpack_msgpack_decode_str(cfgpack_reader_t *r, const uint8_t **pt
  */
 cfgpack_err_t cfgpack_msgpack_decode_map_header(cfgpack_reader_t *r, uint32_t *count);
 
+/**
+ * @brief Skip over a MessagePack value without decoding it.
+ *
+ * Advances the reader past the current value, handling all MessagePack types
+ * (integers, floats, strings, arrays, maps, etc.). Useful for ignoring
+ * unknown keys when loading config.
+ *
+ * @param r Reader positioned at the value to skip.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_DECODE on format error or EOF.
+ */
+cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r);
+
 #endif /* CFGPACK_MSGPACK_H */

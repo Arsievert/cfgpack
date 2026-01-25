@@ -2,24 +2,24 @@
 dlog 1
 
 # Logging settings
-0  intv   u32   1000      # log interval in ms
-1  pfx    fstr  "log"     # log file prefix
-2  maxkb  u16   1024      # max file size in KB
+1  intv   u32   1000      # log interval in ms
+2  pfx    fstr  "log"     # log file prefix
+3  maxkb  u16   1024      # max file size in KB
 
 # Sensor enables (0=disabled, 1=enabled)
-3  ent    u8    1         # temperature sensor
-4  enh    u8    1         # humidity sensor
-5  enp    u8    0         # pressure sensor
-6  enl    u8    1         # light sensor
+4  ent    u8    1         # temperature sensor
+5  enh    u8    1         # humidity sensor
+6  enp    u8    0         # pressure sensor
+7  enl    u8    1         # light sensor
 
 # Calibration offsets
-7  toff   i16   0         # temperature offset (0.1C units)
-8  hoff   i8    0         # humidity offset (%)
+8  toff   i16   0         # temperature offset (0.1C units)
+9  hoff   i8    0         # humidity offset (%)
 
 # Device identity
-9  dname  fstr  "logger"  # device name
-10 did    u16   1         # device ID
+10 dname  fstr  "logger"  # device name
+11 did    u16   1         # device ID
 
 # Power management
-11 sleep  u8    1         # sleep between samples
-12 batwn  u16   3300      # battery warning threshold (mV)
+12 sleep  u8    1         # sleep between samples
+13 batwn  u16   3300      # battery warning threshold (mV)

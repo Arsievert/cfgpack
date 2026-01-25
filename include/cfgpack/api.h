@@ -22,6 +22,26 @@
 #include "value.h"
 
 /**
+ * @brief Reserved index for schema name.
+ *
+ * Index 0 is reserved in the MessagePack blob for storing the schema name
+ * as a string. This allows version detection when loading config from flash.
+ * User schema entries should start at index 1 or higher.
+ */
+#define CFGPACK_INDEX_RESERVED_NAME 0
+
+/**
+ * @brief Remap table entry for migrating config between schema versions.
+ *
+ * Used to translate indices from an old schema to a new schema when loading
+ * config that was saved by a previous firmware version.
+ */
+typedef struct {
+    uint16_t old_index;  /**< Index in the old schema. */
+    uint16_t new_index;  /**< Corresponding index in the new schema. */
+} cfgpack_remap_entry_t;
+
+/**
  * @brief Runtime context using caller-owned buffers (no heap).
  */
 typedef struct {
@@ -580,6 +600,9 @@ static inline cfgpack_err_t cfgpack_get_fstr_by_name(const cfgpack_ctx_t *ctx, c
 /**
  * @brief Encode present values into a MessagePack map in caller buffer.
  *
+ * The schema name is automatically written at CFGPACK_INDEX_RESERVED_NAME (0)
+ * to enable version detection when loading config from flash.
+ *
  * @param ctx      Initialized context.
  * @param out      Output buffer for MessagePack payload.
  * @param out_cap  Capacity of @p out in bytes.
@@ -589,14 +612,59 @@ static inline cfgpack_err_t cfgpack_get_fstr_by_name(const cfgpack_ctx_t *ctx, c
 cfgpack_err_t cfgpack_pageout(const cfgpack_ctx_t *ctx, uint8_t *out, size_t out_cap, size_t *out_len);
 
 /**
+ * @brief Peek at the schema name stored in a MessagePack config blob.
+ *
+ * Reads the schema name from CFGPACK_INDEX_RESERVED_NAME (0) without fully
+ * decoding the blob. Use this to determine which remap table to apply when
+ * loading config from a previous firmware version.
+ *
+ * @param data    MessagePack config blob.
+ * @param len     Length of @p data in bytes.
+ * @param out_name Output buffer for schema name (null-terminated).
+ * @param out_cap  Capacity of @p out_name in bytes.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_DECODE if blob is malformed;
+ *         CFGPACK_ERR_MISSING if key 0 not found; CFGPACK_ERR_BOUNDS if
+ *         name doesn't fit in output buffer.
+ */
+cfgpack_err_t cfgpack_peek_name(const uint8_t *data, size_t len, char *out_name, size_t out_cap);
+
+/**
+ * @brief Decode from a MessagePack buffer into the context with index remapping.
+ *
+ * Use this when loading config from flash that may have been saved by a
+ * previous firmware version with a different schema. The remap table
+ * translates old indices to new indices.
+ *
+ * Behavior:
+ * - Key 0 (schema name) is skipped (not loaded as a config value)
+ * - Keys in remap table are translated to new indices
+ * - Keys not in schema (after remapping) are silently ignored
+ * - Type widening is allowed (e.g., u8 value into u16 field)
+ * - Type narrowing or incompatible types return CFGPACK_ERR_TYPE_MISMATCH
+ *
+ * @param ctx         Initialized context.
+ * @param data        MessagePack map buffer.
+ * @param len         Length of @p data in bytes.
+ * @param remap       Remap table (NULL for no remapping).
+ * @param remap_count Number of entries in @p remap.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_DECODE on malformed input;
+ *         CFGPACK_ERR_TYPE_MISMATCH on incompatible types;
+ *         CFGPACK_ERR_STR_TOO_LONG if strings exceed limits.
+ */
+cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx, const uint8_t *data, size_t len,
+                                    const cfgpack_remap_entry_t *remap, size_t remap_count);
+
+/**
  * @brief Decode from a MessagePack buffer into the context.
- * @note Resets presence bitmap before applying decoded values.
+ *
+ * Equivalent to cfgpack_pagein_remap(ctx, data, len, NULL, 0).
+ * Unknown keys are silently ignored for forward compatibility.
  *
  * @param ctx   Initialized context.
  * @param data  MessagePack map buffer.
  * @param len   Length of @p data in bytes.
- * @return CFGPACK_OK on success; CFGPACK_ERR_DECODE on malformed input or
- *         unknown keys; CFGPACK_ERR_STR_TOO_LONG if strings exceed limits.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_DECODE on malformed input;
+ *         CFGPACK_ERR_STR_TOO_LONG if strings exceed limits.
  */
 cfgpack_err_t cfgpack_pagein_buf(cfgpack_ctx_t *ctx, const uint8_t *data, size_t len);
 

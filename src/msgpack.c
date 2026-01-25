@@ -211,3 +211,150 @@ cfgpack_err_t cfgpack_msgpack_decode_str(cfgpack_reader_t *r, const uint8_t **pt
     r->pos += *len;
     return CFGPACK_OK;
 }
+
+cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
+    if (r->pos >= r->len) return CFGPACK_ERR_DECODE;
+    uint8_t b = r->data[r->pos++];
+
+    /* Positive fixint (0x00-0x7f) and negative fixint (0xe0-0xff) */
+    if (b <= 0x7f || b >= 0xe0) return CFGPACK_OK;
+
+    /* Fixstr (0xa0-0xbf): length in low 5 bits */
+    if ((b & 0xe0) == 0xa0) {
+        uint32_t len = b & 0x1f;
+        if (r->pos + len > r->len) return CFGPACK_ERR_DECODE;
+        r->pos += len;
+        return CFGPACK_OK;
+    }
+
+    /* Fixmap (0x80-0x8f): count in low 4 bits */
+    if ((b & 0xf0) == 0x80) {
+        uint32_t count = b & 0x0f;
+        for (uint32_t i = 0; i < count; i++) {
+            if (cfgpack_msgpack_skip_value(r) != CFGPACK_OK) return CFGPACK_ERR_DECODE; /* key */
+            if (cfgpack_msgpack_skip_value(r) != CFGPACK_OK) return CFGPACK_ERR_DECODE; /* value */
+        }
+        return CFGPACK_OK;
+    }
+
+    /* Fixarray (0x90-0x9f): count in low 4 bits */
+    if ((b & 0xf0) == 0x90) {
+        uint32_t count = b & 0x0f;
+        for (uint32_t i = 0; i < count; i++) {
+            if (cfgpack_msgpack_skip_value(r) != CFGPACK_OK) return CFGPACK_ERR_DECODE;
+        }
+        return CFGPACK_OK;
+    }
+
+    /* Handle other types by format byte */
+    switch (b) {
+        /* nil, false, true */
+        case 0xc0: case 0xc2: case 0xc3:
+            return CFGPACK_OK;
+
+        /* bin 8, str 8 */
+        case 0xc4: case 0xd9: {
+            if (r->pos >= r->len) return CFGPACK_ERR_DECODE;
+            uint8_t len = r->data[r->pos++];
+            if (r->pos + len > r->len) return CFGPACK_ERR_DECODE;
+            r->pos += len;
+            return CFGPACK_OK;
+        }
+
+        /* bin 16, str 16 */
+        case 0xc5: case 0xda: {
+            if (r->pos + 2 > r->len) return CFGPACK_ERR_DECODE;
+            uint32_t len = ((uint32_t)r->data[r->pos] << 8) | r->data[r->pos + 1];
+            r->pos += 2;
+            if (r->pos + len > r->len) return CFGPACK_ERR_DECODE;
+            r->pos += len;
+            return CFGPACK_OK;
+        }
+
+        /* bin 32, str 32 */
+        case 0xc6: case 0xdb: {
+            if (r->pos + 4 > r->len) return CFGPACK_ERR_DECODE;
+            uint32_t len = ((uint32_t)r->data[r->pos] << 24) | ((uint32_t)r->data[r->pos + 1] << 16) |
+                           ((uint32_t)r->data[r->pos + 2] << 8) | r->data[r->pos + 3];
+            r->pos += 4;
+            if (r->pos + len > r->len) return CFGPACK_ERR_DECODE;
+            r->pos += len;
+            return CFGPACK_OK;
+        }
+
+        /* float 32, uint 32, int 32 */
+        case 0xca: case 0xce: case 0xd2:
+            if (r->pos + 4 > r->len) return CFGPACK_ERR_DECODE;
+            r->pos += 4;
+            return CFGPACK_OK;
+
+        /* float 64, uint 64, int 64 */
+        case 0xcb: case 0xcf: case 0xd3:
+            if (r->pos + 8 > r->len) return CFGPACK_ERR_DECODE;
+            r->pos += 8;
+            return CFGPACK_OK;
+
+        /* uint 8, int 8 */
+        case 0xcc: case 0xd0:
+            if (r->pos + 1 > r->len) return CFGPACK_ERR_DECODE;
+            r->pos += 1;
+            return CFGPACK_OK;
+
+        /* uint 16, int 16 */
+        case 0xcd: case 0xd1:
+            if (r->pos + 2 > r->len) return CFGPACK_ERR_DECODE;
+            r->pos += 2;
+            return CFGPACK_OK;
+
+        /* array 16 */
+        case 0xdc: {
+            if (r->pos + 2 > r->len) return CFGPACK_ERR_DECODE;
+            uint32_t count = ((uint32_t)r->data[r->pos] << 8) | r->data[r->pos + 1];
+            r->pos += 2;
+            for (uint32_t i = 0; i < count; i++) {
+                if (cfgpack_msgpack_skip_value(r) != CFGPACK_OK) return CFGPACK_ERR_DECODE;
+            }
+            return CFGPACK_OK;
+        }
+
+        /* array 32 */
+        case 0xdd: {
+            if (r->pos + 4 > r->len) return CFGPACK_ERR_DECODE;
+            uint32_t count = ((uint32_t)r->data[r->pos] << 24) | ((uint32_t)r->data[r->pos + 1] << 16) |
+                             ((uint32_t)r->data[r->pos + 2] << 8) | r->data[r->pos + 3];
+            r->pos += 4;
+            for (uint32_t i = 0; i < count; i++) {
+                if (cfgpack_msgpack_skip_value(r) != CFGPACK_OK) return CFGPACK_ERR_DECODE;
+            }
+            return CFGPACK_OK;
+        }
+
+        /* map 16 */
+        case 0xde: {
+            if (r->pos + 2 > r->len) return CFGPACK_ERR_DECODE;
+            uint32_t count = ((uint32_t)r->data[r->pos] << 8) | r->data[r->pos + 1];
+            r->pos += 2;
+            for (uint32_t i = 0; i < count; i++) {
+                if (cfgpack_msgpack_skip_value(r) != CFGPACK_OK) return CFGPACK_ERR_DECODE;
+                if (cfgpack_msgpack_skip_value(r) != CFGPACK_OK) return CFGPACK_ERR_DECODE;
+            }
+            return CFGPACK_OK;
+        }
+
+        /* map 32 */
+        case 0xdf: {
+            if (r->pos + 4 > r->len) return CFGPACK_ERR_DECODE;
+            uint32_t count = ((uint32_t)r->data[r->pos] << 24) | ((uint32_t)r->data[r->pos + 1] << 16) |
+                             ((uint32_t)r->data[r->pos + 2] << 8) | r->data[r->pos + 3];
+            r->pos += 4;
+            for (uint32_t i = 0; i < count; i++) {
+                if (cfgpack_msgpack_skip_value(r) != CFGPACK_OK) return CFGPACK_ERR_DECODE;
+                if (cfgpack_msgpack_skip_value(r) != CFGPACK_OK) return CFGPACK_ERR_DECODE;
+            }
+            return CFGPACK_OK;
+        }
+
+        default:
+            return CFGPACK_ERR_DECODE;
+    }
+}
