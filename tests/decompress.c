@@ -140,6 +140,8 @@ static void setup_test_context(cfgpack_schema_t *schema, cfgpack_entry_t *entrie
 }
 
 TEST_CASE(test_lz4_basic) {
+    LOG_SECTION("LZ4 basic compression/decompression roundtrip");
+
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[2];
     cfgpack_ctx_t ctx;
@@ -149,33 +151,46 @@ TEST_CASE(test_lz4_basic) {
     size_t msgpack_len, compressed_len;
     cfgpack_err_t err;
 
-    /* Create test msgpack data */
+    LOG("Creating test MessagePack data: {0: \"test\", 1: 42, 2: \"hello\"}");
     msgpack_len = create_test_msgpack(msgpack_buf, BUF_SIZE);
     CHECK(msgpack_len > 0);
+    LOG("Created %zu bytes of MessagePack data", msgpack_len);
+    LOG_HEX("Original msgpack", msgpack_buf, msgpack_len);
 
-    /* Compress with LZ4 */
+    LOG("Compressing with LZ4...");
     CHECK(compress_with_lz4(msgpack_buf, msgpack_len, compressed_buf, BUF_SIZE, &compressed_len) == 0);
     CHECK(compressed_len > 0);
+    LOG("Compressed to %zu bytes (%.1f%% of original)", 
+        compressed_len, (double)compressed_len / msgpack_len * 100);
+    LOG_HEX("LZ4 compressed", compressed_buf, compressed_len);
 
-    /* Set up context and decompress */
+    LOG("Setting up test context with schema: val(u8), str(str)");
     setup_test_context(&schema, entries, &ctx, values, defaults, present);
+
+    LOG("Calling cfgpack_pagein_lz4() to decompress and load...");
     err = cfgpack_pagein_lz4(&ctx, compressed_buf, compressed_len, msgpack_len);
     CHECK(err == CFGPACK_OK);
+    LOG("Decompression successful");
 
-    /* Verify values were loaded correctly */
+    LOG("Verifying loaded values:");
     cfgpack_value_t v;
     CHECK(cfgpack_get(&ctx, 1, &v) == CFGPACK_OK);
     CHECK(v.type == CFGPACK_TYPE_U8);
     CHECK(v.v.u64 == 42);
+    LOG_VALUE("  Index 1 (val)", v);
 
     CHECK(cfgpack_get(&ctx, 2, &v) == CFGPACK_OK);
     CHECK(v.type == CFGPACK_TYPE_STR);
     CHECK(strcmp(v.v.str.data, "hello") == 0);
+    LOG_VALUE("  Index 2 (str)", v);
 
+    LOG("Test completed successfully");
     return TEST_OK;
 }
 
 TEST_CASE(test_lz4_null_args) {
+    LOG_SECTION("LZ4 NULL argument handling");
+
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[2];
     cfgpack_ctx_t ctx;
@@ -183,15 +198,24 @@ TEST_CASE(test_lz4_null_args) {
     cfgpack_value_t defaults[2];
     uint8_t present[1];
 
+    LOG("Setting up test context");
     setup_test_context(&schema, entries, &ctx, values, defaults, present);
 
+    LOG("Testing cfgpack_pagein_lz4(NULL, data, 10, 20)");
     CHECK(cfgpack_pagein_lz4(NULL, compressed_buf, 10, 20) == CFGPACK_ERR_DECODE);
-    CHECK(cfgpack_pagein_lz4(&ctx, NULL, 10, 20) == CFGPACK_ERR_DECODE);
+    LOG("Correctly returned CFGPACK_ERR_DECODE for NULL ctx");
 
+    LOG("Testing cfgpack_pagein_lz4(ctx, NULL, 10, 20)");
+    CHECK(cfgpack_pagein_lz4(&ctx, NULL, 10, 20) == CFGPACK_ERR_DECODE);
+    LOG("Correctly returned CFGPACK_ERR_DECODE for NULL data");
+
+    LOG("Test completed successfully");
     return TEST_OK;
 }
 
 TEST_CASE(test_lz4_size_too_large) {
+    LOG_SECTION("LZ4 decompressed size exceeds buffer limit");
+
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[2];
     cfgpack_ctx_t ctx;
@@ -199,15 +223,20 @@ TEST_CASE(test_lz4_size_too_large) {
     cfgpack_value_t defaults[2];
     uint8_t present[1];
 
+    LOG("Setting up test context");
     setup_test_context(&schema, entries, &ctx, values, defaults, present);
 
-    /* Decompressed size larger than 4096 should fail */
+    LOG("Testing cfgpack_pagein_lz4() with decompressed_size=5000 (max is 4096)");
     CHECK(cfgpack_pagein_lz4(&ctx, compressed_buf, 10, 5000) == CFGPACK_ERR_BOUNDS);
+    LOG("Correctly returned CFGPACK_ERR_BOUNDS for size > PAGE_CAP");
 
+    LOG("Test completed successfully");
     return TEST_OK;
 }
 
 TEST_CASE(test_lz4_corrupted_data) {
+    LOG_SECTION("LZ4 corrupted/garbage data handling");
+
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[2];
     cfgpack_ctx_t ctx;
@@ -216,15 +245,21 @@ TEST_CASE(test_lz4_corrupted_data) {
     uint8_t present[1];
     uint8_t garbage[32] = {0xFF, 0xFE, 0xFD, 0xFC, 0x00, 0x01, 0x02, 0x03};
 
+    LOG("Setting up test context");
     setup_test_context(&schema, entries, &ctx, values, defaults, present);
 
-    /* Garbage data should fail to decompress */
+    LOG("Testing cfgpack_pagein_lz4() with garbage data:");
+    LOG_HEX("Garbage input", garbage, sizeof(garbage));
     CHECK(cfgpack_pagein_lz4(&ctx, garbage, sizeof(garbage), 100) == CFGPACK_ERR_DECODE);
+    LOG("Correctly returned CFGPACK_ERR_DECODE for corrupted data");
 
+    LOG("Test completed successfully");
     return TEST_OK;
 }
 
 TEST_CASE(test_heatshrink_basic) {
+    LOG_SECTION("Heatshrink basic compression/decompression roundtrip");
+
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[2];
     cfgpack_ctx_t ctx;
@@ -234,33 +269,46 @@ TEST_CASE(test_heatshrink_basic) {
     size_t msgpack_len, compressed_len;
     cfgpack_err_t err;
 
-    /* Create test msgpack data */
+    LOG("Creating test MessagePack data: {0: \"test\", 1: 42, 2: \"hello\"}");
     msgpack_len = create_test_msgpack(msgpack_buf, BUF_SIZE);
     CHECK(msgpack_len > 0);
+    LOG("Created %zu bytes of MessagePack data", msgpack_len);
+    LOG_HEX("Original msgpack", msgpack_buf, msgpack_len);
 
-    /* Compress with heatshrink */
+    LOG("Compressing with heatshrink (window=8, lookahead=4)...");
     CHECK(compress_with_heatshrink(msgpack_buf, msgpack_len, compressed_buf, BUF_SIZE, &compressed_len) == 0);
     CHECK(compressed_len > 0);
+    LOG("Compressed to %zu bytes (%.1f%% of original)", 
+        compressed_len, (double)compressed_len / msgpack_len * 100);
+    LOG_HEX("Heatshrink compressed", compressed_buf, compressed_len);
 
-    /* Set up context and decompress */
+    LOG("Setting up test context with schema: val(u8), str(str)");
     setup_test_context(&schema, entries, &ctx, values, defaults, present);
+
+    LOG("Calling cfgpack_pagein_heatshrink() to decompress and load...");
     err = cfgpack_pagein_heatshrink(&ctx, compressed_buf, compressed_len);
     CHECK(err == CFGPACK_OK);
+    LOG("Decompression successful");
 
-    /* Verify values were loaded correctly */
+    LOG("Verifying loaded values:");
     cfgpack_value_t v;
     CHECK(cfgpack_get(&ctx, 1, &v) == CFGPACK_OK);
     CHECK(v.type == CFGPACK_TYPE_U8);
     CHECK(v.v.u64 == 42);
+    LOG_VALUE("  Index 1 (val)", v);
 
     CHECK(cfgpack_get(&ctx, 2, &v) == CFGPACK_OK);
     CHECK(v.type == CFGPACK_TYPE_STR);
     CHECK(strcmp(v.v.str.data, "hello") == 0);
+    LOG_VALUE("  Index 2 (str)", v);
 
+    LOG("Test completed successfully");
     return TEST_OK;
 }
 
 TEST_CASE(test_heatshrink_null_args) {
+    LOG_SECTION("Heatshrink NULL argument handling");
+
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[2];
     cfgpack_ctx_t ctx;
@@ -268,15 +316,24 @@ TEST_CASE(test_heatshrink_null_args) {
     cfgpack_value_t defaults[2];
     uint8_t present[1];
 
+    LOG("Setting up test context");
     setup_test_context(&schema, entries, &ctx, values, defaults, present);
 
+    LOG("Testing cfgpack_pagein_heatshrink(NULL, data, 10)");
     CHECK(cfgpack_pagein_heatshrink(NULL, compressed_buf, 10) == CFGPACK_ERR_DECODE);
-    CHECK(cfgpack_pagein_heatshrink(&ctx, NULL, 10) == CFGPACK_ERR_DECODE);
+    LOG("Correctly returned CFGPACK_ERR_DECODE for NULL ctx");
 
+    LOG("Testing cfgpack_pagein_heatshrink(ctx, NULL, 10)");
+    CHECK(cfgpack_pagein_heatshrink(&ctx, NULL, 10) == CFGPACK_ERR_DECODE);
+    LOG("Correctly returned CFGPACK_ERR_DECODE for NULL data");
+
+    LOG("Test completed successfully");
     return TEST_OK;
 }
 
 TEST_CASE(test_heatshrink_empty_input) {
+    LOG_SECTION("Heatshrink empty input handling");
+
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[2];
     cfgpack_ctx_t ctx;
@@ -284,17 +341,22 @@ TEST_CASE(test_heatshrink_empty_input) {
     cfgpack_value_t defaults[2];
     uint8_t present[1];
 
+    LOG("Setting up test context");
     setup_test_context(&schema, entries, &ctx, values, defaults, present);
 
-    /* Empty compressed data - heatshrink will produce empty output,
-     * which cfgpack_pagein_buf will reject as invalid msgpack */
+    LOG("Testing cfgpack_pagein_heatshrink() with empty input (len=0)");
     uint8_t empty[1] = {0};
     CHECK(cfgpack_pagein_heatshrink(&ctx, empty, 0) == CFGPACK_ERR_DECODE);
+    LOG("Correctly returned CFGPACK_ERR_DECODE for empty input");
+    LOG("(heatshrink produces empty output, which is invalid msgpack)");
 
+    LOG("Test completed successfully");
     return TEST_OK;
 }
 
 TEST_CASE(test_roundtrip_both_algorithms) {
+    LOG_SECTION("Compare LZ4 and Heatshrink roundtrip");
+
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[2];
     cfgpack_ctx_t ctx;
@@ -303,30 +365,38 @@ TEST_CASE(test_roundtrip_both_algorithms) {
     uint8_t present[1];
     size_t msgpack_len, lz4_len, hs_len;
 
-    /* Create test msgpack data */
+    LOG("Creating test MessagePack data");
     msgpack_len = create_test_msgpack(msgpack_buf, BUF_SIZE);
     CHECK(msgpack_len > 0);
+    LOG("Original size: %zu bytes", msgpack_len);
 
-    /* Compress with both algorithms */
+    LOG("Compressing with both algorithms:");
     CHECK(compress_with_lz4(msgpack_buf, msgpack_len, compressed_buf, BUF_SIZE, &lz4_len) == 0);
+    LOG("  LZ4: %zu bytes (%.1f%%)", lz4_len, (double)lz4_len / msgpack_len * 100);
+    
     CHECK(compress_with_heatshrink(msgpack_buf, msgpack_len, scratch_buf, BUF_SIZE, &hs_len) == 0);
+    LOG("  Heatshrink: %zu bytes (%.1f%%)", hs_len, (double)hs_len / msgpack_len * 100);
 
-    /* Test LZ4 roundtrip */
+    LOG("Testing LZ4 roundtrip:");
     setup_test_context(&schema, entries, &ctx, values, defaults, present);
     CHECK(cfgpack_pagein_lz4(&ctx, compressed_buf, lz4_len, msgpack_len) == CFGPACK_OK);
 
     cfgpack_value_t v;
     CHECK(cfgpack_get(&ctx, 1, &v) == CFGPACK_OK);
     CHECK(v.v.u64 == 42);
+    LOG("  LZ4 value verified: val = %llu", (unsigned long long)v.v.u64);
 
-    /* Test heatshrink roundtrip */
+    LOG("Testing Heatshrink roundtrip:");
     memset(present, 0, sizeof(present));
     setup_test_context(&schema, entries, &ctx, values, defaults, present);
     CHECK(cfgpack_pagein_heatshrink(&ctx, scratch_buf, hs_len) == CFGPACK_OK);
 
     CHECK(cfgpack_get(&ctx, 1, &v) == CFGPACK_OK);
     CHECK(v.v.u64 == 42);
+    LOG("  Heatshrink value verified: val = %llu", (unsigned long long)v.v.u64);
 
+    LOG("Both algorithms produced identical results");
+    LOG("Test completed successfully");
     return TEST_OK;
 }
 
