@@ -12,10 +12,12 @@
  * - Runtime context and value access (api.h)
  *
  * For file-based convenience wrappers, also include io_file.h.
+ * For decompression support (LZ4/heatshrink), also include decompress.h.
  */
 #include "error.h"
 #include "value.h"
 #include "schema.h"
 #include "api.h"
+#include "decompress.h"
 
 #endif /* CFGPACK_CFGPACK_H */

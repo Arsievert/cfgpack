@@ -438,16 +438,124 @@ if (strcmp(stored_name, current_schema.map_name) == 0) {
 
 ## Building
 - `make` builds `build/out/libcfgpack.a`.
-- `make tests` builds and runs all test binaries (`build/out/basic`, `build/out/parser`, `build/out/parser_bounds`, `build/out/runtime`).
+- `make tests` builds all test binaries.
+- `make tools` builds the compression tool (`build/out/cfgpack-compress`).
 
 ## Testing
-- `build/out/basic` exercises set/get/print and type/length checks.
-- `build/out/parser` validates schema parsing against sample data.
-- `build/out/parser_bounds` covers parser edge cases (duplicate names/indices, length bounds, missing header/fields, too many entries, unknown types).
-- `build/out/runtime` covers runtime bounds, pageout/pagein error paths, and full type roundtrip (writes `build/runtime_all.bin` and `build/runtime_tmp.bin`).
+
+Run `make tests` to build the test binaries, then `./scripts/run-tests.sh` to execute them:
+
+```bash
+make tests
+./scripts/run-tests.sh
+```
+
+The test runner outputs a summary to the console and writes detailed logs to `build/test.log`:
+
+```
+Running tests...
+
+  basic:         5/5 passed
+  decompress:    8/8 passed
+  parser_bounds: 24/24 passed
+  parser:        3/3 passed
+  runtime:       21/21 passed
+
+TOTAL: 61/61 passed
+Full log: build/test.log
+```
+
+### Test Binaries
+- `build/out/basic` — set/get/print and type/length checks
+- `build/out/decompress` — LZ4 and heatshrink decompression roundtrips
+- `build/out/parser` — schema parsing against sample data
+- `build/out/parser_bounds` — parser edge cases (duplicate names/indices, length bounds, missing header/fields, too many entries, unknown types)
+- `build/out/runtime` — runtime bounds, pageout/pagein error paths, and full type roundtrip
+
+## Compression Support
+
+CFGPack supports decompression of stored configs using LZ4 or heatshrink algorithms. This is useful when config blobs are stored compressed in flash to save space. Compression must be done externally (e.g., at build time or on the host); only decompression is supported on the device.
+
+Both LZ4 and heatshrink are enabled by default. To disable for minimal embedded builds, edit the `CFLAGS` in the Makefile to remove `-DCFGPACK_LZ4` and/or `-DCFGPACK_HEATSHRINK`.
+
+### API
+
+```c
+#include "cfgpack/decompress.h"
+
+/* Decompress LZ4 data and load into context.
+ * decompressed_size must be known (stored alongside compressed data). */
+cfgpack_err_t cfgpack_pagein_lz4(cfgpack_ctx_t *ctx, const uint8_t *data, size_t len,
+                                  size_t decompressed_size);
+
+/* Decompress heatshrink data and load into context.
+ * Encoder must use window=8, lookahead=4 to match decoder config. */
+cfgpack_err_t cfgpack_pagein_heatshrink(cfgpack_ctx_t *ctx, const uint8_t *data, size_t len);
+```
+
+### Usage Example
+
+```c
+// LZ4 example - decompressed size must be stored with the compressed blob
+uint8_t compressed[2048];
+size_t compressed_len = read_from_flash(compressed);
+size_t decompressed_size = read_size_header();  // stored alongside blob
+
+cfgpack_err_t err = cfgpack_pagein_lz4(&ctx, compressed, compressed_len, decompressed_size);
+if (err != CFGPACK_OK) {
+    // Handle decompression or decode error
+}
+
+// Heatshrink example - no size header needed (streaming)
+err = cfgpack_pagein_heatshrink(&ctx, compressed, compressed_len);
+```
+
+### Implementation Notes
+
+- **Static buffer**: Both decompression functions use a shared internal 4096-byte buffer (matching `PAGE_CAP`). Decompressed data cannot exceed this size.
+- **Not thread-safe**: The shared static buffer means these functions cannot be called concurrently from multiple threads.
+- **Heatshrink parameters**: The decoder is configured with window=8 bits (256 bytes) and lookahead=4 bits (16 bytes). The encoder must use matching parameters.
+- **Vendored sources**: LZ4 and heatshrink source files are vendored in `third_party/` to avoid external dependencies.
+
+### Compression Workflow
+
+A typical workflow for storing compressed config:
+
+1. **At build time or on host**: Serialize config with `cfgpack_pageout()`, compress with LZ4 or heatshrink, store compressed blob + size metadata in flash image
+2. **On device boot**: Read compressed blob from flash, decompress with `cfgpack_pagein_lz4()` or `cfgpack_pagein_heatshrink()`
+
+### Compression Tool
+
+The `cfgpack-compress` CLI tool compresses files for build-time or host-side use:
+
+```bash
+make tools
+./build/out/cfgpack-compress <algorithm> <input> <output>
+```
+
+Where `<algorithm>` is either `lz4` or `heatshrink`.
+
+Example:
+```bash
+# Compress a serialized config blob
+./build/out/cfgpack-compress lz4 config.bin config.lz4
+./build/out/cfgpack-compress heatshrink config.bin config.hs
+```
+
+### Third-Party Libraries
+
+LZ4 and heatshrink sources are vendored in `third_party/` for self-contained builds:
+
+```
+third_party/
+  lz4/
+    lz4.h, lz4.c              # BSD-2-Clause license
+  heatshrink/
+    heatshrink_config.h       # window=8, lookahead=4
+    heatshrink_decoder.h/c    # Used by library
+    heatshrink_encoder.h/c    # Used by compression tool and tests
+                              # ISC license
+```
 
 ## Roadmap
 - Rust library alongside C implementation.
-- Compression for stored configs.
-- Generated documentation (e.g., PDF/markdown) from map specs.
-- Potential modes for loading via temp file vs. in-memory live config.
