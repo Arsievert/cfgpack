@@ -93,9 +93,13 @@ vehicle 1
   - `schema.h` — schema structs and parser/doc APIs.
   - `msgpack.h` — minimal MessagePack buffer + encode/decode helpers (fixed-capacity, caller storage).
   - `api.h` — main cfgpack runtime API (set/get/pagein/pageout/print/version/size) using caller buffers.
-- `src/` — library implementation (`core.c`, `io.c`, `msgpack.c`, `schema_parser.c`).
-- `tests/` — C test programs (`basic.c`, `parser.c`, `parser_bounds.c`, `runtime.c`) plus a shared harness in `tests/test.c` and sample data under `tests/data/`.
-- `Makefile` — builds `build/out/libcfgpack.a` and test binaries (`build/out/basic`, `build/out/parser`, `build/out/parser_bounds`, `build/out/runtime`).
+  - `decompress.h` — optional LZ4/heatshrink decompression support.
+- `src/` — library implementation (`core.c`, `io.c`, `msgpack.c`, `schema_parser.c`, `decompress.c`).
+- `tests/` — C test programs (`basic.c`, `parser.c`, `parser_bounds.c`, `runtime.c`, `decompress.c`) plus a shared harness in `tests/test.c` and sample data under `tests/data/`.
+- `tools/` — CLI tools source (`cfgpack-compress.c` for LZ4/heatshrink compression).
+- `examples/` — complete usage examples (`datalogger/`, `sensor_hub/`).
+- `third_party/` — vendored dependencies (`lz4/`, `heatshrink/`).
+- `Makefile` — builds `build/out/libcfgpack.a`, test binaries, and tools.
 
 ## Public APIs (snippets)
 Include just `cfgpack/cfgpack.h`; it re-exports the public API surface.
@@ -165,19 +169,31 @@ typedef struct {
     size_t entry_count;
 } cfgpack_schema_t;
 
-/* Parse schema from .map file */
-cfgpack_err_t cfgpack_parse_schema(const char *path, cfgpack_schema_t *out, cfgpack_entry_t *entries, size_t max_entries, cfgpack_value_t *defaults, cfgpack_parse_error_t *err);
+/* Parse schema from .map buffer */
+cfgpack_err_t cfgpack_parse_schema(const char *data, size_t data_len,
+                                   cfgpack_schema_t *out, cfgpack_entry_t *entries,
+                                   size_t max_entries, cfgpack_value_t *defaults,
+                                   cfgpack_parse_error_t *err);
 
-/* Parse schema from JSON file */
-cfgpack_err_t cfgpack_schema_parse_json(const char *path, cfgpack_schema_t *out, cfgpack_entry_t *entries, size_t max_entries, cfgpack_value_t *defaults, cfgpack_parse_error_t *err);
+/* Parse schema from JSON buffer */
+cfgpack_err_t cfgpack_schema_parse_json(const char *data, size_t data_len,
+                                        cfgpack_schema_t *out, cfgpack_entry_t *entries,
+                                        size_t max_entries, cfgpack_value_t *defaults,
+                                        cfgpack_parse_error_t *err);
 
 void cfgpack_schema_free(cfgpack_schema_t *schema); /* no-op for caller-owned arrays */
 
-/* Write schema to Markdown */
-cfgpack_err_t cfgpack_schema_write_markdown(const cfgpack_schema_t *schema, const cfgpack_value_t *defaults, const char *out_path, cfgpack_parse_error_t *err);
+/* Write schema to Markdown buffer */
+cfgpack_err_t cfgpack_schema_write_markdown(const cfgpack_schema_t *schema,
+                                            const cfgpack_value_t *defaults,
+                                            char *out, size_t out_cap, size_t *out_len,
+                                            cfgpack_parse_error_t *err);
 
-/* Write schema to JSON */
-cfgpack_err_t cfgpack_schema_write_json(const cfgpack_schema_t *schema, const cfgpack_value_t *defaults, const char *out_path, cfgpack_parse_error_t *err);
+/* Write schema to JSON buffer */
+cfgpack_err_t cfgpack_schema_write_json(const cfgpack_schema_t *schema,
+                                        const cfgpack_value_t *values,
+                                        char *out, size_t out_cap, size_t *out_len,
+                                        cfgpack_parse_error_t *err);
 ```
 
 #### JSON Schema Format
@@ -435,6 +451,38 @@ if (strcmp(stored_name, current_schema.map_name) == 0) {
     printf("Unknown config version, using defaults\n");
 }
 ```
+
+## Examples
+
+Two complete examples are provided in the `examples/` directory:
+
+### datalogger
+
+A basic data logger configuration demonstrating:
+- Parsing schema from `.map` file
+- Typed convenience functions for get/set
+- Generic API for dynamic iteration
+- Serialization to MessagePack and JSON export
+
+```bash
+cd examples/datalogger
+make run
+```
+
+### sensor_hub
+
+An IoT sensor hub demonstrating compressed schema loading:
+- JSON schema with 66 entries, compressed with heatshrink at build time
+- Runtime decompression of schema from external file
+- Generic setter API by index (`cfgpack_set(&ctx, index, &val)`)
+- Round-trip verification
+
+```bash
+cd examples/sensor_hub
+make run
+```
+
+The sensor_hub example shows a typical embedded workflow where configuration schemas are compressed to save flash space. The heatshrink compression achieves ~22% ratio (4245 → 949 bytes).
 
 ## Building
 - `make` builds `build/out/libcfgpack.a`.
