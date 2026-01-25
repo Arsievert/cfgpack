@@ -104,14 +104,14 @@ cfgpack_err_t cfgpack_schema_write_markdown(const cfgpack_schema_t *schema, cons
  * - Numbers are output as JSON numbers.
  *
  * @param schema   Schema to write.
- * @param defaults Parallel array of default values (same order as schema->entries).
+ * @param values   Parallel array of values to write (same order as schema->entries).
  * @param out      Output buffer for JSON.
  * @param out_cap  Capacity of @p out in bytes.
  * @param out_len  Output: bytes written (always set, even if > out_cap to indicate needed size).
  * @param err      Optional error info on failure.
  * @return CFGPACK_OK on success; CFGPACK_ERR_BOUNDS if buffer too small.
  */
-cfgpack_err_t cfgpack_schema_write_json(const cfgpack_schema_t *schema, const cfgpack_value_t *defaults, char *out, size_t out_cap, size_t *out_len, cfgpack_parse_error_t *err);
+cfgpack_err_t cfgpack_schema_write_json(const cfgpack_schema_t *schema, const cfgpack_value_t *values, char *out, size_t out_cap, size_t *out_len, cfgpack_parse_error_t *err);
 
 /**
  * @brief Parse a schema from a JSON buffer.

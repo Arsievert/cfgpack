@@ -739,7 +739,7 @@ static void write_json_default_to_wbuf(wbuf_t *w, const cfgpack_entry_t *entry, 
     }
 }
 
-cfgpack_err_t cfgpack_schema_write_json(const cfgpack_schema_t *schema, const cfgpack_value_t *defaults, char *out, size_t out_cap, size_t *out_len, cfgpack_parse_error_t *err) {
+cfgpack_err_t cfgpack_schema_write_json(const cfgpack_schema_t *schema, const cfgpack_value_t *values, char *out, size_t out_cap, size_t *out_len, cfgpack_parse_error_t *err) {
     wbuf_t w;
     wbuf_init(&w, out, out_cap);
 
@@ -760,8 +760,8 @@ cfgpack_err_t cfgpack_schema_write_json(const cfgpack_schema_t *schema, const cf
         wbuf_puts(&w, e->name);
         wbuf_puts(&w, "\", \"type\": \"");
         wbuf_puts(&w, type_to_str(e->type));
-        wbuf_puts(&w, "\", \"default\": ");
-        write_json_default_to_wbuf(&w, e, &defaults[i]);
+        wbuf_puts(&w, "\", \"value\": ");
+        write_json_default_to_wbuf(&w, e, &values[i]);
         if (i + 1 < schema->entry_count) {
             wbuf_puts(&w, "},\n");
         } else {
@@ -1050,7 +1050,7 @@ cfgpack_err_t cfgpack_schema_parse_json(const char *data, size_t data_len, cfgpa
                             return trc;
                         }
                         got_type = 1;
-                    } else if (strcmp(ekey, "default") == 0) {
+                    } else if (strcmp(ekey, "value") == 0) {
                         char c = json_peek(p);
                         if (json_match_literal(p, "null")) {
                             default_is_null = 1;

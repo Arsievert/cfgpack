@@ -139,9 +139,9 @@ cfgpack_err_t cfgpack_schema_write_markdown_file(const cfgpack_schema_t *schema,
     return write_file(path, scratch, out_len);
 }
 
-cfgpack_err_t cfgpack_schema_write_json_file(const cfgpack_schema_t *schema, const cfgpack_value_t *defaults, const char *path, char *scratch, size_t scratch_cap, cfgpack_parse_error_t *err) {
+cfgpack_err_t cfgpack_schema_write_json_file(const cfgpack_schema_t *schema, const cfgpack_value_t *values, const char *path, char *scratch, size_t scratch_cap, cfgpack_parse_error_t *err) {
     size_t out_len = 0;
-    cfgpack_err_t rc = cfgpack_schema_write_json(schema, defaults, scratch, scratch_cap, &out_len, err);
+    cfgpack_err_t rc = cfgpack_schema_write_json(schema, values, scratch, scratch_cap, &out_len, err);
     if (rc != CFGPACK_OK) return rc;
 
     if (out_len > scratch_cap) {

@@ -523,11 +523,11 @@ TEST_CASE(test_json_parse_direct) {
         "  \"name\": \"test\",\n"
         "  \"version\": 42,\n"
         "  \"entries\": [\n"
-        "    {\"index\": 0, \"name\": \"speed\", \"type\": \"u16\", \"default\": 100},\n"
-        "    {\"index\": 1, \"name\": \"name\", \"type\": \"fstr\", \"default\": \"hello\"},\n"
-        "    {\"index\": 2, \"name\": \"temp\", \"type\": \"i8\", \"default\": -10},\n"
-        "    {\"index\": 3, \"name\": \"ratio\", \"type\": \"f32\", \"default\": 3.14},\n"
-        "    {\"index\": 4, \"name\": \"desc\", \"type\": \"str\", \"default\": null}\n"
+        "    {\"index\": 0, \"name\": \"speed\", \"type\": \"u16\", \"value\": 100},\n"
+        "    {\"index\": 1, \"name\": \"name\", \"type\": \"fstr\", \"value\": \"hello\"},\n"
+        "    {\"index\": 2, \"name\": \"temp\", \"type\": \"i8\", \"value\": -10},\n"
+        "    {\"index\": 3, \"name\": \"ratio\", \"type\": \"f32\", \"value\": 3.14},\n"
+        "    {\"index\": 4, \"name\": \"desc\", \"type\": \"str\", \"value\": null}\n"
         "  ]\n"
         "}\n";
 

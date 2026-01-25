@@ -70,14 +70,14 @@ cfgpack_err_t cfgpack_schema_write_markdown_file(const cfgpack_schema_t *schema,
  * Writes to a scratch buffer and then writes the buffer to the file.
  *
  * @param schema      Schema to write.
- * @param defaults    Parallel array of default values (same order as schema->entries).
+ * @param values      Parallel array of values to write (same order as schema->entries).
  * @param path        Output file path.
  * @param scratch     Scratch buffer for formatting.
  * @param scratch_cap Capacity of scratch buffer.
  * @param err         Optional error info on failure.
  * @return CFGPACK_OK on success; CFGPACK_ERR_IO on write failure; CFGPACK_ERR_BOUNDS if scratch too small.
  */
-cfgpack_err_t cfgpack_schema_write_json_file(const cfgpack_schema_t *schema, const cfgpack_value_t *defaults, const char *path, char *scratch, size_t scratch_cap, cfgpack_parse_error_t *err);
+cfgpack_err_t cfgpack_schema_write_json_file(const cfgpack_schema_t *schema, const cfgpack_value_t *values, const char *path, char *scratch, size_t scratch_cap, cfgpack_parse_error_t *err);
 
 /**
  * @brief Encode to a file using caller scratch buffer (no heap).
