@@ -335,41 +335,6 @@ TEST_CASE(test_unsorted_input_sorted_output) {
     return (TEST_OK);
 }
 
-TEST_CASE(test_markdown_writer_basic) {
-    LOG_SECTION("Markdown schema writer");
-
-    const char *in_path = "tests/data/sample.map";
-    const char *out_path = "build/markdown_tmp.md";
-    cfgpack_schema_t schema;
-    cfgpack_entry_t entries[128];
-    cfgpack_value_t defaults[128];
-    cfgpack_parse_error_t err;
-    cfgpack_err_t rc;
-    FILE *f;
-    char buf[64];
-
-    LOG("Parsing input schema: %s", in_path);
-    rc = cfgpack_parse_schema_file(in_path, &schema, entries, 128, defaults, scratch, sizeof(scratch), &err);
-    CHECK(rc == CFGPACK_OK);
-    LOG("Parse succeeded, entry_count = %zu", schema.entry_count);
-
-    LOG("Writing markdown to: %s", out_path);
-    rc = cfgpack_schema_write_markdown_file(&schema, defaults, out_path, scratch, sizeof(scratch), &err);
-    CHECK(rc == CFGPACK_OK);
-    LOG("Markdown write succeeded");
-
-    LOG("Verifying markdown starts with '# '");
-    f = fopen(out_path, "r");
-    CHECK(f != NULL);
-    CHECK(fgets(buf, sizeof(buf), f) != NULL);
-    CHECK(strncmp(buf, "# ", 2) == 0);
-    fclose(f);
-    LOG("First line: '%.*s...' (starts with '# ')", 20, buf);
-
-    LOG("Test completed successfully");
-    return (TEST_OK);
-}
-
 TEST_CASE(test_default_u8_out_of_range) {
     LOG_SECTION("Default value out of range for u8");
 
@@ -857,7 +822,6 @@ int main(void) {
     overall |= (test_case_result("name_length_edges", test_name_length_edges()) != TEST_OK);
     overall |= (test_case_result("index_edges", test_index_edges()) != TEST_OK);
     overall |= (test_case_result("unsorted_input_sorted_output", test_unsorted_input_sorted_output()) != TEST_OK);
-    overall |= (test_case_result("markdown_writer_basic", test_markdown_writer_basic()) != TEST_OK);
     overall |= (test_case_result("default_u8_out_of_range", test_default_u8_out_of_range()) != TEST_OK);
     overall |= (test_case_result("default_i8_out_of_range", test_default_i8_out_of_range()) != TEST_OK);
     overall |= (test_case_result("default_fstr_too_long", test_default_fstr_too_long()) != TEST_OK);

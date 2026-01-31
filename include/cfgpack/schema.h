@@ -6,7 +6,7 @@
  * @brief Schema parsing and serialization for cfgpack.
  *
  * Provides functions to parse schemas from .map and JSON formats,
- * and to serialize schemas to Markdown and JSON formats.
+ * and to serialize schemas to JSON format.
  * All functions use caller-provided buffers (no heap allocation).
  */
 
@@ -71,19 +71,6 @@ cfgpack_err_t cfgpack_parse_schema(const char *data, size_t data_len, cfgpack_sc
  * @param schema Schema to free.
  */
 void cfgpack_schema_free(cfgpack_schema_t *schema);
-
-/**
- * @brief Write a simple Markdown table describing the schema to a buffer.
- *
- * @param schema   Schema to describe.
- * @param defaults Parallel array of default values (same order as schema->entries).
- * @param out      Output buffer for Markdown.
- * @param out_cap  Capacity of @p out in bytes.
- * @param out_len  Output: bytes written (always set, even if > out_cap to indicate needed size).
- * @param err      Optional error info on failure.
- * @return CFGPACK_OK on success; CFGPACK_ERR_BOUNDS if buffer too small.
- */
-cfgpack_err_t cfgpack_schema_write_markdown(const cfgpack_schema_t *schema, const cfgpack_value_t *defaults, char *out, size_t out_cap, size_t *out_len, cfgpack_parse_error_t *err);
 
 /**
  * @brief Write a schema to a JSON buffer.

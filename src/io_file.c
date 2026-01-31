@@ -123,22 +123,6 @@ cfgpack_err_t cfgpack_schema_parse_json_file(const char *path, cfgpack_schema_t 
     return cfgpack_schema_parse_json(scratch, len, out_schema, entries, max_entries, defaults, err);
 }
 
-cfgpack_err_t cfgpack_schema_write_markdown_file(const cfgpack_schema_t *schema, const cfgpack_value_t *defaults, const char *path, char *scratch, size_t scratch_cap, cfgpack_parse_error_t *err) {
-    size_t out_len = 0;
-    cfgpack_err_t rc = cfgpack_schema_write_markdown(schema, defaults, scratch, scratch_cap, &out_len, err);
-    if (rc != CFGPACK_OK) return rc;
-
-    if (out_len > scratch_cap) {
-        if (err) {
-            err->line = 0;
-            snprintf(err->message, sizeof(err->message), "scratch buffer too small");
-        }
-        return CFGPACK_ERR_BOUNDS;
-    }
-
-    return write_file(path, scratch, out_len);
-}
-
 cfgpack_err_t cfgpack_schema_write_json_file(const cfgpack_schema_t *schema, const cfgpack_value_t *values, const char *path, char *scratch, size_t scratch_cap, cfgpack_parse_error_t *err) {
     size_t out_len = 0;
     cfgpack_err_t rc = cfgpack_schema_write_json(schema, values, scratch, scratch_cap, &out_len, err);

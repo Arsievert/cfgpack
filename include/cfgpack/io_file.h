@@ -50,21 +50,6 @@ cfgpack_err_t cfgpack_parse_schema_file(const char *path, cfgpack_schema_t *out_
 cfgpack_err_t cfgpack_schema_parse_json_file(const char *path, cfgpack_schema_t *out_schema, cfgpack_entry_t *entries, size_t max_entries, cfgpack_value_t *defaults, char *scratch, size_t scratch_cap, cfgpack_parse_error_t *err);
 
 /**
- * @brief Write schema as Markdown to a file.
- *
- * Writes to a scratch buffer and then writes the buffer to the file.
- *
- * @param schema      Schema to describe.
- * @param defaults    Parallel array of default values (same order as schema->entries).
- * @param path        Output file path.
- * @param scratch     Scratch buffer for formatting.
- * @param scratch_cap Capacity of scratch buffer.
- * @param err         Optional error info on failure.
- * @return CFGPACK_OK on success; CFGPACK_ERR_IO on write failure; CFGPACK_ERR_BOUNDS if scratch too small.
- */
-cfgpack_err_t cfgpack_schema_write_markdown_file(const cfgpack_schema_t *schema, const cfgpack_value_t *defaults, const char *path, char *scratch, size_t scratch_cap, cfgpack_parse_error_t *err);
-
-/**
  * @brief Write schema as JSON to a file.
  *
  * Writes to a scratch buffer and then writes the buffer to the file.

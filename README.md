@@ -91,7 +91,7 @@ vehicle 1
   - `config.h` — build configuration (`CFGPACK_EMBEDDED`/`CFGPACK_HOSTED` modes).
   - `error.h` — error codes enum.
   - `value.h` — value types and limits (`CFGPACK_STR_MAX`, `CFGPACK_FSTR_MAX`).
-  - `schema.h` — schema structs and parser/doc APIs.
+  - `schema.h` — schema structs and parser/JSON APIs.
   - `msgpack.h` — minimal MessagePack buffer + encode/decode helpers (fixed-capacity, caller storage).
   - `api.h` — main cfgpack runtime API (set/get/pagein/pageout/print/version/size) using caller buffers.
   - `decompress.h` — optional LZ4/heatshrink decompression support.
@@ -183,12 +183,6 @@ cfgpack_err_t cfgpack_schema_parse_json(const char *data, size_t data_len,
                                         cfgpack_parse_error_t *err);
 
 void cfgpack_schema_free(cfgpack_schema_t *schema); /* no-op for caller-owned arrays */
-
-/* Write schema to Markdown buffer */
-cfgpack_err_t cfgpack_schema_write_markdown(const cfgpack_schema_t *schema,
-                                            const cfgpack_value_t *defaults,
-                                            char *out, size_t out_cap, size_t *out_len,
-                                            cfgpack_parse_error_t *err);
 
 /* Write schema to JSON buffer */
 cfgpack_err_t cfgpack_schema_write_json(const cfgpack_schema_t *schema,
@@ -534,11 +528,11 @@ Running tests...
 
   basic:         5/5 passed
   decompress:    8/8 passed
-  parser_bounds: 24/24 passed
+  parser_bounds: 23/23 passed
   parser:        3/3 passed
   runtime:       21/21 passed
 
-TOTAL: 61/61 passed
+TOTAL: 60/60 passed
 Full log: build/test.log
 ```
 
