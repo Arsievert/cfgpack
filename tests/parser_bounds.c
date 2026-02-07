@@ -25,7 +25,7 @@ TEST_CASE(test_duplicate_name) {
     const char *path = "tests/data/dup_name.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
-    cfgpack_value_t defaults[128];
+    cfgpack_fat_value_t defaults[128];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -51,7 +51,7 @@ TEST_CASE(test_name_too_long) {
     const char *path = "tests/data/name_long.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
-    cfgpack_value_t defaults[128];
+    cfgpack_fat_value_t defaults[128];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -74,7 +74,7 @@ TEST_CASE(test_index_too_large) {
     const char *path = "tests/data/index_large.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
-    cfgpack_value_t defaults[128];
+    cfgpack_fat_value_t defaults[128];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -97,7 +97,7 @@ TEST_CASE(test_missing_header) {
     const char *path = "tests/data/missing_header.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
-    cfgpack_value_t defaults[128];
+    cfgpack_fat_value_t defaults[128];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -120,7 +120,7 @@ TEST_CASE(test_missing_fields) {
     const char *path = "tests/data/missing_fields.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
-    cfgpack_value_t defaults[128];
+    cfgpack_fat_value_t defaults[128];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -145,7 +145,7 @@ TEST_CASE(test_too_many_entries) {
     const char *path = "tests/data/too_many.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
-    cfgpack_value_t defaults[128];
+    cfgpack_fat_value_t defaults[128];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -174,7 +174,7 @@ TEST_CASE(test_accept_128_entries) {
     const char *path = "tests/data/accept_128.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
-    cfgpack_value_t defaults[128];
+    cfgpack_fat_value_t defaults[128];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -207,7 +207,7 @@ TEST_CASE(test_unknown_type) {
     const char *path = "tests/data/unknown_type.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
-    cfgpack_value_t defaults[128];
+    cfgpack_fat_value_t defaults[128];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -230,7 +230,7 @@ TEST_CASE(test_header_non_numeric_version) {
     const char *path = "tests/data/header_non_numeric.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[8];
-    cfgpack_value_t defaults[8];
+    cfgpack_fat_value_t defaults[8];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -254,7 +254,7 @@ TEST_CASE(test_name_length_edges) {
     const char *bad_path = "tests/data/name_len_bad.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[8];
-    cfgpack_value_t defaults[8];
+    cfgpack_fat_value_t defaults[8];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -282,7 +282,7 @@ TEST_CASE(test_index_edges) {
     const char *bad_path = "tests/data/index_edge_bad.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[8];
-    cfgpack_value_t defaults[8];
+    cfgpack_fat_value_t defaults[8];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -309,7 +309,7 @@ TEST_CASE(test_unsorted_input_sorted_output) {
     const char *path = "tests/data/unsorted.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[4];
-    cfgpack_value_t defaults[4];
+    cfgpack_fat_value_t defaults[4];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -341,7 +341,7 @@ TEST_CASE(test_default_u8_out_of_range) {
     const char *path = "tests/data/default_u8_oob.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[8];
-    cfgpack_value_t defaults[8];
+    cfgpack_fat_value_t defaults[8];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -368,7 +368,7 @@ TEST_CASE(test_default_i8_out_of_range) {
     const char *path = "tests/data/default_i8_oob.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[8];
-    cfgpack_value_t defaults[8];
+    cfgpack_fat_value_t defaults[8];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -404,7 +404,7 @@ TEST_CASE(test_default_fstr_too_long) {
     const char *path = "tests/data/default_fstr_long.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[8];
-    cfgpack_value_t defaults[8];
+    cfgpack_fat_value_t defaults[8];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -431,7 +431,7 @@ TEST_CASE(test_default_hex_binary_literals) {
     const char *path = "tests/data/default_hex.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[8];
-    cfgpack_value_t defaults[8];
+    cfgpack_fat_value_t defaults[8];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -460,7 +460,7 @@ TEST_CASE(test_default_invalid_format) {
     const char *path = "tests/data/default_invalid.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[8];
-    cfgpack_value_t defaults[8];
+    cfgpack_fat_value_t defaults[8];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -492,7 +492,7 @@ TEST_CASE(test_default_escape_sequences) {
     const char *path = "tests/data/default_escape.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[8];
-    cfgpack_value_t defaults[8];
+    cfgpack_fat_value_t defaults[8];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -547,7 +547,7 @@ TEST_CASE(test_json_writer_basic) {
     const char *out_path = "build/schema_tmp.json";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
-    cfgpack_value_t defaults[128];
+    cfgpack_fat_value_t defaults[128];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
     FILE *f;
@@ -585,7 +585,7 @@ TEST_CASE(test_json_roundtrip) {
     const char *json_path2 = "build/roundtrip2.json";
     cfgpack_schema_t schema1, schema2;
     cfgpack_entry_t entries1[128], entries2[128];
-    cfgpack_value_t defaults1[128], defaults2[128];
+    cfgpack_fat_value_t defaults1[128], defaults2[128];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -672,7 +672,7 @@ TEST_CASE(test_json_parse_direct) {
     const char *json_path = "tests/data/test_schema.json";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
-    cfgpack_value_t defaults[128];
+    cfgpack_fat_value_t defaults[128];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -758,7 +758,7 @@ TEST_CASE(test_reserved_index_zero_map) {
     const char *path = "tests/data/reserved_index.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[8];
-    cfgpack_value_t defaults[8];
+    cfgpack_fat_value_t defaults[8];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -781,7 +781,7 @@ TEST_CASE(test_reserved_index_zero_json) {
     const char *json_path = "tests/data/reserved_index.json";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[8];
-    cfgpack_value_t defaults[8];
+    cfgpack_fat_value_t defaults[8];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 

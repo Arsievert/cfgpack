@@ -9,12 +9,32 @@
 #define PAGE_CAP 4096
 
 /**
+ * @brief Get the string slot index for a given entry offset.
+ */
+static int get_str_slot(const cfgpack_schema_t *schema, size_t entry_off) {
+    int slot = 0;
+    for (size_t i = 0; i < entry_off; ++i) {
+        cfgpack_type_t t = schema->entries[i].type;
+        if (t == CFGPACK_TYPE_STR || t == CFGPACK_TYPE_FSTR) {
+            slot++;
+        }
+    }
+    cfgpack_type_t t = schema->entries[entry_off].type;
+    if (t != CFGPACK_TYPE_STR && t != CFGPACK_TYPE_FSTR) {
+        return -1;
+    }
+    return slot;
+}
+
+/**
  * @brief Encode a cfgpack value into msgpack format.
- * @param buf  Output buffer.
- * @param v    Value to encode.
+ * @param buf        Output buffer.
+ * @param ctx        Context (for string pool access).
+ * @param entry_off  Entry offset in schema.
+ * @param v          Value to encode.
  * @return CFGPACK_OK on success, CFGPACK_ERR_ENCODE or CFGPACK_ERR_INVALID_TYPE on failure.
  */
-static cfgpack_err_t encode_value(cfgpack_buf_t *buf, const cfgpack_value_t *v) {
+static cfgpack_err_t encode_value(cfgpack_buf_t *buf, const cfgpack_ctx_t *ctx, size_t entry_off, const cfgpack_value_t *v) {
     switch (v->type) {
         case CFGPACK_TYPE_U8: return cfgpack_msgpack_encode_uint64(buf, v->v.u64);
         case CFGPACK_TYPE_U16: return cfgpack_msgpack_encode_uint64(buf, v->v.u64);
@@ -26,9 +46,16 @@ static cfgpack_err_t encode_value(cfgpack_buf_t *buf, const cfgpack_value_t *v) 
         case CFGPACK_TYPE_I64: return cfgpack_msgpack_encode_int64(buf, v->v.i64);
         case CFGPACK_TYPE_F32: return cfgpack_msgpack_encode_f32(buf, v->v.f32);
         case CFGPACK_TYPE_F64: return cfgpack_msgpack_encode_f64(buf, v->v.f64);
-        case CFGPACK_TYPE_STR: return cfgpack_msgpack_encode_str(buf, v->v.str.data, v->v.str.len);
-        case CFGPACK_TYPE_FSTR: return cfgpack_msgpack_encode_str(buf, v->v.fstr.data, v->v.fstr.len);
+        case CFGPACK_TYPE_STR: {
+            const char *str = ctx->str_pool + v->v.str.offset;
+            return cfgpack_msgpack_encode_str(buf, str, v->v.str.len);
+        }
+        case CFGPACK_TYPE_FSTR: {
+            const char *str = ctx->str_pool + v->v.fstr.offset;
+            return cfgpack_msgpack_encode_str(buf, str, v->v.fstr.len);
+        }
     }
+    (void)entry_off; /* May be used in future for bounds checking */
     return CFGPACK_ERR_INVALID_TYPE;
 }
 
@@ -55,7 +82,7 @@ cfgpack_err_t cfgpack_pageout(const cfgpack_ctx_t *ctx, uint8_t *out, size_t out
         if (!cfgpack_presence_get(ctx, i)) continue;
         const cfgpack_entry_t *e = &ctx->schema->entries[i];
         if (cfgpack_msgpack_encode_uint_key(&buf, e->index) != CFGPACK_OK) return CFGPACK_ERR_ENCODE;
-        if (encode_value(&buf, &ctx->values[i]) != CFGPACK_OK) return CFGPACK_ERR_ENCODE;
+        if (encode_value(&buf, ctx, i, &ctx->values[i]) != CFGPACK_OK) return CFGPACK_ERR_ENCODE;
     }
 
     if (out_len) *out_len = buf.len;
@@ -99,13 +126,15 @@ cfgpack_err_t cfgpack_peek_name(const uint8_t *data, size_t len, char *out_name,
 }
 
 /**
- * @brief Decode a msgpack value into a cfgpack value.
- * @param r     Reader state.
- * @param type  Expected type to decode.
- * @param out   Output value structure.
+ * @brief Decode a msgpack value into a cfgpack value, writing strings to pool.
+ * @param r          Reader state.
+ * @param ctx        Context (for string pool access).
+ * @param entry_off  Entry offset in schema (for string slot lookup).
+ * @param type       Expected type to decode.
+ * @param out        Output value structure.
  * @return CFGPACK_OK on success, error code on failure.
  */
-static cfgpack_err_t decode_value(cfgpack_reader_t *r, cfgpack_type_t type, cfgpack_value_t *out) {
+static cfgpack_err_t decode_value(cfgpack_reader_t *r, cfgpack_ctx_t *ctx, size_t entry_off, cfgpack_type_t type, cfgpack_value_t *out) {
     out->type = type;
     switch (type) {
         case CFGPACK_TYPE_U8:
@@ -126,18 +155,36 @@ static cfgpack_err_t decode_value(cfgpack_reader_t *r, cfgpack_type_t type, cfgp
             const uint8_t *ptr; uint32_t len;
             if (cfgpack_msgpack_decode_str(r, &ptr, &len) != CFGPACK_OK) return CFGPACK_ERR_DECODE;
             if (len > CFGPACK_STR_MAX) return CFGPACK_ERR_STR_TOO_LONG;
+            
+            /* Get string slot and write to pool */
+            int slot = get_str_slot(ctx->schema, entry_off);
+            if (slot < 0 || (size_t)slot >= ctx->str_offsets_count) return CFGPACK_ERR_BOUNDS;
+            
+            uint16_t pool_off = ctx->str_offsets[slot];
+            char *dst = ctx->str_pool + pool_off;
+            memcpy(dst, ptr, len);
+            dst[len] = '\0';
+            
+            out->v.str.offset = pool_off;
             out->v.str.len = (uint16_t)len;
-            memcpy(out->v.str.data, ptr, len);
-            out->v.str.data[len] = '\0';
             return CFGPACK_OK;
         }
         case CFGPACK_TYPE_FSTR: {
             const uint8_t *ptr; uint32_t len;
             if (cfgpack_msgpack_decode_str(r, &ptr, &len) != CFGPACK_OK) return CFGPACK_ERR_DECODE;
             if (len > CFGPACK_FSTR_MAX) return CFGPACK_ERR_STR_TOO_LONG;
+            
+            /* Get string slot and write to pool */
+            int slot = get_str_slot(ctx->schema, entry_off);
+            if (slot < 0 || (size_t)slot >= ctx->str_offsets_count) return CFGPACK_ERR_BOUNDS;
+            
+            uint16_t pool_off = ctx->str_offsets[slot];
+            char *dst = ctx->str_pool + pool_off;
+            memcpy(dst, ptr, len);
+            dst[len] = '\0';
+            
+            out->v.fstr.offset = pool_off;
             out->v.fstr.len = (uint8_t)len;
-            memcpy(out->v.fstr.data, ptr, len);
-            out->v.fstr.data[len] = '\0';
             return CFGPACK_OK;
         }
     }
@@ -231,12 +278,14 @@ static int can_coerce_type(cfgpack_type_t wire_type, cfgpack_type_t schema_type)
  * the value accordingly. Supports type coercion during decode.
  *
  * @param r           Reader state.
+ * @param ctx         Context (for string pool access).
+ * @param entry_off   Entry offset in schema.
  * @param schema_type Expected schema type (for coercion check).
  * @param out         Output value structure.
  * @return CFGPACK_OK on success, CFGPACK_ERR_TYPE_MISMATCH if incompatible,
  *         CFGPACK_ERR_DECODE on parse error.
  */
-static cfgpack_err_t decode_value_with_coercion(cfgpack_reader_t *r, cfgpack_type_t schema_type, cfgpack_value_t *out) {
+static cfgpack_err_t decode_value_with_coercion(cfgpack_reader_t *r, cfgpack_ctx_t *ctx, size_t entry_off, cfgpack_type_t schema_type, cfgpack_value_t *out) {
     if (r->pos >= r->len) return CFGPACK_ERR_DECODE;
 
     uint8_t b = r->data[r->pos];
@@ -287,7 +336,7 @@ static cfgpack_err_t decode_value_with_coercion(cfgpack_reader_t *r, cfgpack_typ
     }
 
     /* Decode the value using the schema type */
-    return decode_value(r, schema_type, out);
+    return decode_value(r, ctx, entry_off, schema_type, out);
 }
 
 cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx, const uint8_t *data, size_t len,
@@ -299,7 +348,7 @@ cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx, const uint8_t *data, size
     cfgpack_reader_init(&r, data, len);
     if (cfgpack_msgpack_decode_map_header(&r, &map_count) != CFGPACK_OK) return CFGPACK_ERR_DECODE;
 
-    memset(ctx->present, 0, ctx->present_bytes);
+    memset(ctx->present, 0, sizeof(ctx->present));
 
     for (uint32_t i = 0; i < map_count; ++i) {
         uint64_t key;
@@ -340,7 +389,7 @@ cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx, const uint8_t *data, size
         }
 
         /* Decode value with type coercion support */
-        cfgpack_err_t err = decode_value_with_coercion(&r, entry->type, &ctx->values[idx]);
+        cfgpack_err_t err = decode_value_with_coercion(&r, ctx, idx, entry->type, &ctx->values[idx]);
         if (err != CFGPACK_OK) return err;
         cfgpack_presence_set(ctx, idx);
     }

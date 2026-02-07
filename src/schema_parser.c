@@ -237,10 +237,10 @@ static int has_duplicate(const cfgpack_entry_t *entries, size_t count, uint16_t 
 /**
  * @brief Sort entries and defaults by index using insertion sort.
  */
-static void sort_entries(cfgpack_entry_t *entries, cfgpack_value_t *defaults, size_t n) {
+static void sort_entries(cfgpack_entry_t *entries, cfgpack_fat_value_t *defaults, size_t n) {
     for (size_t i = 1; i < n; ++i) {
         cfgpack_entry_t key_entry = entries[i];
-        cfgpack_value_t key_default = defaults[i];
+        cfgpack_fat_value_t key_default = defaults[i];
         size_t j = i;
         while (j > 0 && entries[j - 1].index > key_entry.index) {
             entries[j] = entries[j - 1];
@@ -263,7 +263,7 @@ static const char *skip_space(const char *p) {
 /**
  * @brief Parse a quoted string default value.
  */
-static cfgpack_err_t parse_quoted_string(const char *p, cfgpack_value_t *out, cfgpack_type_t type, const char **endp) {
+static cfgpack_err_t parse_quoted_string(const char *p, cfgpack_fat_value_t *out, cfgpack_type_t type, const char **endp) {
     size_t max_len = (type == CFGPACK_TYPE_FSTR) ? CFGPACK_FSTR_MAX : CFGPACK_STR_MAX;
     char *dst = (type == CFGPACK_TYPE_FSTR) ? out->v.fstr.data : out->v.str.data;
     size_t len = 0;
@@ -307,7 +307,7 @@ static cfgpack_err_t parse_quoted_string(const char *p, cfgpack_value_t *out, cf
 /**
  * @brief Parse an unsigned integer default value.
  */
-static cfgpack_err_t parse_uint(const char *tok, cfgpack_value_t *out, cfgpack_type_t type) {
+static cfgpack_err_t parse_uint(const char *tok, cfgpack_fat_value_t *out, cfgpack_type_t type) {
     char *endp = NULL;
     uint64_t val;
     uint64_t max_val;
@@ -336,7 +336,7 @@ static cfgpack_err_t parse_uint(const char *tok, cfgpack_value_t *out, cfgpack_t
 /**
  * @brief Parse a signed integer default value.
  */
-static cfgpack_err_t parse_int(const char *tok, cfgpack_value_t *out, cfgpack_type_t type) {
+static cfgpack_err_t parse_int(const char *tok, cfgpack_fat_value_t *out, cfgpack_type_t type) {
     char *endp = NULL;
     int64_t val;
     int64_t min_val, max_val;
@@ -365,7 +365,7 @@ static cfgpack_err_t parse_int(const char *tok, cfgpack_value_t *out, cfgpack_ty
 /**
  * @brief Parse a float default value.
  */
-static cfgpack_err_t parse_float(const char *tok, cfgpack_value_t *out, cfgpack_type_t type) {
+static cfgpack_err_t parse_float(const char *tok, cfgpack_fat_value_t *out, cfgpack_type_t type) {
     char *endp = NULL;
     double val;
 
@@ -418,7 +418,7 @@ static const char *extract_default_token(const char *line, char *out_tok, size_t
 /**
  * @brief Parse a default value based on type.
  */
-static cfgpack_err_t parse_default(const char *tok, cfgpack_type_t type, cfgpack_value_t *out, uint8_t *has_def) {
+static cfgpack_err_t parse_default(const char *tok, cfgpack_type_t type, cfgpack_fat_value_t *out, uint8_t *has_def) {
     if (strcmp(tok, "NIL") == 0) {
         *has_def = 0;
         memset(out, 0, sizeof(*out));
@@ -457,7 +457,7 @@ static cfgpack_err_t parse_default(const char *tok, cfgpack_type_t type, cfgpack
  * .map Schema Parser (buffer-based)
  * ───────────────────────────────────────────────────────────────────────────── */
 
-cfgpack_err_t cfgpack_parse_schema(const char *data, size_t data_len, cfgpack_schema_t *out_schema, cfgpack_entry_t *entries, size_t max_entries, cfgpack_value_t *defaults, cfgpack_parse_error_t *err) {
+cfgpack_err_t cfgpack_parse_schema(const char *data, size_t data_len, cfgpack_schema_t *out_schema, cfgpack_entry_t *entries, size_t max_entries, cfgpack_fat_value_t *defaults, cfgpack_parse_error_t *err) {
     line_iter_t iter;
     char line_buf[MAX_LINE_LEN];
     size_t line_no = 0;
@@ -666,7 +666,7 @@ static void write_json_string_to_wbuf(wbuf_t *w, const char *str, size_t len) {
     wbuf_putc(w, '"');
 }
 
-static void write_json_default_to_wbuf(wbuf_t *w, const cfgpack_entry_t *entry, const cfgpack_value_t *val) {
+static void write_json_default_to_wbuf(wbuf_t *w, const cfgpack_entry_t *entry, const cfgpack_fat_value_t *val) {
     if (!entry->has_default) {
         wbuf_puts(w, "null");
         return;
@@ -700,7 +700,7 @@ static void write_json_default_to_wbuf(wbuf_t *w, const cfgpack_entry_t *entry, 
     }
 }
 
-cfgpack_err_t cfgpack_schema_write_json(const cfgpack_schema_t *schema, const cfgpack_value_t *values, char *out, size_t out_cap, size_t *out_len, cfgpack_parse_error_t *err) {
+cfgpack_err_t cfgpack_schema_write_json(const cfgpack_schema_t *schema, const cfgpack_fat_value_t *values, char *out, size_t out_cap, size_t *out_len, cfgpack_parse_error_t *err) {
     wbuf_t w;
     wbuf_init(&w, out, out_cap);
 
@@ -887,7 +887,43 @@ static int json_match_literal(json_parser_t *p, const char *lit) {
     return 0;
 }
 
-cfgpack_err_t cfgpack_schema_parse_json(const char *data, size_t data_len, cfgpack_schema_t *out_schema, cfgpack_entry_t *entries, size_t max_entries, cfgpack_value_t *defaults, cfgpack_parse_error_t *err) {
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Schema Sizing
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+cfgpack_err_t cfgpack_schema_get_sizing(const cfgpack_schema_t *schema,
+                                         cfgpack_schema_sizing_t *out) {
+    size_t str_count = 0;
+    size_t fstr_count = 0;
+    size_t str_pool_size = 0;
+
+    for (size_t i = 0; i < schema->entry_count; ++i) {
+        switch (schema->entries[i].type) {
+            case CFGPACK_TYPE_STR:
+                str_count++;
+                str_pool_size += CFGPACK_STR_MAX + 1;  /* Fixed slot per entry */
+                break;
+            case CFGPACK_TYPE_FSTR:
+                fstr_count++;
+                str_pool_size += CFGPACK_FSTR_MAX + 1; /* Fixed slot per entry */
+                break;
+            default:
+                break;
+        }
+    }
+
+    out->str_count = str_count;
+    out->fstr_count = fstr_count;
+    out->str_pool_size = str_pool_size;
+
+    return CFGPACK_OK;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * JSON Parser (buffer-based, no malloc)
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+cfgpack_err_t cfgpack_schema_parse_json(const char *data, size_t data_len, cfgpack_schema_t *out_schema, cfgpack_entry_t *entries, size_t max_entries, cfgpack_fat_value_t *defaults, cfgpack_parse_error_t *err) {
     json_parser_t parser = {data, data_len, 0, 1};
     json_parser_t *p = &parser;
     cfgpack_err_t result = CFGPACK_OK;
@@ -948,7 +984,7 @@ cfgpack_err_t cfgpack_schema_parse_json(const char *data, size_t data_len, cfgpa
                 }
 
                 cfgpack_entry_t *e = &entries[count];
-                cfgpack_value_t *d = &defaults[count];
+                cfgpack_fat_value_t *d = &defaults[count];
                 memset(e, 0, sizeof(*e));
                 memset(d, 0, sizeof(*d));
 

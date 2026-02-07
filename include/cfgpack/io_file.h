@@ -30,7 +30,7 @@
  * @param err         Optional parse error info (line/message) on failure.
  * @return CFGPACK_OK on success; CFGPACK_ERR_IO on read error; CFGPACK_ERR_* on parse error.
  */
-cfgpack_err_t cfgpack_parse_schema_file(const char *path, cfgpack_schema_t *out_schema, cfgpack_entry_t *entries, size_t max_entries, cfgpack_value_t *defaults, char *scratch, size_t scratch_cap, cfgpack_parse_error_t *err);
+cfgpack_err_t cfgpack_parse_schema_file(const char *path, cfgpack_schema_t *out_schema, cfgpack_entry_t *entries, size_t max_entries, cfgpack_fat_value_t *defaults, char *scratch, size_t scratch_cap, cfgpack_parse_error_t *err);
 
 /**
  * @brief Parse a JSON schema from a file.
@@ -47,7 +47,7 @@ cfgpack_err_t cfgpack_parse_schema_file(const char *path, cfgpack_schema_t *out_
  * @param err         Optional parse error info (line/message) on failure.
  * @return CFGPACK_OK on success; CFGPACK_ERR_IO on read error; CFGPACK_ERR_* on parse error.
  */
-cfgpack_err_t cfgpack_schema_parse_json_file(const char *path, cfgpack_schema_t *out_schema, cfgpack_entry_t *entries, size_t max_entries, cfgpack_value_t *defaults, char *scratch, size_t scratch_cap, cfgpack_parse_error_t *err);
+cfgpack_err_t cfgpack_schema_parse_json_file(const char *path, cfgpack_schema_t *out_schema, cfgpack_entry_t *entries, size_t max_entries, cfgpack_fat_value_t *defaults, char *scratch, size_t scratch_cap, cfgpack_parse_error_t *err);
 
 /**
  * @brief Write schema as JSON to a file.
@@ -62,7 +62,7 @@ cfgpack_err_t cfgpack_schema_parse_json_file(const char *path, cfgpack_schema_t 
  * @param err         Optional error info on failure.
  * @return CFGPACK_OK on success; CFGPACK_ERR_IO on write failure; CFGPACK_ERR_BOUNDS if scratch too small.
  */
-cfgpack_err_t cfgpack_schema_write_json_file(const cfgpack_schema_t *schema, const cfgpack_value_t *values, const char *path, char *scratch, size_t scratch_cap, cfgpack_parse_error_t *err);
+cfgpack_err_t cfgpack_schema_write_json_file(const cfgpack_schema_t *schema, const cfgpack_fat_value_t *values, const char *path, char *scratch, size_t scratch_cap, cfgpack_parse_error_t *err);
 
 /**
  * @brief Encode to a file using caller scratch buffer (no heap).

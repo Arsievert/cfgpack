@@ -13,7 +13,7 @@ TEST_CASE(test_parse_ok) {
 
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
-    cfgpack_value_t defaults[128];
+    cfgpack_fat_value_t defaults[128];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -55,7 +55,7 @@ TEST_CASE(test_parse_bad_type) {
     FILE *f;
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
-    cfgpack_value_t defaults[128];
+    cfgpack_fat_value_t defaults[128];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -83,7 +83,7 @@ TEST_CASE(test_parse_duplicate_index) {
     FILE *f;
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
-    cfgpack_value_t defaults[128];
+    cfgpack_fat_value_t defaults[128];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 

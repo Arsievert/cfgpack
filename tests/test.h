@@ -38,8 +38,27 @@ typedef enum {
     printf(COLOR_RESET "\n"); \
 } while (0)
 
-/* Log a value with type information */
+/* Log a value with type information (for cfgpack_value_t) */
 #define LOG_VALUE(label, val) do { \
+    switch ((val).type) { \
+    case CFGPACK_TYPE_U8:  LOG("%s: u8 = %" PRIu64, label, (val).v.u64); break; \
+    case CFGPACK_TYPE_U16: LOG("%s: u16 = %" PRIu64, label, (val).v.u64); break; \
+    case CFGPACK_TYPE_U32: LOG("%s: u32 = %" PRIu64, label, (val).v.u64); break; \
+    case CFGPACK_TYPE_U64: LOG("%s: u64 = %" PRIu64, label, (val).v.u64); break; \
+    case CFGPACK_TYPE_I8:  LOG("%s: i8 = %" PRId64, label, (val).v.i64); break; \
+    case CFGPACK_TYPE_I16: LOG("%s: i16 = %" PRId64, label, (val).v.i64); break; \
+    case CFGPACK_TYPE_I32: LOG("%s: i32 = %" PRId64, label, (val).v.i64); break; \
+    case CFGPACK_TYPE_I64: LOG("%s: i64 = %" PRId64, label, (val).v.i64); break; \
+    case CFGPACK_TYPE_F32: LOG("%s: f32 = %f", label, (double)(val).v.f32); break; \
+    case CFGPACK_TYPE_F64: LOG("%s: f64 = %f", label, (val).v.f64); break; \
+    case CFGPACK_TYPE_STR: LOG("%s: str[%u] @offset=%u", label, (val).v.str.len, (val).v.str.offset); break; \
+    case CFGPACK_TYPE_FSTR: LOG("%s: fstr[%u] @offset=%u", label, (val).v.fstr.len, (val).v.fstr.offset); break; \
+    default: LOG("%s: unknown type %d", label, (val).type); break; \
+    } \
+} while (0)
+
+/* Log a fat value with type information (for cfgpack_fat_value_t with inline strings) */
+#define LOG_FAT_VALUE(label, val) do { \
     switch ((val).type) { \
     case CFGPACK_TYPE_U8:  LOG("%s: u8 = %" PRIu64, label, (val).v.u64); break; \
     case CFGPACK_TYPE_U16: LOG("%s: u16 = %" PRIu64, label, (val).v.u64); break; \

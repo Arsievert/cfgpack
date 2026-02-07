@@ -34,14 +34,17 @@
  * ═══════════════════════════════════════════════════════════════════════════ */
 static cfgpack_schema_t schema;
 static cfgpack_entry_t entries[MAX_ENTRIES];
-static cfgpack_value_t defaults[MAX_ENTRIES];
+static cfgpack_fat_value_t defaults[MAX_ENTRIES];
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * Runtime Context
  * ═══════════════════════════════════════════════════════════════════════════ */
 static cfgpack_ctx_t ctx;
 static cfgpack_value_t values[MAX_ENTRIES];
-static uint8_t presence[(MAX_ENTRIES + 7) / 8];
+
+/* String pool for runtime string values */
+static char str_pool[1024];
+static uint16_t str_offsets[MAX_ENTRIES];
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * Buffers
@@ -275,7 +278,8 @@ int main(int argc, char **argv) {
      * 4. INITIALIZE WITH DEFAULTS
      * ═══════════════════════════════════════════════════════════════════════ */
     rc = cfgpack_init(&ctx, &schema, values, MAX_ENTRIES, defaults,
-                      presence, sizeof(presence));
+                      str_pool, sizeof(str_pool),
+                      str_offsets, MAX_ENTRIES);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Init failed: %d\n", rc);
         return 1;
@@ -302,12 +306,20 @@ int main(int argc, char **argv) {
             case CFGPACK_TYPE_I64:
                 printf("%lld", (long long)val.v.i64);
                 break;
-            case CFGPACK_TYPE_STR:
-                printf("\"%.*s\"", (int)val.v.str.len, val.v.str.data);
+            case CFGPACK_TYPE_STR: {
+                const char *str;
+                uint16_t len;
+                if (cfgpack_get_str(&ctx, e->index, &str, &len) == CFGPACK_OK)
+                    printf("\"%.*s\"", (int)len, str);
                 break;
-            case CFGPACK_TYPE_FSTR:
-                printf("\"%.*s\"", (int)val.v.fstr.len, val.v.fstr.data);
+            }
+            case CFGPACK_TYPE_FSTR: {
+                const char *str;
+                uint8_t len;
+                if (cfgpack_get_fstr(&ctx, e->index, &str, &len) == CFGPACK_OK)
+                    printf("\"%.*s\"", (int)len, str);
                 break;
+            }
             default:
                 break;
         }
@@ -334,11 +346,7 @@ int main(int argc, char **argv) {
     printf("  [18] mtls  = 1       %s\n", rc == CFGPACK_OK ? "OK" : "FAIL");
 
     /* Device: dname = "hub01" */
-    val.type = CFGPACK_TYPE_FSTR;
-    memcpy(val.v.fstr.data, "hub01", 5);
-    val.v.fstr.data[5] = '\0';
-    val.v.fstr.len = 5;
-    rc = cfgpack_set(&ctx, 57, &val);
+    rc = cfgpack_set_fstr(&ctx, 57, "hub01");
     printf("  [57] dname = \"hub01\" %s\n", rc == CFGPACK_OK ? "OK" : "FAIL");
 
     /* Sensor 0: interval = 5000ms */
@@ -387,7 +395,8 @@ int main(int argc, char **argv) {
 
     /* Re-initialize context (simulates device reboot) */
     rc = cfgpack_init(&ctx, &schema, values, MAX_ENTRIES, defaults,
-                      presence, sizeof(presence));
+                      str_pool, sizeof(str_pool),
+                      str_offsets, MAX_ENTRIES);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Re-init failed: %d\n", rc);
         return 1;
@@ -412,9 +421,14 @@ int main(int argc, char **argv) {
     else { printf("  OK: mtls = 1\n"); }
 
     cfgpack_get(&ctx, 57, &val);
-    if (val.v.fstr.len != 5 || memcmp(val.v.fstr.data, "hub01", 5) != 0) {
-        printf("  FAIL: dname != \"hub01\"\n"); errors++;
-    } else { printf("  OK: dname = \"hub01\"\n"); }
+    {
+        const char *fstr;
+        uint8_t fstr_len;
+        if (cfgpack_get_fstr(&ctx, 57, &fstr, &fstr_len) != CFGPACK_OK ||
+            fstr_len != 5 || memcmp(fstr, "hub01", 5) != 0) {
+            printf("  FAIL: dname != \"hub01\"\n"); errors++;
+        } else { printf("  OK: dname = \"hub01\"\n"); }
+    }
 
     cfgpack_get(&ctx, 27, &val);
     if (val.v.u64 != 5000) { printf("  FAIL: s0iv != 5000\n"); errors++; }
@@ -436,9 +450,9 @@ int main(int argc, char **argv) {
            errors == 0 ? "PASSED" : "FAILED", errors);
 
     /* ═══════════════════════════════════════════════════════════════════════
-     * 8. EXPORT TO JSON
+     * 8. EXPORT SCHEMA WITH DEFAULTS TO JSON
      * ═══════════════════════════════════════════════════════════════════════ */
-    rc = cfgpack_schema_write_json(&schema, values, json_out, sizeof(json_out),
+    rc = cfgpack_schema_write_json(&schema, defaults, json_out, sizeof(json_out),
                                     &json_out_len, &parse_err);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "JSON export failed: %d\n", rc);

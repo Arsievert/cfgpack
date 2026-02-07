@@ -14,9 +14,11 @@
  * All functions use caller-provided buffers (no heap allocation).
  */
 
+#include <limits.h>
 #include <stddef.h>
 #include <string.h>
 
+#include "config.h"
 #include "error.h"
 #include "schema.h"
 #include "value.h"
@@ -43,14 +45,24 @@ typedef struct {
 
 /**
  * @brief Runtime context using caller-owned buffers (no heap).
+ *
+ * String values are stored in an external pool rather than inline.
+ * Use cfgpack_schema_get_sizing() to determine required pool sizes
+ * before calling cfgpack_init().
+ *
+ * The presence bitmap is embedded in the context structure and supports
+ * up to CFGPACK_MAX_ENTRIES entries (default 128, configurable in config.h).
  */
 typedef struct {
-    const cfgpack_schema_t *schema; /**< Pointer to schema describing entries. */
-    cfgpack_value_t *values;        /**< Caller-provided value slots (size = entry_count). */
-    size_t values_count;            /**< Number of value slots available. */
-    const cfgpack_value_t *defaults;/**< Pointer to defaults array (parallel to entries). */
-    uint8_t *present;               /**< Presence bitmap (entry_count bits). */
-    size_t present_bytes;           /**< Size of presence bitmap in bytes. */
+    const cfgpack_schema_t *schema;        /**< Pointer to schema describing entries. */
+    cfgpack_value_t *values;               /**< Caller-provided value slots (size = entry_count). */
+    size_t values_count;                   /**< Number of value slots available. */
+    const cfgpack_fat_value_t *defaults;   /**< Pointer to fat defaults array (parallel to entries). */
+    uint8_t present[CFGPACK_PRESENCE_BYTES]; /**< Inline presence bitmap (entry_count bits). */
+    char *str_pool;                        /**< Caller-provided string pool buffer. */
+    size_t str_pool_cap;                   /**< Capacity of string pool in bytes. */
+    uint16_t *str_offsets;                 /**< Per-string-entry offsets into str_pool. */
+    size_t str_offsets_count;              /**< Number of string offset slots. */
 } cfgpack_ctx_t;
 
 /**
@@ -59,7 +71,7 @@ typedef struct {
  * @param idx Entry index to mark present.
  */
 static inline void cfgpack_presence_set(cfgpack_ctx_t *ctx, size_t idx) {
-    ctx->present[idx / 8] |= (uint8_t)(1u << (idx % 8));
+    ctx->present[idx / CHAR_BIT] |= (uint8_t)(1u << (idx % CHAR_BIT));
 }
 
 /**
@@ -69,7 +81,16 @@ static inline void cfgpack_presence_set(cfgpack_ctx_t *ctx, size_t idx) {
  * @return 1 if present, 0 otherwise.
  */
 static inline int cfgpack_presence_get(const cfgpack_ctx_t *ctx, size_t idx) {
-    return (ctx->present[idx / 8] >> (idx % 8)) & 1u;
+    return (ctx->present[idx / CHAR_BIT] >> (idx % CHAR_BIT)) & 1u;
+}
+
+/**
+ * @brief Clear presence bit for entry index in the context bitmap.
+ * @param ctx Context with presence bitmap.
+ * @param idx Entry index to clear.
+ */
+static inline void cfgpack_presence_clear(cfgpack_ctx_t *ctx, size_t idx) {
+    ctx->present[idx / CHAR_BIT] &= (uint8_t)~(1u << (idx % CHAR_BIT));
 }
 
 /**
@@ -77,17 +98,26 @@ static inline int cfgpack_presence_get(const cfgpack_ctx_t *ctx, size_t idx) {
  *
  * Zeroes values and presence, then applies default values for any
  * schema entries that have has_default=1 (marking them as present).
+ * String defaults are copied from fat_value defaults into the string pool.
  *
- * @param ctx            Context to initialize (output).
- * @param schema         Parsed schema describing entries; must outlive ctx.
- * @param values         Caller-owned array of value slots (>= entry_count).
- * @param values_count   Number of elements in @p values.
- * @param defaults       Caller-owned array of default values (parallel to schema entries).
- * @param present        Caller-owned bitmap buffer (>= (entry_count+7)/8 bytes).
- * @param present_bytes  Size of @p present in bytes.
- * @return CFGPACK_OK on success; CFGPACK_ERR_BOUNDS if buffers are too small.
+ * @param ctx              Context to initialize (output).
+ * @param schema           Parsed schema describing entries; must outlive ctx.
+ * @param values           Caller-owned array of value slots (>= entry_count).
+ * @param values_count     Number of elements in @p values.
+ * @param defaults         Caller-owned array of fat default values (parallel to schema entries).
+ * @param str_pool         Caller-owned string pool buffer (use cfgpack_schema_get_sizing()).
+ * @param str_pool_cap     Capacity of @p str_pool in bytes.
+ * @param str_offsets      Caller-owned array for string offsets (str_count + fstr_count).
+ * @param str_offsets_count Number of elements in @p str_offsets.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_BOUNDS if buffers are too small
+ *         or schema has more than CFGPACK_MAX_ENTRIES entries.
  */
-cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx, const cfgpack_schema_t *schema, cfgpack_value_t *values, size_t values_count, const cfgpack_value_t *defaults, uint8_t *present, size_t present_bytes);
+cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx,
+                           const cfgpack_schema_t *schema,
+                           cfgpack_value_t *values, size_t values_count,
+                           const cfgpack_fat_value_t *defaults,
+                           char *str_pool, size_t str_pool_cap,
+                           uint16_t *str_offsets, size_t str_offsets_count);
 
 /**
  * @brief No-op cleanup (buffers are caller-owned).
@@ -214,26 +244,10 @@ static inline cfgpack_err_t cfgpack_set_f64(cfgpack_ctx_t *ctx, uint16_t index, 
 }
 
 /** @brief Set a variable-length string by index. @see cfgpack_set */
-static inline cfgpack_err_t cfgpack_set_str(cfgpack_ctx_t *ctx, uint16_t index, const char *str) {
-    cfgpack_value_t v;
-    size_t len = strlen(str);
-    if (len > CFGPACK_STR_MAX) return CFGPACK_ERR_STR_TOO_LONG;
-    v.type = CFGPACK_TYPE_STR;
-    v.v.str.len = (uint16_t)len;
-    memcpy(v.v.str.data, str, len + 1);
-    return cfgpack_set(ctx, index, &v);
-}
+cfgpack_err_t cfgpack_set_str(cfgpack_ctx_t *ctx, uint16_t index, const char *str);
 
 /** @brief Set a fixed-length string by index. @see cfgpack_set */
-static inline cfgpack_err_t cfgpack_set_fstr(cfgpack_ctx_t *ctx, uint16_t index, const char *str) {
-    cfgpack_value_t v;
-    size_t len = strlen(str);
-    if (len > CFGPACK_FSTR_MAX) return CFGPACK_ERR_STR_TOO_LONG;
-    v.type = CFGPACK_TYPE_FSTR;
-    v.v.fstr.len = (uint8_t)len;
-    memcpy(v.v.fstr.data, str, len + 1);
-    return cfgpack_set(ctx, index, &v);
-}
+cfgpack_err_t cfgpack_set_fstr(cfgpack_ctx_t *ctx, uint16_t index, const char *str);
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * Typed Setter Convenience Functions (by name)
@@ -300,26 +314,10 @@ static inline cfgpack_err_t cfgpack_set_f64_by_name(cfgpack_ctx_t *ctx, const ch
 }
 
 /** @brief Set a variable-length string by name. @see cfgpack_set_by_name */
-static inline cfgpack_err_t cfgpack_set_str_by_name(cfgpack_ctx_t *ctx, const char *name, const char *str) {
-    cfgpack_value_t v;
-    size_t len = strlen(str);
-    if (len > CFGPACK_STR_MAX) return CFGPACK_ERR_STR_TOO_LONG;
-    v.type = CFGPACK_TYPE_STR;
-    v.v.str.len = (uint16_t)len;
-    memcpy(v.v.str.data, str, len + 1);
-    return cfgpack_set_by_name(ctx, name, &v);
-}
+cfgpack_err_t cfgpack_set_str_by_name(cfgpack_ctx_t *ctx, const char *name, const char *str);
 
 /** @brief Set a fixed-length string by name. @see cfgpack_set_by_name */
-static inline cfgpack_err_t cfgpack_set_fstr_by_name(cfgpack_ctx_t *ctx, const char *name, const char *str) {
-    cfgpack_value_t v;
-    size_t len = strlen(str);
-    if (len > CFGPACK_FSTR_MAX) return CFGPACK_ERR_STR_TOO_LONG;
-    v.type = CFGPACK_TYPE_FSTR;
-    v.v.fstr.len = (uint8_t)len;
-    memcpy(v.v.fstr.data, str, len + 1);
-    return cfgpack_set_by_name(ctx, name, &v);
-}
+cfgpack_err_t cfgpack_set_fstr_by_name(cfgpack_ctx_t *ctx, const char *name, const char *str);
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * Typed Getter Convenience Functions (by index)
@@ -425,39 +423,11 @@ static inline cfgpack_err_t cfgpack_get_f64(const cfgpack_ctx_t *ctx, uint16_t i
     return CFGPACK_OK;
 }
 
-/** @brief Get a heap string pointer and length by index. @see cfgpack_get */
-static inline cfgpack_err_t cfgpack_get_str(const cfgpack_ctx_t *ctx, uint16_t index, const char **out, uint16_t *len) {
-    cfgpack_value_t v;
-    cfgpack_err_t rc = cfgpack_get(ctx, index, &v);
-    if (rc != CFGPACK_OK) return rc;
-    if (v.type != CFGPACK_TYPE_STR) return CFGPACK_ERR_TYPE_MISMATCH;
-    /* Find entry offset to get pointer to actual storage */
-    for (size_t i = 0; i < ctx->schema->entry_count; ++i) {
-        if (ctx->schema->entries[i].index == index) {
-            *out = ctx->values[i].v.str.data;
-            *len = ctx->values[i].v.str.len;
-            return CFGPACK_OK;
-        }
-    }
-    return CFGPACK_ERR_MISSING;
-}
+/** @brief Get a string pointer and length by index (from pool). @see cfgpack_get */
+cfgpack_err_t cfgpack_get_str(const cfgpack_ctx_t *ctx, uint16_t index, const char **out, uint16_t *len);
 
-/** @brief Get a fixed-length string pointer and length by index. @see cfgpack_get */
-static inline cfgpack_err_t cfgpack_get_fstr(const cfgpack_ctx_t *ctx, uint16_t index, const char **out, uint8_t *len) {
-    cfgpack_value_t v;
-    cfgpack_err_t rc = cfgpack_get(ctx, index, &v);
-    if (rc != CFGPACK_OK) return rc;
-    if (v.type != CFGPACK_TYPE_FSTR) return CFGPACK_ERR_TYPE_MISMATCH;
-    /* Find entry offset to get pointer to actual storage */
-    for (size_t i = 0; i < ctx->schema->entry_count; ++i) {
-        if (ctx->schema->entries[i].index == index) {
-            *out = ctx->values[i].v.fstr.data;
-            *len = ctx->values[i].v.fstr.len;
-            return CFGPACK_OK;
-        }
-    }
-    return CFGPACK_ERR_MISSING;
-}
+/** @brief Get a fixed-length string pointer and length by index (from pool). @see cfgpack_get */
+cfgpack_err_t cfgpack_get_fstr(const cfgpack_ctx_t *ctx, uint16_t index, const char **out, uint8_t *len);
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * Typed Getter Convenience Functions (by name)
@@ -563,39 +533,11 @@ static inline cfgpack_err_t cfgpack_get_f64_by_name(const cfgpack_ctx_t *ctx, co
     return CFGPACK_OK;
 }
 
-/** @brief Get a heap string pointer and length by name. @see cfgpack_get_by_name */
-static inline cfgpack_err_t cfgpack_get_str_by_name(const cfgpack_ctx_t *ctx, const char *name, const char **out, uint16_t *len) {
-    cfgpack_value_t v;
-    cfgpack_err_t rc = cfgpack_get_by_name(ctx, name, &v);
-    if (rc != CFGPACK_OK) return rc;
-    if (v.type != CFGPACK_TYPE_STR) return CFGPACK_ERR_TYPE_MISMATCH;
-    /* Need to find the entry again to get the pointer - this is inefficient but correct */
-    for (size_t i = 0; i < ctx->schema->entry_count; ++i) {
-        if (strcmp(ctx->schema->entries[i].name, name) == 0) {
-            *out = ctx->values[i].v.str.data;
-            *len = ctx->values[i].v.str.len;
-            return CFGPACK_OK;
-        }
-    }
-    return CFGPACK_ERR_MISSING;
-}
+/** @brief Get a string pointer and length by name (from pool). @see cfgpack_get_by_name */
+cfgpack_err_t cfgpack_get_str_by_name(const cfgpack_ctx_t *ctx, const char *name, const char **out, uint16_t *len);
 
-/** @brief Get a fixed-length string pointer and length by name. @see cfgpack_get_by_name */
-static inline cfgpack_err_t cfgpack_get_fstr_by_name(const cfgpack_ctx_t *ctx, const char *name, const char **out, uint8_t *len) {
-    cfgpack_value_t v;
-    cfgpack_err_t rc = cfgpack_get_by_name(ctx, name, &v);
-    if (rc != CFGPACK_OK) return rc;
-    if (v.type != CFGPACK_TYPE_FSTR) return CFGPACK_ERR_TYPE_MISMATCH;
-    /* Need to find the entry again to get the pointer - this is inefficient but correct */
-    for (size_t i = 0; i < ctx->schema->entry_count; ++i) {
-        if (strcmp(ctx->schema->entries[i].name, name) == 0) {
-            *out = ctx->values[i].v.fstr.data;
-            *len = ctx->values[i].v.fstr.len;
-            return CFGPACK_OK;
-        }
-    }
-    return CFGPACK_ERR_MISSING;
-}
+/** @brief Get a fixed-length string pointer and length by name (from pool). @see cfgpack_get_by_name */
+cfgpack_err_t cfgpack_get_fstr_by_name(const cfgpack_ctx_t *ctx, const char *name, const char **out, uint8_t *len);
 
 /**
  * @brief Encode present values into a MessagePack map in caller buffer.

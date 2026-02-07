@@ -16,6 +16,8 @@
 #ifndef CFGPACK_CONFIG_H
 #define CFGPACK_CONFIG_H
 
+#include <limits.h>  /* CHAR_BIT */
+
 #ifndef CFGPACK_HOSTED
   #define CFGPACK_EMBEDDED 1
 #endif
@@ -26,5 +28,20 @@
 #else
   #define CFGPACK_PRINTF(...) ((void)0)
 #endif
+
+/**
+ * @brief Maximum number of schema entries supported.
+ *
+ * This determines the size of the inline presence bitmap in cfgpack_ctx_t.
+ * Override by defining CFGPACK_MAX_ENTRIES before including cfgpack headers.
+ */
+#ifndef CFGPACK_MAX_ENTRIES
+#define CFGPACK_MAX_ENTRIES 128
+#endif
+
+/**
+ * @brief Size in bytes of the presence bitmap.
+ */
+#define CFGPACK_PRESENCE_BYTES ((CFGPACK_MAX_ENTRIES + CHAR_BIT - 1) / CHAR_BIT)
 
 #endif /* CFGPACK_CONFIG_H */

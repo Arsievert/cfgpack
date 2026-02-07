@@ -24,12 +24,15 @@
 /* Schema storage (parsed from .map file) */
 static cfgpack_schema_t schema;
 static cfgpack_entry_t entries[MAX_ENTRIES];
-static cfgpack_value_t defaults[MAX_ENTRIES];
+static cfgpack_fat_value_t defaults[MAX_ENTRIES];
 
 /* Runtime context */
 static cfgpack_ctx_t ctx;
 static cfgpack_value_t values[MAX_ENTRIES];
-static uint8_t presence[(MAX_ENTRIES + 7) / 8];
+
+/* String pool for runtime string values */
+static char str_pool[256];
+static uint16_t str_offsets[MAX_ENTRIES];
 
 /* Simulated flash storage */
 static uint8_t storage[512];
@@ -117,12 +120,20 @@ static void dump_all_entries(const cfgpack_ctx_t *c)
             case CFGPACK_TYPE_F64:
                 printf("%.6f", val.v.f64);
                 break;
-            case CFGPACK_TYPE_STR:
-                printf("\"%.*s\"", (int)val.v.str.len, val.v.str.data);
+            case CFGPACK_TYPE_STR: {
+                const char *str;
+                uint16_t len;
+                if (cfgpack_get_str(c, e->index, &str, &len) == CFGPACK_OK)
+                    printf("\"%.*s\"", (int)len, str);
                 break;
-            case CFGPACK_TYPE_FSTR:
-                printf("\"%.*s\"", (int)val.v.fstr.len, val.v.fstr.data);
+            }
+            case CFGPACK_TYPE_FSTR: {
+                const char *str;
+                uint8_t len;
+                if (cfgpack_get_fstr(c, e->index, &str, &len) == CFGPACK_OK)
+                    printf("\"%.*s\"", (int)len, str);
                 break;
+            }
         }
         printf("\n");
     }
@@ -219,7 +230,8 @@ int main(int argc, char **argv)
 
     /* 2. Initialize context with defaults */
     rc = cfgpack_init(&ctx, &schema, values, MAX_ENTRIES, defaults,
-                      presence, sizeof(presence));
+                      str_pool, sizeof(str_pool),
+                      str_offsets, MAX_ENTRIES);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Init failed: %d\n", rc);
         return 1;
@@ -275,9 +287,9 @@ int main(int argc, char **argv)
     hexdump(storage, storage_len);
     printf("\n");
 
-    /* 6. Export current config to JSON (human-readable) */
+    /* 6. Export schema with defaults to JSON (human-readable) */
     size_t json_len;
-    rc = cfgpack_schema_write_json(&schema, values, json_buf, sizeof(json_buf),
+    rc = cfgpack_schema_write_json(&schema, defaults, json_buf, sizeof(json_buf),
                                    &json_len, &parse_err);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "JSON export failed: %d\n", rc);
@@ -296,7 +308,8 @@ int main(int argc, char **argv)
 
     /* 7. Re-initialize context (simulates device reboot) */
     rc = cfgpack_init(&ctx, &schema, values, MAX_ENTRIES, defaults,
-                      presence, sizeof(presence));
+                      str_pool, sizeof(str_pool),
+                      str_offsets, MAX_ENTRIES);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Re-init failed: %d\n", rc);
         return 1;
