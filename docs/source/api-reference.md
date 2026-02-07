@@ -25,6 +25,11 @@ typedef enum {
 
 ## Values
 
+Two value types are provided:
+
+- **`cfgpack_value_t`**: Compact runtime storage (~16 bytes). Strings use pointer + length (data stored in string pool).
+- **`cfgpack_fat_value_t`**: Inline string storage (~72 bytes). Used for parsing schema defaults.
+
 ```c
 #include "cfgpack/value.h"
 
@@ -38,6 +43,20 @@ typedef enum {
     CFGPACK_TYPE_STR, CFGPACK_TYPE_FSTR
 } cfgpack_type_t;
 
+/* Compact runtime value (strings use pointer + length) */
+typedef struct {
+    cfgpack_type_t type;
+    union {
+        uint64_t u64;
+        int64_t i64;
+        float   f32;
+        double  f64;
+        struct { const char *data; uint16_t len; } str;
+        struct { const char *data; uint8_t len; } fstr;
+    } v;
+} cfgpack_value_t;
+
+/* Fat value with inline string storage (for schema defaults) */
 typedef struct {
     cfgpack_type_t type;
     union {
@@ -48,7 +67,7 @@ typedef struct {
         struct { uint16_t len; char data[CFGPACK_STR_MAX + 1]; } str;
         struct { uint8_t  len; char data[CFGPACK_FSTR_MAX + 1]; } fstr;
     } v;
-} cfgpack_value_t;
+} cfgpack_fat_value_t;
 ```
 
 ## Schema
@@ -73,20 +92,20 @@ typedef struct {
 /* Parse schema from .map buffer */
 cfgpack_err_t cfgpack_parse_schema(const char *data, size_t data_len,
                                    cfgpack_schema_t *out, cfgpack_entry_t *entries,
-                                   size_t max_entries, cfgpack_value_t *defaults,
+                                   size_t max_entries, cfgpack_fat_value_t *defaults,
                                    cfgpack_parse_error_t *err);
 
 /* Parse schema from JSON buffer */
 cfgpack_err_t cfgpack_schema_parse_json(const char *data, size_t data_len,
                                         cfgpack_schema_t *out, cfgpack_entry_t *entries,
-                                        size_t max_entries, cfgpack_value_t *defaults,
+                                        size_t max_entries, cfgpack_fat_value_t *defaults,
                                         cfgpack_parse_error_t *err);
 
 void cfgpack_schema_free(cfgpack_schema_t *schema); /* no-op for caller-owned arrays */
 
 /* Write schema to JSON buffer */
 cfgpack_err_t cfgpack_schema_write_json(const cfgpack_schema_t *schema,
-                                        const cfgpack_value_t *values,
+                                        const cfgpack_fat_value_t *defaults,
                                         char *out, size_t out_cap, size_t *out_len,
                                         cfgpack_parse_error_t *err);
 ```
@@ -117,10 +136,13 @@ Schemas can be read from and written to JSON for interoperability with other too
 ```c
 #include "cfgpack/api.h"
 
+/* Initialize runtime context. Presence bitmap is embedded in cfgpack_ctx_t
+ * (sized by CFGPACK_MAX_ENTRIES, default 128). */
 cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx, const cfgpack_schema_t *schema,
                            cfgpack_value_t *values, size_t values_count,
-                           const cfgpack_value_t *defaults,
-                           uint8_t *present, size_t present_bytes);
+                           const cfgpack_fat_value_t *defaults,
+                           char *str_pool, size_t str_pool_cap,
+                           uint16_t *str_offsets, size_t str_offsets_count);
 void          cfgpack_free(cfgpack_ctx_t *ctx);
 void          cfgpack_reset_to_defaults(cfgpack_ctx_t *ctx);
 
@@ -202,16 +224,19 @@ cfgpack_get_fstr_by_name(ctx, name, &ptr, &len)
 
 ```c
 cfgpack_entry_t entries[128];
-cfgpack_value_t defaults[128];
+cfgpack_fat_value_t defaults[128];
 cfgpack_schema_t schema;
 cfgpack_parse_error_t err;
 cfgpack_value_t values[128];
-uint8_t present[(128+7)/8];
+char str_pool[256];
+uint16_t str_offsets[128];
 uint8_t scratch[4096];
 
-cfgpack_parse_schema("my.map", &schema, entries, 128, defaults, &err);
-cfgpack_init(&ctx, &schema, values, 128, defaults, present, sizeof(present));
+cfgpack_parse_schema(map_data, map_len, &schema, entries, 128, defaults, &err);
+cfgpack_init(&ctx, &schema, values, 128, defaults,
+             str_pool, sizeof(str_pool), str_offsets, 128);
 // At this point, entries with defaults are already present and populated
+// Presence bitmap is embedded in ctx (no separate allocation needed)
 
 // Using typed convenience functions (recommended):
 uint16_t speed;
