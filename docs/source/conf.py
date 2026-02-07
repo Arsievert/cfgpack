@@ -33,6 +33,9 @@ source_suffix = {
 templates_path = ['_templates']
 exclude_patterns = []
 
+# Suppress warnings for duplicate declarations (from anonymous struct members)
+suppress_warnings = ['duplicate_declaration.cpp']
+
 # -- Options for HTML output -------------------------------------------------
 
 html_theme = 'sphinx_rtd_theme'
