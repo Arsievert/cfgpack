@@ -1,5 +1,6 @@
 #ifndef CFGPACK_CFGPACK_H
 #define CFGPACK_CFGPACK_H
+/* IWYU pragma: always_keep */
 
 /**
  * @file cfgpack.h
