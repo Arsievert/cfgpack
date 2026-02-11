@@ -14,32 +14,34 @@
 #   make run    - Build and run the example
 #   make clean  - Remove build artifacts
 
-# Paths relative to this directory
-ROOT     := ../..
-INCLUDE  := $(ROOT)/include
-LIBDIR   := $(ROOT)/build/out
-LIB      := $(LIBDIR)/libcfgpack.a
-HS_INC   := $(ROOT)/third_party/heatshrink
+# --- Paths --------------------------------------------------------------------
+ROOT    := ../..
+INCLUDE := $(ROOT)/include
+LIBDIR  := $(ROOT)/build/out
+LIB     := $(LIBDIR)/libcfgpack.a
+HS_INC  := $(ROOT)/third_party/heatshrink
 
-# Compression tool
+# --- Toolchain ----------------------------------------------------------------
+CC       := clang
 COMPRESS := $(LIBDIR)/cfgpack-compress
 
-# Compiler settings
-CC       := clang
+# --- Flags --------------------------------------------------------------------
 CPPFLAGS := -I$(INCLUDE) -I$(HS_INC)
 CFLAGS   := -Wall -Wextra -std=c99
 
-# Output
-BUILD    := build
-TARGET   := $(BUILD)/sensor_hub
-SCHEMA   := $(BUILD)/schema.hs.bin
+# --- Outputs ------------------------------------------------------------------
+BUILD  := build
+TARGET := $(BUILD)/sensor_hub
+SCHEMA := $(BUILD)/schema.hs.bin
 
-# Sources
-SRCS     := main.c
+# --- Sources ------------------------------------------------------------------
+SRCS := main.c
 
+# --- Default goal -------------------------------------------------------------
 .DEFAULT_GOAL := all
 
-all: $(TARGET) $(SCHEMA)
+# --- Build rules --------------------------------------------------------------
+all: $(TARGET) $(SCHEMA) ## Build the example
 
 # Build library if it doesn't exist
 $(LIB):
@@ -57,19 +59,20 @@ $(SCHEMA): sensor_hub.json $(COMPRESS) | $(BUILD)
 	@echo "Compressing schema with heatshrink..."
 	@$(COMPRESS) heatshrink sensor_hub.json $@
 
-# Build example binary
 $(TARGET): $(SRCS) $(LIB) | $(BUILD)
 	@echo "CC sensor_hub"
 	@$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $(SRCS) $(LIB)
 
-run: $(TARGET) $(SCHEMA)
+# --- Utility targets ----------------------------------------------------------
+run: $(TARGET) $(SCHEMA) ## Build and run the example
 	@echo ""
 	@echo "Running sensor_hub example..."
 	@echo ""
 	@cd $(BUILD) && ./sensor_hub
 
-clean:
+clean: ## Remove build artifacts
 	@echo "rm -rf $(BUILD)/"
 	@rm -rf $(BUILD)
 
+# --- Phony --------------------------------------------------------------------
 .PHONY: all run clean

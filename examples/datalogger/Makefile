@@ -8,27 +8,31 @@
 #   make run    - Build and run the example
 #   make clean  - Remove build artifacts
 
-# Paths relative to this directory
-ROOT     := ../..
-INCLUDE  := $(ROOT)/include
-LIBDIR   := $(ROOT)/build/out
-LIB      := $(LIBDIR)/libcfgpack.a
+# --- Paths --------------------------------------------------------------------
+ROOT    := ../..
+INCLUDE := $(ROOT)/include
+LIBDIR  := $(ROOT)/build/out
+LIB     := $(LIBDIR)/libcfgpack.a
 
-# Compiler settings
-CC       := clang
+# --- Toolchain ----------------------------------------------------------------
+CC := clang
+
+# --- Flags --------------------------------------------------------------------
 CPPFLAGS := -I$(INCLUDE)
 CFLAGS   := -Wall -Wextra -std=c99
 
-# Output
-BUILD    := build
-TARGET   := $(BUILD)/datalogger
+# --- Outputs ------------------------------------------------------------------
+BUILD  := build
+TARGET := $(BUILD)/datalogger
 
-# Sources
-SRCS     := main.c
+# --- Sources ------------------------------------------------------------------
+SRCS := main.c
 
+# --- Default goal -------------------------------------------------------------
 .DEFAULT_GOAL := all
 
-all: $(TARGET)
+# --- Build rules --------------------------------------------------------------
+all: $(TARGET) ## Build the example
 
 # Build library if it doesn't exist
 $(LIB):
@@ -41,12 +45,14 @@ $(TARGET): $(SRCS) $(LIB) | $(BUILD)
 	@echo "CC datalogger"
 	@$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $(SRCS) $(LIB)
 
-run: $(TARGET)
+# --- Utility targets ----------------------------------------------------------
+run: $(TARGET) ## Build and run the example
 	@echo ""
 	@./$(TARGET) datalogger.map
 
-clean:
+clean: ## Remove build artifacts
 	@echo "rm -rf $(BUILD)/"
 	@rm -rf $(BUILD)
 
+# --- Phony --------------------------------------------------------------------
 .PHONY: all run clean
