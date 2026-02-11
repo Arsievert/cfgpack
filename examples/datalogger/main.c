@@ -24,7 +24,6 @@
 /* Schema storage (parsed from .map file) */
 static cfgpack_schema_t schema;
 static cfgpack_entry_t entries[MAX_ENTRIES];
-static cfgpack_fat_value_t defaults[MAX_ENTRIES];
 
 /* Runtime context */
 static cfgpack_ctx_t ctx;
@@ -208,7 +207,17 @@ int main(int argc, char **argv) {
     fclose(f);
     map_buf[map_len] = '\0';
 
-    rc = cfgpack_parse_schema(map_buf, map_len, &schema, entries, MAX_ENTRIES, defaults, &parse_err);
+    rc = cfgpack_parse_schema(map_buf,
+                              map_len,
+                              &schema,
+                              entries,
+                              MAX_ENTRIES,
+                              values,
+                              str_pool,
+                              sizeof(str_pool),
+                              str_offsets,
+                              MAX_ENTRIES,
+                              &parse_err);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Schema parse error at line %zu: %s\n", parse_err.line, parse_err.message);
         return 1;
@@ -216,15 +225,7 @@ int main(int argc, char **argv) {
     printf("Loaded schema: %s (version %u, %zu entries)\n\n", schema.map_name, schema.version, schema.entry_count);
 
     /* 2. Initialize context with defaults */
-    rc = cfgpack_init(&ctx,
-                      &schema,
-                      values,
-                      MAX_ENTRIES,
-                      defaults,
-                      str_pool,
-                      sizeof(str_pool),
-                      str_offsets,
-                      MAX_ENTRIES);
+    rc = cfgpack_init(&ctx, &schema, values, MAX_ENTRIES, str_pool, sizeof(str_pool), str_offsets, MAX_ENTRIES);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Init failed: %d\n", rc);
         return 1;
@@ -282,7 +283,7 @@ int main(int argc, char **argv) {
 
     /* 6. Export schema with defaults to JSON (human-readable) */
     size_t json_len;
-    rc = cfgpack_schema_write_json(&schema, defaults, json_buf, sizeof(json_buf), &json_len, &parse_err);
+    rc = cfgpack_schema_write_json(&ctx, json_buf, sizeof(json_buf), &json_len, &parse_err);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "JSON export failed: %d\n", rc);
         return 1;
@@ -299,15 +300,25 @@ int main(int argc, char **argv) {
     }
 
     /* 7. Re-initialize context (simulates device reboot) */
-    rc = cfgpack_init(&ctx,
-                      &schema,
-                      values,
-                      MAX_ENTRIES,
-                      defaults,
-                      str_pool,
-                      sizeof(str_pool),
-                      str_offsets,
-                      MAX_ENTRIES);
+
+    /* Re-parse schema to restore defaults into values/str_pool */
+    rc = cfgpack_parse_schema(map_buf,
+                              map_len,
+                              &schema,
+                              entries,
+                              MAX_ENTRIES,
+                              values,
+                              str_pool,
+                              sizeof(str_pool),
+                              str_offsets,
+                              MAX_ENTRIES,
+                              &parse_err);
+    if (rc != CFGPACK_OK) {
+        fprintf(stderr, "Schema re-parse error: %s\n", parse_err.message);
+        return 1;
+    }
+
+    rc = cfgpack_init(&ctx, &schema, values, MAX_ENTRIES, str_pool, sizeof(str_pool), str_offsets, MAX_ENTRIES);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Re-init failed: %d\n", rc);
         return 1;

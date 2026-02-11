@@ -113,7 +113,11 @@ cfgpack_err_t cfgpack_parse_schema_file(const char *path,
                                         cfgpack_schema_t *out_schema,
                                         cfgpack_entry_t *entries,
                                         size_t max_entries,
-                                        cfgpack_fat_value_t *defaults,
+                                        cfgpack_value_t *values,
+                                        char *str_pool,
+                                        size_t str_pool_cap,
+                                        uint16_t *str_offsets,
+                                        size_t str_offsets_count,
                                         char *scratch,
                                         size_t scratch_cap,
                                         cfgpack_parse_error_t *err) {
@@ -126,14 +130,28 @@ cfgpack_err_t cfgpack_parse_schema_file(const char *path,
         }
         return rc;
     }
-    return cfgpack_parse_schema(scratch, len, out_schema, entries, max_entries, defaults, err);
+    return cfgpack_parse_schema(scratch,
+                                len,
+                                out_schema,
+                                entries,
+                                max_entries,
+                                values,
+                                str_pool,
+                                str_pool_cap,
+                                str_offsets,
+                                str_offsets_count,
+                                err);
 }
 
 cfgpack_err_t cfgpack_schema_parse_json_file(const char *path,
                                              cfgpack_schema_t *out_schema,
                                              cfgpack_entry_t *entries,
                                              size_t max_entries,
-                                             cfgpack_fat_value_t *defaults,
+                                             cfgpack_value_t *values,
+                                             char *str_pool,
+                                             size_t str_pool_cap,
+                                             uint16_t *str_offsets,
+                                             size_t str_offsets_count,
                                              char *scratch,
                                              size_t scratch_cap,
                                              cfgpack_parse_error_t *err) {
@@ -146,17 +164,26 @@ cfgpack_err_t cfgpack_schema_parse_json_file(const char *path,
         }
         return rc;
     }
-    return cfgpack_schema_parse_json(scratch, len, out_schema, entries, max_entries, defaults, err);
+    return cfgpack_schema_parse_json(scratch,
+                                     len,
+                                     out_schema,
+                                     entries,
+                                     max_entries,
+                                     values,
+                                     str_pool,
+                                     str_pool_cap,
+                                     str_offsets,
+                                     str_offsets_count,
+                                     err);
 }
 
-cfgpack_err_t cfgpack_schema_write_json_file(const cfgpack_schema_t *schema,
-                                             const cfgpack_fat_value_t *values,
+cfgpack_err_t cfgpack_schema_write_json_file(const cfgpack_ctx_t *ctx,
                                              const char *path,
                                              char *scratch,
                                              size_t scratch_cap,
                                              cfgpack_parse_error_t *err) {
     size_t out_len = 0;
-    cfgpack_err_t rc = cfgpack_schema_write_json(schema, values, scratch, scratch_cap, &out_len, err);
+    cfgpack_err_t rc = cfgpack_schema_write_json(ctx, scratch, scratch_cap, &out_len, err);
     if (rc != CFGPACK_OK) {
         return rc;
     }

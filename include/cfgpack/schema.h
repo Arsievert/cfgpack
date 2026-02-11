@@ -79,13 +79,20 @@ cfgpack_err_t cfgpack_schema_get_sizing(const cfgpack_schema_t *schema, cfgpack_
  * Fails on duplicates (index or name), name length >5, unsupported type,
  * too many entries, or indices outside 0..65535.
  *
- * @param data        Input buffer containing schema data (null-terminated).
- * @param data_len    Length of data in bytes.
- * @param out_schema  Filled on success; points at caller-owned entries array.
- * @param entries     Caller-owned array to store parsed entries.
- * @param max_entries Capacity of @p entries.
- * @param defaults    Caller-owned array to store default values (parallel to entries).
- * @param err         Optional parse error info (line/message) on failure.
+ * Default values are written directly into @p values and @p str_pool.
+ * Entries with defaults are marked present in the output.
+ *
+ * @param data             Input buffer containing schema data (null-terminated).
+ * @param data_len         Length of data in bytes.
+ * @param out_schema       Filled on success; points at caller-owned entries array.
+ * @param entries          Caller-owned array to store parsed entries.
+ * @param max_entries      Capacity of @p entries.
+ * @param values           Caller-owned value slots to receive defaults (>= max_entries).
+ * @param str_pool         Caller-owned string pool buffer.
+ * @param str_pool_cap     Capacity of @p str_pool in bytes.
+ * @param str_offsets      Caller-owned array for string offsets.
+ * @param str_offsets_count Number of elements in @p str_offsets.
+ * @param err              Optional parse error info (line/message) on failure.
  * @return CFGPACK_OK on success; CFGPACK_ERR_* on failure.
  */
 cfgpack_err_t cfgpack_parse_schema(const char *data,
@@ -93,7 +100,11 @@ cfgpack_err_t cfgpack_parse_schema(const char *data,
                                    cfgpack_schema_t *out_schema,
                                    cfgpack_entry_t *entries,
                                    size_t max_entries,
-                                   cfgpack_fat_value_t *defaults,
+                                   cfgpack_value_t *values,
+                                   char *str_pool,
+                                   size_t str_pool_cap,
+                                   uint16_t *str_offsets,
+                                   size_t str_offsets_count,
                                    cfgpack_parse_error_t *err);
 
 /**
@@ -102,34 +113,35 @@ cfgpack_err_t cfgpack_parse_schema(const char *data,
  */
 void cfgpack_schema_free(cfgpack_schema_t *schema);
 
+/* Forward declaration - full definition in api.h */
+typedef struct cfgpack_ctx cfgpack_ctx_t;
+
 /**
- * @brief Write a schema to a JSON buffer.
+ * @brief Write a schema and its current values to a JSON buffer.
  *
  * Output format (pretty-printed with 2-space indentation):
  * {
  *   "name": "demo",
  *   "version": 1,
  *   "entries": [
- *     {"index": 0, "name": "foo", "type": "u8", "default": 255},
- *     {"index": 1, "name": "bar", "type": "str", "default": "hello"},
- *     {"index": 2, "name": "baz", "type": "str", "default": null}
+ *     {"index": 0, "name": "foo", "type": "u8", "value": 255},
+ *     {"index": 1, "name": "bar", "type": "str", "value": "hello"},
+ *     {"index": 2, "name": "baz", "type": "str", "value": null}
  *   ]
  * }
  *
- * - `default` is `null` for entries with has_default == 0 (NIL).
+ * - `value` is `null` for entries with has_default == 0 (NIL).
  * - Strings are JSON-escaped.
  * - Numbers are output as JSON numbers.
  *
- * @param schema   Schema to write.
- * @param values   Parallel array of values to write (same order as schema->entries).
+ * @param ctx      Initialized context containing schema and values.
  * @param out      Output buffer for JSON.
  * @param out_cap  Capacity of @p out in bytes.
  * @param out_len  Output: bytes written (always set, even if > out_cap to indicate needed size).
  * @param err      Optional error info on failure.
  * @return CFGPACK_OK on success; CFGPACK_ERR_BOUNDS if buffer too small.
  */
-cfgpack_err_t cfgpack_schema_write_json(const cfgpack_schema_t *schema,
-                                        const cfgpack_fat_value_t *values,
+cfgpack_err_t cfgpack_schema_write_json(const cfgpack_ctx_t *ctx,
                                         char *out,
                                         size_t out_cap,
                                         size_t *out_len,
@@ -141,13 +153,19 @@ cfgpack_err_t cfgpack_schema_write_json(const cfgpack_schema_t *schema,
  * Expects the same JSON format produced by cfgpack_schema_write_json().
  * Entries are sorted by index after parsing.
  *
- * @param data        Input buffer containing JSON data.
- * @param data_len    Length of data in bytes.
- * @param out_schema  Filled on success; points at caller-owned entries array.
- * @param entries     Caller-owned array to store parsed entries.
- * @param max_entries Capacity of @p entries.
- * @param defaults    Caller-owned array to store default values (parallel to entries).
- * @param err         Optional parse error info (line/message) on failure.
+ * Default values are written directly into @p values and @p str_pool.
+ *
+ * @param data             Input buffer containing JSON data.
+ * @param data_len         Length of data in bytes.
+ * @param out_schema       Filled on success; points at caller-owned entries array.
+ * @param entries          Caller-owned array to store parsed entries.
+ * @param max_entries      Capacity of @p entries.
+ * @param values           Caller-owned value slots to receive defaults (>= max_entries).
+ * @param str_pool         Caller-owned string pool buffer.
+ * @param str_pool_cap     Capacity of @p str_pool in bytes.
+ * @param str_offsets      Caller-owned array for string offsets.
+ * @param str_offsets_count Number of elements in @p str_offsets.
+ * @param err              Optional parse error info (line/message) on failure.
  * @return CFGPACK_OK on success; CFGPACK_ERR_* on failure.
  */
 cfgpack_err_t cfgpack_schema_parse_json(const char *data,
@@ -155,7 +173,11 @@ cfgpack_err_t cfgpack_schema_parse_json(const char *data,
                                         cfgpack_schema_t *out_schema,
                                         cfgpack_entry_t *entries,
                                         size_t max_entries,
-                                        cfgpack_fat_value_t *defaults,
+                                        cfgpack_value_t *values,
+                                        char *str_pool,
+                                        size_t str_pool_cap,
+                                        uint16_t *str_offsets,
+                                        size_t str_offsets_count,
                                         cfgpack_parse_error_t *err);
 
 #endif /* CFGPACK_SCHEMA_H */

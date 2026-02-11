@@ -53,17 +53,16 @@ typedef struct {
  * The presence bitmap is embedded in the context structure and supports
  * up to CFGPACK_MAX_ENTRIES entries (default 128, configurable in config.h).
  */
-typedef struct {
+struct cfgpack_ctx {
     const cfgpack_schema_t *schema;          /**< Pointer to schema describing entries. */
     cfgpack_value_t *values;                 /**< Caller-provided value slots (size = entry_count). */
     size_t values_count;                     /**< Number of value slots available. */
-    const cfgpack_fat_value_t *defaults;     /**< Pointer to fat defaults array (parallel to entries). */
     uint8_t present[CFGPACK_PRESENCE_BYTES]; /**< Inline presence bitmap (entry_count bits). */
     char *str_pool;                          /**< Caller-provided string pool buffer. */
     size_t str_pool_cap;                     /**< Capacity of string pool in bytes. */
     uint16_t *str_offsets;                   /**< Per-string-entry offsets into str_pool. */
     size_t str_offsets_count;                /**< Number of string offset slots. */
-} cfgpack_ctx_t;
+};
 
 /**
  * @brief Mark entry index as present in the context bitmap.
@@ -94,17 +93,17 @@ static inline void cfgpack_presence_clear(cfgpack_ctx_t *ctx, size_t idx) {
 }
 
 /**
- * @brief Initialize context with caller buffers; applies schema defaults.
+ * @brief Initialize context with caller buffers.
  *
- * Zeroes values and presence, then applies default values for any
- * schema entries that have has_default=1 (marking them as present).
- * String defaults are copied from fat_value defaults into the string pool.
+ * Sets up the runtime context with references to the parsed schema,
+ * value slots, string pool, and string offsets. The values and string pool
+ * should already contain defaults from schema parsing.
  *
  * @param ctx              Context to initialize (output).
  * @param schema           Parsed schema describing entries; must outlive ctx.
  * @param values           Caller-owned array of value slots (>= entry_count).
+ *                         Should already contain defaults from parsing.
  * @param values_count     Number of elements in @p values.
- * @param defaults         Caller-owned array of fat default values (parallel to schema entries).
  * @param str_pool         Caller-owned string pool buffer (use cfgpack_schema_get_sizing()).
  * @param str_pool_cap     Capacity of @p str_pool in bytes.
  * @param str_offsets      Caller-owned array for string offsets (str_count + fstr_count).
@@ -116,7 +115,6 @@ cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx,
                            const cfgpack_schema_t *schema,
                            cfgpack_value_t *values,
                            size_t values_count,
-                           const cfgpack_fat_value_t *defaults,
                            char *str_pool,
                            size_t str_pool_cap,
                            uint16_t *str_offsets,
@@ -128,15 +126,6 @@ cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx,
  */
 void cfgpack_free(cfgpack_ctx_t *ctx);
 
-/**
- * @brief Reset all values to their defaults.
- *
- * Clears all values and presence bits, then re-applies default values
- * for entries that have has_default=1 (marking them as present).
- *
- * @param ctx Initialized context.
- */
-void cfgpack_reset_to_defaults(cfgpack_ctx_t *ctx);
 
 /**
  * @brief Set a value by schema index; validates type and string lengths.

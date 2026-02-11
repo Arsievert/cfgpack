@@ -13,7 +13,9 @@ TEST_CASE(test_parse_ok) {
 
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
-    cfgpack_fat_value_t defaults[128];
+    cfgpack_value_t values[128];
+    char str_pool[2048];
+    uint16_t str_offsets[128];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -22,7 +24,11 @@ TEST_CASE(test_parse_ok) {
                                    &schema,
                                    entries,
                                    128,
-                                   defaults,
+                                   values,
+                                   str_pool,
+                                   sizeof(str_pool),
+                                   str_offsets,
+                                   128,
                                    scratch,
                                    sizeof(scratch),
                                    &err);
@@ -62,7 +68,9 @@ TEST_CASE(test_parse_bad_type) {
     FILE *f;
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
-    cfgpack_fat_value_t defaults[128];
+    cfgpack_value_t values[128];
+    char str_pool[2048];
+    uint16_t str_offsets[128];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -75,7 +83,18 @@ TEST_CASE(test_parse_bad_type) {
     LOG("  'nope' is not a valid type name");
 
     LOG("Parsing file (expecting CFGPACK_ERR_INVALID_TYPE)");
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 128, defaults, scratch, sizeof(scratch), &err);
+    rc = cfgpack_parse_schema_file(path,
+                                   &schema,
+                                   entries,
+                                   128,
+                                   values,
+                                   str_pool,
+                                   sizeof(str_pool),
+                                   str_offsets,
+                                   128,
+                                   scratch,
+                                   sizeof(scratch),
+                                   &err);
     CHECK(rc == CFGPACK_ERR_INVALID_TYPE);
     LOG("Correctly rejected: CFGPACK_ERR_INVALID_TYPE");
 
@@ -90,7 +109,9 @@ TEST_CASE(test_parse_duplicate_index) {
     FILE *f;
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
-    cfgpack_fat_value_t defaults[128];
+    cfgpack_value_t values[128];
+    char str_pool[2048];
+    uint16_t str_offsets[128];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
@@ -105,7 +126,18 @@ TEST_CASE(test_parse_duplicate_index) {
     LOG("  1 bar u8 0  # duplicate index (same index 1)");
 
     LOG("Parsing file (expecting CFGPACK_ERR_DUPLICATE)");
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 128, defaults, scratch, sizeof(scratch), &err);
+    rc = cfgpack_parse_schema_file(path,
+                                   &schema,
+                                   entries,
+                                   128,
+                                   values,
+                                   str_pool,
+                                   sizeof(str_pool),
+                                   str_offsets,
+                                   128,
+                                   scratch,
+                                   sizeof(scratch),
+                                   &err);
     CHECK(rc == CFGPACK_ERR_DUPLICATE);
     LOG("Correctly rejected: CFGPACK_ERR_DUPLICATE");
 

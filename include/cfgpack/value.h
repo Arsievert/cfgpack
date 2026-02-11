@@ -8,9 +8,8 @@
  * Defines the supported data types and the tagged union containers
  * used to store configuration values.
  *
- * Two value types are provided:
- * - cfgpack_value_t: Compact (16 bytes), strings stored in external pool
- * - cfgpack_fat_value_t: Inline strings (~72 bytes), used for parsing defaults
+ * Provides the compact tagged union container for runtime configuration values.
+ * String data is stored in an external pool; only offsets are kept inline.
  */
 
 #include <stdint.h>
@@ -58,24 +57,5 @@ typedef struct {
     /* clang-format on */
 } cfgpack_value_t;
 
-/**
- * @brief Fat value container with inline string storage.
- *
- * Used for parsing schema defaults. Strings are stored inline,
- * making this type ~72 bytes. Use cfgpack_value_t for runtime storage.
- */
-typedef struct {
-    cfgpack_type_t type;
-    /* clang-format off */
-    union {
-        uint64_t u64;
-        int64_t  i64;
-        float    f32;
-        double   f64;
-        struct { uint16_t len; char data[CFGPACK_STR_MAX + 1]; } str;
-        struct { uint8_t  len; char data[CFGPACK_FSTR_MAX + 1]; } fstr;
-    } v;
-    /* clang-format on */
-} cfgpack_fat_value_t;
 
 #endif /* CFGPACK_VALUE_H */

@@ -8,7 +8,6 @@ TEST_CASE(test_basic_case) {
 
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[2];
-    cfgpack_fat_value_t defaults[2];
     cfgpack_ctx_t ctx;
     cfgpack_value_t values[2];
     cfgpack_value_t out;
@@ -36,7 +35,7 @@ TEST_CASE(test_basic_case) {
     entries[1].has_default = 0;
 
     LOG("Initializing context with 2-entry schema");
-    rc = cfgpack_init(&ctx, &schema, values, 2, defaults, str_pool, sizeof(str_pool), str_offsets, 1);
+    rc = cfgpack_init(&ctx, &schema, values, 2, str_pool, sizeof(str_pool), str_offsets, 1);
     CHECK(rc == CFGPACK_OK);
     LOG("cfgpack_init() returned OK");
 
@@ -120,7 +119,6 @@ TEST_CASE(test_pageout_small_buffer) {
 
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[1];
-    cfgpack_fat_value_t defaults[1];
     cfgpack_ctx_t ctx;
     cfgpack_value_t values[1];
     uint8_t buf[4]; /* intentionally tiny */
@@ -143,7 +141,7 @@ TEST_CASE(test_pageout_small_buffer) {
     entries[0].has_default = 0;
 
     LOG("Initializing context");
-    rc = cfgpack_init(&ctx, &schema, values, 1, defaults, str_pool, sizeof(str_pool), str_offsets, 0);
+    rc = cfgpack_init(&ctx, &schema, values, 1, str_pool, sizeof(str_pool), str_offsets, 0);
     CHECK(rc == CFGPACK_OK);
 
     LOG("Setting entry 'a' to value 5");
@@ -165,7 +163,6 @@ TEST_CASE(test_defaults_applied_at_init) {
 
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[2];
-    cfgpack_fat_value_t defaults[2];
     cfgpack_ctx_t ctx;
     cfgpack_value_t values[2];
     cfgpack_value_t out;
@@ -189,8 +186,8 @@ TEST_CASE(test_defaults_applied_at_init) {
     snprintf(entries[0].name, sizeof(entries[0].name), "%s", "a");
     entries[0].type = CFGPACK_TYPE_U8;
     entries[0].has_default = 1;
-    defaults[0].type = CFGPACK_TYPE_U8;
-    defaults[0].v.u64 = 42;
+    values[0].type = CFGPACK_TYPE_U8;
+    values[0].v.u64 = 42;
 
     /* Entry 1: no default (NIL) */
     entries[1].index = 2;
@@ -199,7 +196,7 @@ TEST_CASE(test_defaults_applied_at_init) {
     entries[1].has_default = 0;
 
     LOG("Initializing context");
-    rc = cfgpack_init(&ctx, &schema, values, 2, defaults, str_pool, sizeof(str_pool), str_offsets, 0);
+    rc = cfgpack_init(&ctx, &schema, values, 2, str_pool, sizeof(str_pool), str_offsets, 0);
     CHECK(rc == CFGPACK_OK);
 
     LOG("Getting entry with default (index 1)");
@@ -230,140 +227,12 @@ TEST_CASE(test_defaults_applied_at_init) {
     return (TEST_OK);
 }
 
-TEST_CASE(test_reset_to_defaults) {
-    LOG_SECTION("Test reset_to_defaults functionality");
-
-    cfgpack_schema_t schema;
-    cfgpack_entry_t entries[3];
-    cfgpack_fat_value_t defaults[3];
-    cfgpack_ctx_t ctx;
-    cfgpack_value_t values[3];
-    cfgpack_value_t out;
-    cfgpack_err_t rc;
-
-    /* 1 fstr entry */
-    char str_pool[32];
-    uint16_t str_offsets[1];
-
-    LOG("Creating schema with 3 entries:");
-    LOG("  Entry 0 (index 1): 'a' (u8) with default=10");
-    LOG("  Entry 1 (index 2): 'msg' (fstr) with default=\"hi\"");
-    LOG("  Entry 2 (index 3): 'b' (u16) without default (NIL)");
-
-    schema.map_name[0] = '\0';
-    schema.version = 1;
-    schema.entry_count = 3;
-    schema.entries = entries;
-
-    /* Entry 0: has default value 10 */
-    entries[0].index = 1;
-    snprintf(entries[0].name, sizeof(entries[0].name), "%s", "a");
-    entries[0].type = CFGPACK_TYPE_U8;
-    entries[0].has_default = 1;
-    defaults[0].type = CFGPACK_TYPE_U8;
-    defaults[0].v.u64 = 10;
-
-    /* Entry 1: has default string "hi" */
-    entries[1].index = 2;
-    snprintf(entries[1].name, sizeof(entries[1].name), "%s", "msg");
-    entries[1].type = CFGPACK_TYPE_FSTR;
-    entries[1].has_default = 1;
-    defaults[1].type = CFGPACK_TYPE_FSTR;
-    defaults[1].v.fstr.len = 2;
-    snprintf(defaults[1].v.fstr.data, sizeof(defaults[1].v.fstr.data), "%s", "hi");
-
-    /* Entry 2: no default (NIL) */
-    entries[2].index = 3;
-    snprintf(entries[2].name, sizeof(entries[2].name), "%s", "b");
-    entries[2].type = CFGPACK_TYPE_U16;
-    entries[2].has_default = 0;
-
-    LOG("Initializing context");
-    rc = cfgpack_init(&ctx, &schema, values, 3, defaults, str_pool, sizeof(str_pool), str_offsets, 1);
-    CHECK(rc == CFGPACK_OK);
-
-    LOG("Verifying defaults are applied at init");
-    rc = cfgpack_get(&ctx, 1, &out);
-    CHECK(rc == CFGPACK_OK);
-    CHECK(out.v.u64 == 10);
-    LOG_VALUE("Index 1 (default)", out);
-
-    const char *fstr_out;
-    uint8_t fstr_len;
-    rc = cfgpack_get_fstr(&ctx, 2, &fstr_out, &fstr_len);
-    CHECK(rc == CFGPACK_OK);
-    CHECK(fstr_len == 2);
-    CHECK(strcmp(fstr_out, "hi") == 0);
-    LOG("Index 2 (default fstr): \"%s\" len=%u", fstr_out, fstr_len);
-
-    rc = cfgpack_get(&ctx, 3, &out);
-    CHECK(rc == CFGPACK_ERR_MISSING);
-    LOG("Index 3 correctly missing (no default)");
-
-    LOG("Modifying all values:");
-    cfgpack_value_t v;
-    v.type = CFGPACK_TYPE_U8;
-    v.v.u64 = 99;
-    rc = cfgpack_set(&ctx, 1, &v);
-    CHECK(rc == CFGPACK_OK);
-    LOG("  Set index 1 to 99");
-
-    rc = cfgpack_set_fstr(&ctx, 2, "hello");
-    CHECK(rc == CFGPACK_OK);
-    LOG("  Set index 2 to \"hello\"");
-
-    v.type = CFGPACK_TYPE_U16;
-    v.v.u64 = 1000;
-    rc = cfgpack_set(&ctx, 3, &v);
-    CHECK(rc == CFGPACK_OK);
-    LOG("  Set index 3 to 1000");
-
-    LOG("Verifying modified values:");
-    rc = cfgpack_get(&ctx, 1, &out);
-    CHECK(rc == CFGPACK_OK);
-    CHECK(out.v.u64 == 99);
-    LOG_VALUE("Index 1 (modified)", out);
-
-    rc = cfgpack_get_fstr(&ctx, 2, &fstr_out, &fstr_len);
-    CHECK(rc == CFGPACK_OK);
-    CHECK(strcmp(fstr_out, "hello") == 0);
-    LOG("Index 2 (modified fstr): \"%s\"", fstr_out);
-
-    rc = cfgpack_get(&ctx, 3, &out);
-    CHECK(rc == CFGPACK_OK);
-    CHECK(out.v.u64 == 1000);
-    LOG_VALUE("Index 3 (modified)", out);
-
-    LOG("Calling cfgpack_reset_to_defaults()");
-    cfgpack_reset_to_defaults(&ctx);
-
-    LOG("Verifying defaults are restored:");
-    rc = cfgpack_get(&ctx, 1, &out);
-    CHECK(rc == CFGPACK_OK);
-    CHECK(out.v.u64 == 10);
-    LOG_VALUE("Index 1 (restored)", out);
-
-    rc = cfgpack_get_fstr(&ctx, 2, &fstr_out, &fstr_len);
-    CHECK(rc == CFGPACK_OK);
-    CHECK(fstr_len == 2);
-    CHECK(strcmp(fstr_out, "hi") == 0);
-    LOG("Index 2 (restored fstr): \"%s\" len=%u", fstr_out, fstr_len);
-
-    rc = cfgpack_get(&ctx, 3, &out);
-    CHECK(rc == CFGPACK_ERR_MISSING);
-    LOG("Index 3 correctly missing again (no default)");
-
-    cfgpack_free(&ctx);
-    LOG("Test completed successfully");
-    return (TEST_OK);
-}
 
 TEST_CASE(test_typed_convenience_functions) {
     LOG_SECTION("Test typed convenience functions (set_u8, get_u8, etc.)");
 
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[6];
-    cfgpack_fat_value_t defaults[6];
     cfgpack_ctx_t ctx;
     cfgpack_value_t values[6];
     cfgpack_err_t rc;
@@ -412,7 +281,7 @@ TEST_CASE(test_typed_convenience_functions) {
     entries[5].has_default = 0;
 
     LOG("Initializing context");
-    rc = cfgpack_init(&ctx, &schema, values, 6, defaults, str_pool, sizeof(str_pool), str_offsets, 2);
+    rc = cfgpack_init(&ctx, &schema, values, 6, str_pool, sizeof(str_pool), str_offsets, 2);
     CHECK(rc == CFGPACK_OK);
 
     LOG("Testing typed setters by index:");
@@ -537,7 +406,6 @@ int main(void) {
     overall |= (test_case_result("basic", test_basic_case()) != TEST_OK);
     overall |= (test_case_result("pageout_small_buffer", test_pageout_small_buffer()) != TEST_OK);
     overall |= (test_case_result("defaults_applied_at_init", test_defaults_applied_at_init()) != TEST_OK);
-    overall |= (test_case_result("reset_to_defaults", test_reset_to_defaults()) != TEST_OK);
     overall |= (test_case_result("typed_convenience_functions", test_typed_convenience_functions()) != TEST_OK);
 
     if (overall == TEST_OK) {

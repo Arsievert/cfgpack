@@ -77,38 +77,10 @@ static int get_str_slot(const cfgpack_schema_t *schema, size_t entry_off) {
     return slot;
 }
 
-/**
- * @brief Copy a string default from fat_value into the string pool.
- */
-static void copy_string_default(cfgpack_ctx_t *ctx, size_t entry_off, const cfgpack_fat_value_t *fat) {
-    int slot = get_str_slot(ctx->schema, entry_off);
-    if (slot < 0) {
-        return;
-    }
-
-    uint16_t offset = ctx->str_offsets[slot];
-    char *dst = ctx->str_pool + offset;
-
-    if (fat->type == CFGPACK_TYPE_STR) {
-        memcpy(dst, fat->v.str.data, fat->v.str.len);
-        dst[fat->v.str.len] = '\0';
-        ctx->values[entry_off].type = CFGPACK_TYPE_STR;
-        ctx->values[entry_off].v.str.offset = offset;
-        ctx->values[entry_off].v.str.len = fat->v.str.len;
-    } else if (fat->type == CFGPACK_TYPE_FSTR) {
-        memcpy(dst, fat->v.fstr.data, fat->v.fstr.len);
-        dst[fat->v.fstr.len] = '\0';
-        ctx->values[entry_off].type = CFGPACK_TYPE_FSTR;
-        ctx->values[entry_off].v.fstr.offset = offset;
-        ctx->values[entry_off].v.fstr.len = fat->v.fstr.len;
-    }
-}
-
 cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx,
                            const cfgpack_schema_t *schema,
                            cfgpack_value_t *values,
                            size_t values_count,
-                           const cfgpack_fat_value_t *defaults,
                            char *str_pool,
                            size_t str_pool_cap,
                            uint16_t *str_offsets,
@@ -116,16 +88,6 @@ cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx,
     if (schema->entry_count > CFGPACK_MAX_ENTRIES) {
         return CFGPACK_ERR_BOUNDS;
     }
-
-    memset(ctx, 0, sizeof(*ctx));
-    ctx->schema = schema;
-    ctx->values = values;
-    ctx->values_count = values_count;
-    ctx->defaults = defaults;
-    ctx->str_pool = str_pool;
-    ctx->str_pool_cap = str_pool_cap;
-    ctx->str_offsets = str_offsets;
-    ctx->str_offsets_count = str_offsets_count;
 
     if (values_count < schema->entry_count) {
         return CFGPACK_ERR_BOUNDS;
@@ -140,13 +102,15 @@ cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx,
             if (str_slot >= str_offsets_count) {
                 return CFGPACK_ERR_BOUNDS;
             }
-            str_offsets[str_slot++] = (uint16_t)pool_offset;
+            str_offsets[str_slot] = (uint16_t)pool_offset;
+            str_slot++;
             pool_offset += CFGPACK_STR_MAX + 1;
         } else if (t == CFGPACK_TYPE_FSTR) {
             if (str_slot >= str_offsets_count) {
                 return CFGPACK_ERR_BOUNDS;
             }
-            str_offsets[str_slot++] = (uint16_t)pool_offset;
+            str_offsets[str_slot] = (uint16_t)pool_offset;
+            str_slot++;
             pool_offset += CFGPACK_FSTR_MAX + 1;
         }
     }
@@ -154,35 +118,20 @@ cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx,
         return CFGPACK_ERR_BOUNDS;
     }
 
-    memset(ctx->values, 0, values_count * sizeof(cfgpack_value_t));
+    /* Set up context fields — values and str_pool already contain defaults
+     * from schema parsing, so we must NOT zero them. */
     memset(ctx->present, 0, sizeof(ctx->present));
-    if (str_pool_cap > 0) {
-        memset(ctx->str_pool, 0, str_pool_cap);
-    }
+    ctx->schema = schema;
+    ctx->values = values;
+    ctx->values_count = values_count;
+    ctx->str_pool = str_pool;
+    ctx->str_pool_cap = str_pool_cap;
+    ctx->str_offsets = str_offsets;
+    ctx->str_offsets_count = str_offsets_count;
 
-    /* Apply default values for entries that have them */
+    /* Mark entries with defaults as present */
     for (size_t i = 0; i < schema->entry_count; ++i) {
         if (schema->entries[i].has_default) {
-            cfgpack_type_t t = schema->entries[i].type;
-            if (t == CFGPACK_TYPE_STR || t == CFGPACK_TYPE_FSTR) {
-                copy_string_default(ctx, i, &defaults[i]);
-            } else {
-                /* Copy non-string value: match scalar types between unions */
-                ctx->values[i].type = defaults[i].type;
-                switch (t) {
-                case CFGPACK_TYPE_U8:
-                case CFGPACK_TYPE_U16:
-                case CFGPACK_TYPE_U32:
-                case CFGPACK_TYPE_U64: ctx->values[i].v.u64 = defaults[i].v.u64; break;
-                case CFGPACK_TYPE_I8:
-                case CFGPACK_TYPE_I16:
-                case CFGPACK_TYPE_I32:
-                case CFGPACK_TYPE_I64: ctx->values[i].v.i64 = defaults[i].v.i64; break;
-                case CFGPACK_TYPE_F32: ctx->values[i].v.f32 = defaults[i].v.f32; break;
-                case CFGPACK_TYPE_F64: ctx->values[i].v.f64 = defaults[i].v.f64; break;
-                default: break;
-                }
-            }
             cfgpack_presence_set(ctx, i);
         }
     }
@@ -192,43 +141,6 @@ cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx,
 
 void cfgpack_free(cfgpack_ctx_t *ctx) {
     (void)ctx; /* no-op: caller owns buffers */
-}
-
-void cfgpack_reset_to_defaults(cfgpack_ctx_t *ctx) {
-    const cfgpack_schema_t *schema = ctx->schema;
-
-    /* Clear all values and presence bits */
-    memset(ctx->values, 0, ctx->values_count * sizeof(cfgpack_value_t));
-    memset(ctx->present, 0, sizeof(ctx->present));
-    if (ctx->str_pool_cap > 0) {
-        memset(ctx->str_pool, 0, ctx->str_pool_cap);
-    }
-
-    /* Re-apply default values for entries that have them */
-    for (size_t i = 0; i < schema->entry_count; ++i) {
-        if (schema->entries[i].has_default) {
-            cfgpack_type_t t = schema->entries[i].type;
-            if (t == CFGPACK_TYPE_STR || t == CFGPACK_TYPE_FSTR) {
-                copy_string_default(ctx, i, &ctx->defaults[i]);
-            } else {
-                ctx->values[i].type = ctx->defaults[i].type;
-                switch (t) {
-                case CFGPACK_TYPE_U8:
-                case CFGPACK_TYPE_U16:
-                case CFGPACK_TYPE_U32:
-                case CFGPACK_TYPE_U64: ctx->values[i].v.u64 = ctx->defaults[i].v.u64; break;
-                case CFGPACK_TYPE_I8:
-                case CFGPACK_TYPE_I16:
-                case CFGPACK_TYPE_I32:
-                case CFGPACK_TYPE_I64: ctx->values[i].v.i64 = ctx->defaults[i].v.i64; break;
-                case CFGPACK_TYPE_F32: ctx->values[i].v.f32 = ctx->defaults[i].v.f32; break;
-                case CFGPACK_TYPE_F64: ctx->values[i].v.f64 = ctx->defaults[i].v.f64; break;
-                default: break;
-                }
-            }
-            cfgpack_presence_set(ctx, i);
-        }
-    }
 }
 
 static int type_matches(cfgpack_type_t expect, const cfgpack_value_t *v) {
