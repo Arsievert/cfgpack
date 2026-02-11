@@ -19,7 +19,10 @@ static uint8_t decompress_buf[DECOMPRESS_BUF_CAP];
 #ifdef CFGPACK_LZ4
   #include "lz4.h"
 
-cfgpack_err_t cfgpack_pagein_lz4(cfgpack_ctx_t *ctx, const uint8_t *data, size_t len, size_t decompressed_size) {
+cfgpack_err_t cfgpack_pagein_lz4(cfgpack_ctx_t *ctx,
+                                 const uint8_t *data,
+                                 size_t len,
+                                 size_t decompressed_size) {
     int result;
 
     if (!ctx || !data) {
@@ -30,7 +33,8 @@ cfgpack_err_t cfgpack_pagein_lz4(cfgpack_ctx_t *ctx, const uint8_t *data, size_t
     }
 
     /* LZ4_decompress_safe requires knowing the exact decompressed size */
-    result = LZ4_decompress_safe((const char *)data, (char *)decompress_buf, (int)len, (int)decompressed_size);
+    result = LZ4_decompress_safe((const char *)data, (char *)decompress_buf,
+                                 (int)len, (int)decompressed_size);
 
     if (result < 0) {
         return CFGPACK_ERR_DECODE;
@@ -50,7 +54,9 @@ cfgpack_err_t cfgpack_pagein_lz4(cfgpack_ctx_t *ctx, const uint8_t *data, size_t
 /* Static decoder instance (no dynamic allocation) */
 static heatshrink_decoder hs_decoder;
 
-cfgpack_err_t cfgpack_pagein_heatshrink(cfgpack_ctx_t *ctx, const uint8_t *data, size_t len) {
+cfgpack_err_t cfgpack_pagein_heatshrink(cfgpack_ctx_t *ctx,
+                                        const uint8_t *data,
+                                        size_t len) {
     size_t input_consumed = 0;
     size_t output_produced = 0;
     size_t total_output = 0;
@@ -80,7 +86,8 @@ cfgpack_err_t cfgpack_pagein_heatshrink(cfgpack_ctx_t *ctx, const uint8_t *data,
         do {
             poll_res = heatshrink_decoder_poll(&hs_decoder,
                                                decompress_buf + total_output,
-                                               DECOMPRESS_BUF_CAP - total_output,
+                                               DECOMPRESS_BUF_CAP -
+                                                   total_output,
                                                &output_produced);
             if (poll_res < 0) {
                 return CFGPACK_ERR_DECODE;

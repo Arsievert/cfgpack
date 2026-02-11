@@ -109,7 +109,10 @@ cfgpack_err_t cfgpack_schema_write_json_file(const cfgpack_ctx_t *ctx,
  * @return CFGPACK_OK on success; CFGPACK_ERR_ENCODE if scratch too small;
  *         CFGPACK_ERR_IO on write failures.
  */
-cfgpack_err_t cfgpack_pageout_file(const cfgpack_ctx_t *ctx, const char *path, uint8_t *scratch, size_t scratch_cap);
+cfgpack_err_t cfgpack_pageout_file(const cfgpack_ctx_t *ctx,
+                                   const char *path,
+                                   uint8_t *scratch,
+                                   size_t scratch_cap);
 
 /**
  * @brief Decode from a file using caller scratch buffer (no heap).
@@ -121,6 +124,9 @@ cfgpack_err_t cfgpack_pageout_file(const cfgpack_ctx_t *ctx, const char *path, u
  * @return CFGPACK_OK on success; CFGPACK_ERR_IO on read/size errors;
  *         CFGPACK_ERR_DECODE if payload is invalid.
  */
-cfgpack_err_t cfgpack_pagein_file(cfgpack_ctx_t *ctx, const char *path, uint8_t *scratch, size_t scratch_cap);
+cfgpack_err_t cfgpack_pagein_file(cfgpack_ctx_t *ctx,
+                                  const char *path,
+                                  uint8_t *scratch,
+                                  size_t scratch_cap);
 
 #endif /* CFGPACK_IO_FILE_H */

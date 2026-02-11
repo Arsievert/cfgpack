@@ -35,7 +35,8 @@ TEST_CASE(test_basic_case) {
     entries[1].has_default = 0;
 
     LOG("Initializing context with 2-entry schema");
-    rc = cfgpack_init(&ctx, &schema, values, 2, str_pool, sizeof(str_pool), str_offsets, 1);
+    rc = cfgpack_init(&ctx, &schema, values, 2, str_pool, sizeof(str_pool),
+                      str_offsets, 1);
     CHECK(rc == CFGPACK_OK);
     LOG("cfgpack_init() returned OK");
 
@@ -141,7 +142,8 @@ TEST_CASE(test_pageout_small_buffer) {
     entries[0].has_default = 0;
 
     LOG("Initializing context");
-    rc = cfgpack_init(&ctx, &schema, values, 1, str_pool, sizeof(str_pool), str_offsets, 0);
+    rc = cfgpack_init(&ctx, &schema, values, 1, str_pool, sizeof(str_pool),
+                      str_offsets, 0);
     CHECK(rc == CFGPACK_OK);
 
     LOG("Setting entry 'a' to value 5");
@@ -196,7 +198,8 @@ TEST_CASE(test_defaults_applied_at_init) {
     entries[1].has_default = 0;
 
     LOG("Initializing context");
-    rc = cfgpack_init(&ctx, &schema, values, 2, str_pool, sizeof(str_pool), str_offsets, 0);
+    rc = cfgpack_init(&ctx, &schema, values, 2, str_pool, sizeof(str_pool),
+                      str_offsets, 0);
     CHECK(rc == CFGPACK_OK);
 
     LOG("Getting entry with default (index 1)");
@@ -281,7 +284,8 @@ TEST_CASE(test_typed_convenience_functions) {
     entries[5].has_default = 0;
 
     LOG("Initializing context");
-    rc = cfgpack_init(&ctx, &schema, values, 6, str_pool, sizeof(str_pool), str_offsets, 2);
+    rc = cfgpack_init(&ctx, &schema, values, 6, str_pool, sizeof(str_pool),
+                      str_offsets, 2);
     CHECK(rc == CFGPACK_OK);
 
     LOG("Testing typed setters by index:");
@@ -404,9 +408,13 @@ int main(void) {
     test_result_t overall = TEST_OK;
 
     overall |= (test_case_result("basic", test_basic_case()) != TEST_OK);
-    overall |= (test_case_result("pageout_small_buffer", test_pageout_small_buffer()) != TEST_OK);
-    overall |= (test_case_result("defaults_applied_at_init", test_defaults_applied_at_init()) != TEST_OK);
-    overall |= (test_case_result("typed_convenience_functions", test_typed_convenience_functions()) != TEST_OK);
+    overall |= (test_case_result("pageout_small_buffer",
+                                 test_pageout_small_buffer()) != TEST_OK);
+    overall |= (test_case_result("defaults_applied_at_init",
+                                 test_defaults_applied_at_init()) != TEST_OK);
+    overall |= (test_case_result("typed_convenience_functions",
+                                 test_typed_convenience_functions()) !=
+                TEST_OK);
 
     if (overall == TEST_OK) {
         printf(COLOR_GREEN "ALL PASS" COLOR_RESET "\n");

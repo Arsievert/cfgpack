@@ -68,7 +68,11 @@ static int _is_delimeter(char s, const char *d) {
  * @param stop_offset  Optional offset where parsing stopped.
  * @return 0 on success; -1 on invalid args or capacity issues.
  */
-int tokens_find(tokens_t *tokens, char *input, const char *delimeters, uint16_t n_tokens, size_t *stop_offset) {
+int tokens_find(tokens_t *tokens,
+                char *input,
+                const char *delimeters,
+                uint16_t n_tokens,
+                size_t *stop_offset) {
     size_t len;
     bool new_token;
 

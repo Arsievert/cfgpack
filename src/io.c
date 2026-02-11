@@ -62,7 +62,10 @@ static cfgpack_err_t encode_value(cfgpack_buf_t *buf,
     return CFGPACK_ERR_INVALID_TYPE;
 }
 
-cfgpack_err_t cfgpack_pageout(const cfgpack_ctx_t *ctx, uint8_t *out, size_t out_cap, size_t *out_len) {
+cfgpack_err_t cfgpack_pageout(const cfgpack_ctx_t *ctx,
+                              uint8_t *out,
+                              size_t out_cap,
+                              size_t *out_len) {
     cfgpack_buf_t buf;
     size_t present_count = 0;
 
@@ -79,15 +82,19 @@ cfgpack_err_t cfgpack_pageout(const cfgpack_ctx_t *ctx, uint8_t *out, size_t out
 
     cfgpack_buf_init(&buf, out, out_cap);
     /* Map header includes +1 for reserved index 0 (schema name) */
-    if (cfgpack_msgpack_encode_map_header(&buf, (uint32_t)(present_count + 1)) != CFGPACK_OK) {
+    if (cfgpack_msgpack_encode_map_header(&buf, (uint32_t)(present_count +
+                                                           1)) != CFGPACK_OK) {
         return CFGPACK_ERR_ENCODE;
     }
 
     /* Write schema name at reserved index 0 */
-    if (cfgpack_msgpack_encode_uint_key(&buf, CFGPACK_INDEX_RESERVED_NAME) != CFGPACK_OK) {
+    if (cfgpack_msgpack_encode_uint_key(&buf, CFGPACK_INDEX_RESERVED_NAME) !=
+        CFGPACK_OK) {
         return CFGPACK_ERR_ENCODE;
     }
-    if (cfgpack_msgpack_encode_str(&buf, ctx->schema->map_name, strlen(ctx->schema->map_name)) != CFGPACK_OK) {
+    if (cfgpack_msgpack_encode_str(&buf, ctx->schema->map_name,
+                                   strlen(ctx->schema->map_name)) !=
+        CFGPACK_OK) {
         return CFGPACK_ERR_ENCODE;
     }
 
@@ -110,7 +117,10 @@ cfgpack_err_t cfgpack_pageout(const cfgpack_ctx_t *ctx, uint8_t *out, size_t out
     return (buf.len <= out_cap) ? CFGPACK_OK : CFGPACK_ERR_ENCODE;
 }
 
-cfgpack_err_t cfgpack_peek_name(const uint8_t *data, size_t len, char *out_name, size_t out_cap) {
+cfgpack_err_t cfgpack_peek_name(const uint8_t *data,
+                                size_t len,
+                                char *out_name,
+                                size_t out_cap) {
     cfgpack_reader_t r;
     uint32_t map_count;
 
@@ -134,7 +144,8 @@ cfgpack_err_t cfgpack_peek_name(const uint8_t *data, size_t len, char *out_name,
             /* Found key 0, expect string value */
             const uint8_t *str_ptr;
             uint32_t str_len;
-            if (cfgpack_msgpack_decode_str(&r, &str_ptr, &str_len) != CFGPACK_OK) {
+            if (cfgpack_msgpack_decode_str(&r, &str_ptr, &str_len) !=
+                CFGPACK_OK) {
                 return CFGPACK_ERR_DECODE;
             }
 
@@ -262,28 +273,35 @@ static cfgpack_err_t decode_value(cfgpack_reader_t *r,
  * @param schema_type Type declared in schema.
  * @return 1 if coercion is allowed (or exact match), 0 otherwise.
  */
-static int can_coerce_type(cfgpack_type_t wire_type, cfgpack_type_t schema_type) {
+static int can_coerce_type(cfgpack_type_t wire_type,
+                           cfgpack_type_t schema_type) {
     if (wire_type == schema_type) {
         return 1;
     }
 
     /* Unsigned widening */
     if (wire_type == CFGPACK_TYPE_U8) {
-        if (schema_type == CFGPACK_TYPE_U16 || schema_type == CFGPACK_TYPE_U32 || schema_type == CFGPACK_TYPE_U64) {
+        if (schema_type == CFGPACK_TYPE_U16 ||
+            schema_type == CFGPACK_TYPE_U32 ||
+            schema_type == CFGPACK_TYPE_U64) {
             return 1;
         }
         /* Small unsigned -> signed (value range checked at decode) */
-        if (schema_type == CFGPACK_TYPE_I8 || schema_type == CFGPACK_TYPE_I16 || schema_type == CFGPACK_TYPE_I32 ||
+        if (schema_type == CFGPACK_TYPE_I8 || schema_type == CFGPACK_TYPE_I16 ||
+            schema_type == CFGPACK_TYPE_I32 ||
             schema_type == CFGPACK_TYPE_I64) {
             return 1;
         }
     }
     if (wire_type == CFGPACK_TYPE_U16) {
-        if (schema_type == CFGPACK_TYPE_U32 || schema_type == CFGPACK_TYPE_U64) {
+        if (schema_type == CFGPACK_TYPE_U32 ||
+            schema_type == CFGPACK_TYPE_U64) {
             return 1;
         }
         /* u16 -> signed (value range checked at decode) */
-        if (schema_type == CFGPACK_TYPE_I16 || schema_type == CFGPACK_TYPE_I32 || schema_type == CFGPACK_TYPE_I64) {
+        if (schema_type == CFGPACK_TYPE_I16 ||
+            schema_type == CFGPACK_TYPE_I32 ||
+            schema_type == CFGPACK_TYPE_I64) {
             return 1;
         }
     }
@@ -292,7 +310,8 @@ static int can_coerce_type(cfgpack_type_t wire_type, cfgpack_type_t schema_type)
             return 1;
         }
         /* u32 -> signed (value range checked at decode) */
-        if (schema_type == CFGPACK_TYPE_I32 || schema_type == CFGPACK_TYPE_I64) {
+        if (schema_type == CFGPACK_TYPE_I32 ||
+            schema_type == CFGPACK_TYPE_I64) {
             return 1;
         }
     }
@@ -305,10 +324,13 @@ static int can_coerce_type(cfgpack_type_t wire_type, cfgpack_type_t schema_type)
 
     /* Signed widening */
     if (wire_type == CFGPACK_TYPE_I8) {
-        return schema_type == CFGPACK_TYPE_I16 || schema_type == CFGPACK_TYPE_I32 || schema_type == CFGPACK_TYPE_I64;
+        return schema_type == CFGPACK_TYPE_I16 ||
+               schema_type == CFGPACK_TYPE_I32 ||
+               schema_type == CFGPACK_TYPE_I64;
     }
     if (wire_type == CFGPACK_TYPE_I16) {
-        return schema_type == CFGPACK_TYPE_I32 || schema_type == CFGPACK_TYPE_I64;
+        return schema_type == CFGPACK_TYPE_I32 ||
+               schema_type == CFGPACK_TYPE_I64;
     }
     if (wire_type == CFGPACK_TYPE_I32) {
         return schema_type == CFGPACK_TYPE_I64;
@@ -383,7 +405,8 @@ static cfgpack_err_t decode_value_with_coercion(cfgpack_reader_t *r,
     } else if ((b & 0xe0) == 0xa0 || b == 0xd9 || b == 0xda) {
         /* String: peek at length to decide fstr vs str */
         /* For simplicity, we'll detect based on what we're coercing to */
-        if (schema_type == CFGPACK_TYPE_FSTR || schema_type == CFGPACK_TYPE_STR) {
+        if (schema_type == CFGPACK_TYPE_FSTR ||
+            schema_type == CFGPACK_TYPE_STR) {
             wire_type = schema_type; /* Match schema expectation for strings */
         } else {
             return CFGPACK_ERR_TYPE_MISMATCH;
@@ -464,7 +487,9 @@ cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx,
         }
 
         /* Decode value with type coercion support */
-        cfgpack_err_t err = decode_value_with_coercion(&r, ctx, idx, entry->type, &ctx->values[idx]);
+        cfgpack_err_t err = decode_value_with_coercion(&r, ctx, idx,
+                                                       entry->type,
+                                                       &ctx->values[idx]);
         if (err != CFGPACK_OK) {
             return err;
         }
@@ -473,6 +498,8 @@ cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx,
     return CFGPACK_OK;
 }
 
-cfgpack_err_t cfgpack_pagein_buf(cfgpack_ctx_t *ctx, const uint8_t *data, size_t len) {
+cfgpack_err_t cfgpack_pagein_buf(cfgpack_ctx_t *ctx,
+                                 const uint8_t *data,
+                                 size_t len) {
     return cfgpack_pagein_remap(ctx, data, len, NULL, 0);
 }

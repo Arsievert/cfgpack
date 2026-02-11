@@ -86,8 +86,10 @@ static int decompress_heatshrink(heatshrink_decoder *hsd,
 
     /* Feed input and poll for output */
     while (input_consumed < input_len) {
-        sink_res =
-            heatshrink_decoder_sink(hsd, (uint8_t *)(input + input_consumed), input_len - input_consumed, &sink_count);
+        sink_res = heatshrink_decoder_sink(hsd,
+                                           (uint8_t *)(input + input_consumed),
+                                           input_len - input_consumed,
+                                           &sink_count);
         if (sink_res < 0) {
             fprintf(stderr, "Heatshrink sink error: %d\n", sink_res);
             return -1;
@@ -96,7 +98,9 @@ static int decompress_heatshrink(heatshrink_decoder *hsd,
 
         /* Poll for decompressed output */
         do {
-            poll_res = heatshrink_decoder_poll(hsd, output + total_output, output_cap - total_output, &poll_count);
+            poll_res = heatshrink_decoder_poll(hsd, output + total_output,
+                                               output_cap - total_output,
+                                               &poll_count);
             if (poll_res < 0) {
                 fprintf(stderr, "Heatshrink poll error: %d\n", poll_res);
                 return -1;
@@ -120,7 +124,9 @@ static int decompress_heatshrink(heatshrink_decoder *hsd,
 
         /* Poll remaining output */
         do {
-            poll_res = heatshrink_decoder_poll(hsd, output + total_output, output_cap - total_output, &poll_count);
+            poll_res = heatshrink_decoder_poll(hsd, output + total_output,
+                                               output_cap - total_output,
+                                               &poll_count);
             if (poll_res < 0) {
                 fprintf(stderr, "Heatshrink poll error: %d\n", poll_res);
                 return -1;
@@ -256,7 +262,8 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to open %s\n", schema_path);
         return 1;
     }
-    compressed_len = fread(scratch.load.compressed_buf, 1, sizeof(scratch.load.compressed_buf), f);
+    compressed_len = fread(scratch.load.compressed_buf, 1,
+                           sizeof(scratch.load.compressed_buf), f);
     fclose(f);
 
     printf("Compressed size: %zu bytes\n", compressed_len);
@@ -264,12 +271,9 @@ int main(int argc, char **argv) {
     /* ═══════════════════════════════════════════════════════════════════════
      * 2. DECOMPRESS WITH HEATSHRINK
      * ═══════════════════════════════════════════════════════════════════════ */
-    if (decompress_heatshrink(&scratch.load.hsd,
-                              scratch.load.compressed_buf,
-                              compressed_len,
-                              (uint8_t *)json_buf,
-                              sizeof(json_buf) - 1,
-                              &json_len) != 0) {
+    if (decompress_heatshrink(&scratch.load.hsd, scratch.load.compressed_buf,
+                              compressed_len, (uint8_t *)json_buf,
+                              sizeof(json_buf) - 1, &json_len) != 0) {
         fprintf(stderr, "Decompression failed\n");
         return 1;
     }
@@ -281,28 +285,24 @@ int main(int argc, char **argv) {
     /* ═══════════════════════════════════════════════════════════════════════
      * 3. PARSE JSON SCHEMA
      * ═══════════════════════════════════════════════════════════════════════ */
-    rc = cfgpack_schema_parse_json(json_buf,
-                                   json_len,
-                                   &schema,
-                                   entries,
-                                   MAX_ENTRIES,
-                                   values,
-                                   str_pool,
-                                   sizeof(str_pool),
-                                   str_offsets,
-                                   NUM_STR_SLOTS,
+    rc = cfgpack_schema_parse_json(json_buf, json_len, &schema, entries,
+                                   MAX_ENTRIES, values, str_pool,
+                                   sizeof(str_pool), str_offsets, NUM_STR_SLOTS,
                                    &parse_err);
     if (rc != CFGPACK_OK) {
-        fprintf(stderr, "Schema parse error at line %zu: %s\n", parse_err.line, parse_err.message);
+        fprintf(stderr, "Schema parse error at line %zu: %s\n", parse_err.line,
+                parse_err.message);
         return 1;
     }
 
-    printf("Parsed schema: %s v%u (%zu entries)\n\n", schema.map_name, schema.version, schema.entry_count);
+    printf("Parsed schema: %s v%u (%zu entries)\n\n", schema.map_name,
+           schema.version, schema.entry_count);
 
     /* ═══════════════════════════════════════════════════════════════════════
      * 4. INITIALIZE WITH DEFAULTS
      * ═══════════════════════════════════════════════════════════════════════ */
-    rc = cfgpack_init(&ctx, &schema, values, MAX_ENTRIES, str_pool, sizeof(str_pool), str_offsets, NUM_STR_SLOTS);
+    rc = cfgpack_init(&ctx, &schema, values, MAX_ENTRIES, str_pool,
+                      sizeof(str_pool), str_offsets, NUM_STR_SLOTS);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Init failed: %d\n", rc);
         return 1;
@@ -322,7 +322,9 @@ int main(int argc, char **argv) {
         case CFGPACK_TYPE_U8:
         case CFGPACK_TYPE_U16:
         case CFGPACK_TYPE_U32:
-        case CFGPACK_TYPE_U64: printf("%llu", (unsigned long long)val.v.u64); break;
+        case CFGPACK_TYPE_U64:
+            printf("%llu", (unsigned long long)val.v.u64);
+            break;
         case CFGPACK_TYPE_I8:
         case CFGPACK_TYPE_I16:
         case CFGPACK_TYPE_I32:
@@ -419,23 +421,17 @@ int main(int argc, char **argv) {
     /* Re-initialize context (simulates device reboot) */
 
     /* Re-parse schema to restore defaults into values/str_pool */
-    rc = cfgpack_schema_parse_json(json_buf,
-                                   json_len,
-                                   &schema,
-                                   entries,
-                                   MAX_ENTRIES,
-                                   values,
-                                   str_pool,
-                                   sizeof(str_pool),
-                                   str_offsets,
-                                   NUM_STR_SLOTS,
+    rc = cfgpack_schema_parse_json(json_buf, json_len, &schema, entries,
+                                   MAX_ENTRIES, values, str_pool,
+                                   sizeof(str_pool), str_offsets, NUM_STR_SLOTS,
                                    &parse_err);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Schema re-parse error: %s\n", parse_err.message);
         return 1;
     }
 
-    rc = cfgpack_init(&ctx, &schema, values, MAX_ENTRIES, str_pool, sizeof(str_pool), str_offsets, NUM_STR_SLOTS);
+    rc = cfgpack_init(&ctx, &schema, values, MAX_ENTRIES, str_pool,
+                      sizeof(str_pool), str_offsets, NUM_STR_SLOTS);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Re-init failed: %d\n", rc);
         return 1;
@@ -471,8 +467,8 @@ int main(int argc, char **argv) {
     {
         const char *fstr;
         uint8_t fstr_len;
-        if (cfgpack_get_fstr(&ctx, 57, &fstr, &fstr_len) != CFGPACK_OK || fstr_len != 5 ||
-            memcmp(fstr, "hub01", 5) != 0) {
+        if (cfgpack_get_fstr(&ctx, 57, &fstr, &fstr_len) != CFGPACK_OK ||
+            fstr_len != 5 || memcmp(fstr, "hub01", 5) != 0) {
             printf("  FAIL: dname != \"hub01\"\n");
             errors++;
         } else {
@@ -512,12 +508,15 @@ int main(int argc, char **argv) {
         printf("  OK: batwn = 3400\n");
     }
 
-    printf("\nRound-trip: %s (%d errors)\n\n", errors == 0 ? "PASSED" : "FAILED", errors);
+    printf("\nRound-trip: %s (%d errors)\n\n",
+           errors == 0 ? "PASSED" : "FAILED", errors);
 
     /* ═══════════════════════════════════════════════════════════════════════
      * 8. EXPORT SCHEMA WITH DEFAULTS TO JSON
      * ═══════════════════════════════════════════════════════════════════════ */
-    rc = cfgpack_schema_write_json(&ctx, scratch.json_out, sizeof(scratch.json_out), &json_out_len, &parse_err);
+    rc = cfgpack_schema_write_json(&ctx, scratch.json_out,
+                                   sizeof(scratch.json_out), &json_out_len,
+                                   &parse_err);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "JSON export failed: %d\n", rc);
         return 1;
@@ -527,7 +526,8 @@ int main(int argc, char **argv) {
     if (f) {
         fwrite(scratch.json_out, 1, json_out_len, f);
         fclose(f);
-        printf("Exported final config to: config.json (%zu bytes)\n", json_out_len);
+        printf("Exported final config to: config.json (%zu bytes)\n",
+               json_out_len);
     }
 
     /* ═══════════════════════════════════════════════════════════════════════

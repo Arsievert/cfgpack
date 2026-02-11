@@ -104,7 +104,9 @@ static void dump_all_entries(const cfgpack_ctx_t *c) {
         case CFGPACK_TYPE_U8:
         case CFGPACK_TYPE_U16:
         case CFGPACK_TYPE_U32:
-        case CFGPACK_TYPE_U64: printf("%llu", (unsigned long long)val.v.u64); break;
+        case CFGPACK_TYPE_U64:
+            printf("%llu", (unsigned long long)val.v.u64);
+            break;
         case CFGPACK_TYPE_I8:
         case CFGPACK_TYPE_I16:
         case CFGPACK_TYPE_I32:
@@ -178,10 +180,13 @@ static void print_config(const cfgpack_ctx_t *c) {
     printf("Log interval:    %u ms\n", log_interval);
     printf("Log prefix:      %.*s\n", prefix_len, prefix);
     printf("Max file size:   %u KB\n", max_file_size);
-    printf("Sensors:         temp=%u hum=%u pres=%u light=%u\n", en_temp, en_hum, en_pres, en_light);
-    printf("Calibration:     temp_offset=%d, humidity_offset=%d\n", temp_off, hum_off);
+    printf("Sensors:         temp=%u hum=%u pres=%u light=%u\n", en_temp,
+           en_hum, en_pres, en_light);
+    printf("Calibration:     temp_offset=%d, humidity_offset=%d\n", temp_off,
+           hum_off);
     printf("Device:          %.*s (ID=%u)\n", name_len, name, device_id);
-    printf("Power:           sleep=%u, battery_warn=%u mV\n", sleep_between, battery_warn);
+    printf("Power:           sleep=%u, battery_warn=%u mV\n", sleep_between,
+           battery_warn);
     printf("\n");
 }
 
@@ -207,25 +212,20 @@ int main(int argc, char **argv) {
     fclose(f);
     map_buf[map_len] = '\0';
 
-    rc = cfgpack_parse_schema(map_buf,
-                              map_len,
-                              &schema,
-                              entries,
-                              MAX_ENTRIES,
-                              values,
-                              str_pool,
-                              sizeof(str_pool),
-                              str_offsets,
-                              MAX_ENTRIES,
-                              &parse_err);
+    rc = cfgpack_parse_schema(map_buf, map_len, &schema, entries, MAX_ENTRIES,
+                              values, str_pool, sizeof(str_pool), str_offsets,
+                              MAX_ENTRIES, &parse_err);
     if (rc != CFGPACK_OK) {
-        fprintf(stderr, "Schema parse error at line %zu: %s\n", parse_err.line, parse_err.message);
+        fprintf(stderr, "Schema parse error at line %zu: %s\n", parse_err.line,
+                parse_err.message);
         return 1;
     }
-    printf("Loaded schema: %s (version %u, %zu entries)\n\n", schema.map_name, schema.version, schema.entry_count);
+    printf("Loaded schema: %s (version %u, %zu entries)\n\n", schema.map_name,
+           schema.version, schema.entry_count);
 
     /* 2. Initialize context with defaults */
-    rc = cfgpack_init(&ctx, &schema, values, MAX_ENTRIES, str_pool, sizeof(str_pool), str_offsets, MAX_ENTRIES);
+    rc = cfgpack_init(&ctx, &schema, values, MAX_ENTRIES, str_pool,
+                      sizeof(str_pool), str_offsets, MAX_ENTRIES);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Init failed: %d\n", rc);
         return 1;
@@ -283,7 +283,8 @@ int main(int argc, char **argv) {
 
     /* 6. Export schema with defaults to JSON (human-readable) */
     size_t json_len;
-    rc = cfgpack_schema_write_json(&ctx, json_buf, sizeof(json_buf), &json_len, &parse_err);
+    rc = cfgpack_schema_write_json(&ctx, json_buf, sizeof(json_buf), &json_len,
+                                   &parse_err);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "JSON export failed: %d\n", rc);
         return 1;
@@ -302,23 +303,16 @@ int main(int argc, char **argv) {
     /* 7. Re-initialize context (simulates device reboot) */
 
     /* Re-parse schema to restore defaults into values/str_pool */
-    rc = cfgpack_parse_schema(map_buf,
-                              map_len,
-                              &schema,
-                              entries,
-                              MAX_ENTRIES,
-                              values,
-                              str_pool,
-                              sizeof(str_pool),
-                              str_offsets,
-                              MAX_ENTRIES,
-                              &parse_err);
+    rc = cfgpack_parse_schema(map_buf, map_len, &schema, entries, MAX_ENTRIES,
+                              values, str_pool, sizeof(str_pool), str_offsets,
+                              MAX_ENTRIES, &parse_err);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Schema re-parse error: %s\n", parse_err.message);
         return 1;
     }
 
-    rc = cfgpack_init(&ctx, &schema, values, MAX_ENTRIES, str_pool, sizeof(str_pool), str_offsets, MAX_ENTRIES);
+    rc = cfgpack_init(&ctx, &schema, values, MAX_ENTRIES, str_pool,
+                      sizeof(str_pool), str_offsets, MAX_ENTRIES);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Re-init failed: %d\n", rc);
         return 1;

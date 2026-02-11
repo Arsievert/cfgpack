@@ -66,7 +66,8 @@ typedef struct {
  * @param out    Filled with sizing information.
  * @return CFGPACK_OK on success.
  */
-cfgpack_err_t cfgpack_schema_get_sizing(const cfgpack_schema_t *schema, cfgpack_schema_sizing_t *out);
+cfgpack_err_t cfgpack_schema_get_sizing(const cfgpack_schema_t *schema,
+                                        cfgpack_schema_sizing_t *out);
 
 /**
  * @brief Parse a schema from a buffer into caller-provided buffers (no heap).

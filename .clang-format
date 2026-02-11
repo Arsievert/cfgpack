@@ -13,7 +13,7 @@ IndentPPDirectives: BeforeHash
 PPIndentWidth: 2
 
 # Column limit
-ColumnLimit: 120
+ColumnLimit: 80
 
 # Braces — K&R (Attach)
 BreakBeforeBraces: Attach
@@ -32,7 +32,7 @@ AlignConsecutiveDeclarations: false
 AlignTrailingComments:
   Kind: Always
   OverEmptyLines: 0
-BinPackArguments: false
+BinPackArguments: true
 BinPackParameters: false
 AllowAllParametersOfDeclarationOnNextLine: false
 AllowAllArgumentsOnNextLine: false

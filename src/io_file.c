@@ -20,7 +20,10 @@
  * @param out_len     Output: bytes read.
  * @return CFGPACK_OK on success, CFGPACK_ERR_IO on failure.
  */
-static cfgpack_err_t read_file(const char *path, char *scratch, size_t scratch_cap, size_t *out_len) {
+static cfgpack_err_t read_file(const char *path,
+                               char *scratch,
+                               size_t scratch_cap,
+                               size_t *out_len) {
     FILE *f = fopen(path, "r");
     if (!f) {
         return CFGPACK_ERR_IO;
@@ -48,7 +51,10 @@ static cfgpack_err_t read_file(const char *path, char *scratch, size_t scratch_c
  * @param out_len     Output: bytes read.
  * @return CFGPACK_OK on success, CFGPACK_ERR_IO on failure.
  */
-static cfgpack_err_t read_file_binary(const char *path, uint8_t *scratch, size_t scratch_cap, size_t *out_len) {
+static cfgpack_err_t read_file_binary(const char *path,
+                                      uint8_t *scratch,
+                                      size_t scratch_cap,
+                                      size_t *out_len) {
     FILE *f = fopen(path, "rb");
     if (!f) {
         return CFGPACK_ERR_IO;
@@ -74,7 +80,9 @@ static cfgpack_err_t read_file_binary(const char *path, uint8_t *scratch, size_t
  * @param len  Length of data.
  * @return CFGPACK_OK on success, CFGPACK_ERR_IO on failure.
  */
-static cfgpack_err_t write_file(const char *path, const char *data, size_t len) {
+static cfgpack_err_t write_file(const char *path,
+                                const char *data,
+                                size_t len) {
     FILE *f = fopen(path, "w");
     if (!f) {
         return CFGPACK_ERR_IO;
@@ -95,7 +103,9 @@ static cfgpack_err_t write_file(const char *path, const char *data, size_t len) 
  * @param len  Length of data.
  * @return CFGPACK_OK on success, CFGPACK_ERR_IO on failure.
  */
-static cfgpack_err_t write_file_binary(const char *path, const uint8_t *data, size_t len) {
+static cfgpack_err_t write_file_binary(const char *path,
+                                       const uint8_t *data,
+                                       size_t len) {
     FILE *f = fopen(path, "wb");
     if (!f) {
         return CFGPACK_ERR_IO;
@@ -130,17 +140,9 @@ cfgpack_err_t cfgpack_parse_schema_file(const char *path,
         }
         return rc;
     }
-    return cfgpack_parse_schema(scratch,
-                                len,
-                                out_schema,
-                                entries,
-                                max_entries,
-                                values,
-                                str_pool,
-                                str_pool_cap,
-                                str_offsets,
-                                str_offsets_count,
-                                err);
+    return cfgpack_parse_schema(scratch, len, out_schema, entries, max_entries,
+                                values, str_pool, str_pool_cap, str_offsets,
+                                str_offsets_count, err);
 }
 
 cfgpack_err_t cfgpack_schema_parse_json_file(const char *path,
@@ -164,17 +166,10 @@ cfgpack_err_t cfgpack_schema_parse_json_file(const char *path,
         }
         return rc;
     }
-    return cfgpack_schema_parse_json(scratch,
-                                     len,
-                                     out_schema,
-                                     entries,
-                                     max_entries,
-                                     values,
-                                     str_pool,
-                                     str_pool_cap,
-                                     str_offsets,
-                                     str_offsets_count,
-                                     err);
+    return cfgpack_schema_parse_json(scratch, len, out_schema, entries,
+                                     max_entries, values, str_pool,
+                                     str_pool_cap, str_offsets,
+                                     str_offsets_count, err);
 }
 
 cfgpack_err_t cfgpack_schema_write_json_file(const cfgpack_ctx_t *ctx,
@@ -183,7 +178,8 @@ cfgpack_err_t cfgpack_schema_write_json_file(const cfgpack_ctx_t *ctx,
                                              size_t scratch_cap,
                                              cfgpack_parse_error_t *err) {
     size_t out_len = 0;
-    cfgpack_err_t rc = cfgpack_schema_write_json(ctx, scratch, scratch_cap, &out_len, err);
+    cfgpack_err_t rc = cfgpack_schema_write_json(ctx, scratch, scratch_cap,
+                                                 &out_len, err);
     if (rc != CFGPACK_OK) {
         return rc;
     }
@@ -191,7 +187,8 @@ cfgpack_err_t cfgpack_schema_write_json_file(const cfgpack_ctx_t *ctx,
     if (out_len > scratch_cap) {
         if (err) {
             err->line = 0;
-            snprintf(err->message, sizeof(err->message), "scratch buffer too small");
+            snprintf(err->message, sizeof(err->message),
+                     "scratch buffer too small");
         }
         return CFGPACK_ERR_BOUNDS;
     }
@@ -199,7 +196,10 @@ cfgpack_err_t cfgpack_schema_write_json_file(const cfgpack_ctx_t *ctx,
     return write_file(path, scratch, out_len);
 }
 
-cfgpack_err_t cfgpack_pageout_file(const cfgpack_ctx_t *ctx, const char *path, uint8_t *scratch, size_t scratch_cap) {
+cfgpack_err_t cfgpack_pageout_file(const cfgpack_ctx_t *ctx,
+                                   const char *path,
+                                   uint8_t *scratch,
+                                   size_t scratch_cap) {
     size_t len = 0;
     cfgpack_err_t rc = cfgpack_pageout(ctx, scratch, scratch_cap, &len);
     if (rc != CFGPACK_OK) {
@@ -209,7 +209,10 @@ cfgpack_err_t cfgpack_pageout_file(const cfgpack_ctx_t *ctx, const char *path, u
     return write_file_binary(path, scratch, len);
 }
 
-cfgpack_err_t cfgpack_pagein_file(cfgpack_ctx_t *ctx, const char *path, uint8_t *scratch, size_t scratch_cap) {
+cfgpack_err_t cfgpack_pagein_file(cfgpack_ctx_t *ctx,
+                                  const char *path,
+                                  uint8_t *scratch,
+                                  size_t scratch_cap) {
     size_t len = 0;
     cfgpack_err_t rc = read_file_binary(path, scratch, scratch_cap, &len);
     if (rc != CFGPACK_OK) {

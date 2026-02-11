@@ -40,7 +40,9 @@ void cfgpack_buf_init(cfgpack_buf_t *buf, uint8_t *storage, size_t cap);
  * @param len Number of bytes to append.
  * @return CFGPACK_OK on success; CFGPACK_ERR_ENCODE if capacity exceeded.
  */
-cfgpack_err_t cfgpack_buf_append(cfgpack_buf_t *buf, const void *src, size_t len);
+cfgpack_err_t cfgpack_buf_append(cfgpack_buf_t *buf,
+                                 const void *src,
+                                 size_t len);
 
 /** Encoding helpers (MessagePack subset). */
 
@@ -83,7 +85,9 @@ cfgpack_err_t cfgpack_msgpack_encode_f64(cfgpack_buf_t *buf, double v);
  * @param len Length of string in bytes.
  * @return CFGPACK_OK on success; CFGPACK_ERR_ENCODE if buffer capacity exceeded.
  */
-cfgpack_err_t cfgpack_msgpack_encode_str(cfgpack_buf_t *buf, const char *s, size_t len);
+cfgpack_err_t cfgpack_msgpack_encode_str(cfgpack_buf_t *buf,
+                                         const char *s,
+                                         size_t len);
 
 /**
  * @brief Encode a MessagePack map header with the given entry count.
@@ -91,7 +95,8 @@ cfgpack_err_t cfgpack_msgpack_encode_str(cfgpack_buf_t *buf, const char *s, size
  * @param count Number of key-value pairs in the map.
  * @return CFGPACK_OK on success; CFGPACK_ERR_ENCODE if buffer capacity exceeded.
  */
-cfgpack_err_t cfgpack_msgpack_encode_map_header(cfgpack_buf_t *buf, uint32_t count);
+cfgpack_err_t cfgpack_msgpack_encode_map_header(cfgpack_buf_t *buf,
+                                                uint32_t count);
 
 /**
  * @brief Encode an unsigned integer as a MessagePack map key.
@@ -108,7 +113,9 @@ cfgpack_err_t cfgpack_msgpack_encode_uint_key(cfgpack_buf_t *buf, uint64_t v);
  * @param len Length of key string in bytes.
  * @return CFGPACK_OK on success; CFGPACK_ERR_ENCODE if buffer capacity exceeded.
  */
-cfgpack_err_t cfgpack_msgpack_encode_str_key(cfgpack_buf_t *buf, const char *s, size_t len);
+cfgpack_err_t cfgpack_msgpack_encode_str_key(cfgpack_buf_t *buf,
+                                             const char *s,
+                                             size_t len);
 
 /**
  * @brief Reader over a MessagePack buffer.
@@ -169,7 +176,9 @@ cfgpack_err_t cfgpack_msgpack_decode_f64(cfgpack_reader_t *r, double *out);
  * @param len Output parameter for string length.
  * @return CFGPACK_OK on success; CFGPACK_ERR_DECODE on format error or EOF.
  */
-cfgpack_err_t cfgpack_msgpack_decode_str(cfgpack_reader_t *r, const uint8_t **ptr, uint32_t *len);
+cfgpack_err_t cfgpack_msgpack_decode_str(cfgpack_reader_t *r,
+                                         const uint8_t **ptr,
+                                         uint32_t *len);
 
 /**
  * @brief Decode a MessagePack map header.
@@ -177,7 +186,8 @@ cfgpack_err_t cfgpack_msgpack_decode_str(cfgpack_reader_t *r, const uint8_t **pt
  * @param count Output parameter for number of key-value pairs.
  * @return CFGPACK_OK on success; CFGPACK_ERR_DECODE on format error or EOF.
  */
-cfgpack_err_t cfgpack_msgpack_decode_map_header(cfgpack_reader_t *r, uint32_t *count);
+cfgpack_err_t cfgpack_msgpack_decode_map_header(cfgpack_reader_t *r,
+                                                uint32_t *count);
 
 /**
  * @brief Skip over a MessagePack value without decoding it.
