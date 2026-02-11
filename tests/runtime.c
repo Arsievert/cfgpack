@@ -38,8 +38,8 @@ TEST_CASE(test_init_bounds) {
     make_schema(&schema, entries, 2);
 
     LOG("Testing init with too few values (1 instead of 2)");
-    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults,
-                       str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_ERR_BOUNDS);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults, str_pool, sizeof(str_pool), str_offsets, 0) ==
+          CFGPACK_ERR_BOUNDS);
     LOG("Correctly rejected: CFGPACK_ERR_BOUNDS");
 
     LOG("Test completed successfully");
@@ -61,8 +61,7 @@ TEST_CASE(test_pagein_zero_len) {
     make_schema(&schema, entries, 1);
 
     LOG("Initializing context");
-    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults,
-                       str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults, str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
     LOG("Context initialized successfully");
 
     LOG("Testing pagein with NULL buffer and 0 length");
@@ -89,8 +88,7 @@ TEST_CASE(test_pagein_file_small_scratch) {
     make_schema(&schema, entries, 1);
 
     LOG("Initializing context");
-    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults,
-                       str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults, str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
     LOG("Context initialized successfully");
 
     LOG("Testing pagein_file with 1-byte scratch buffer");
@@ -118,8 +116,7 @@ TEST_CASE(test_pageout_too_large) {
     make_schema(&schema, entries, 1);
 
     LOG("Initializing context");
-    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults,
-                       str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults, str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
     LOG("Context initialized successfully");
 
     LOG("Setting value at index 1 (u8 = 1)");
@@ -161,8 +158,7 @@ TEST_CASE(test_decode_unknown_key_skipped) {
     make_schema(&schema, entries, 1);
 
     LOG("Initializing context");
-    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults,
-                       str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults, str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
     LOG("Context initialized successfully");
 
     LOG("Crafting msgpack with unknown key 42");
@@ -191,15 +187,14 @@ TEST_CASE(test_type_mismatch_and_len) {
     cfgpack_fat_value_t defaults[2];
     cfgpack_value_t v;
     char str_pool[128];
-    uint16_t str_offsets[1];  /* 1 str entry */
+    uint16_t str_offsets[1]; /* 1 str entry */
 
     LOG("Creating schema: index 1 = u8, index 2 = str");
     make_schema(&schema, entries, 2);
     entries[1].type = CFGPACK_TYPE_STR;
 
     LOG("Initializing context");
-    CHECK(cfgpack_init(&ctx, &schema, values, 2, defaults,
-                       str_pool, sizeof(str_pool), str_offsets, 1) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 2, defaults, str_pool, sizeof(str_pool), str_offsets, 1) == CFGPACK_OK);
     LOG("Context initialized successfully");
 
     LOG("Testing type mismatch: setting str at index 1 (expects u8)");
@@ -238,8 +233,7 @@ TEST_CASE(test_presence_reset) {
     make_schema(&schema, entries, 2);
 
     LOG("Initializing context");
-    CHECK(cfgpack_init(&ctx, &schema, values, 2, defaults,
-                       str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 2, defaults, str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
     LOG("Context initialized successfully");
 
     LOG("Setting both values: index 1 = 1, index 2 = 2");
@@ -295,8 +289,7 @@ TEST_CASE(test_pageout_file_roundtrip_and_io) {
     make_schema(&schema, entries, 1);
 
     LOG("Initializing context");
-    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults,
-                       str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults, str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
     LOG("Context initialized successfully");
 
     LOG("Setting value at index 1 (u8 = 9)");
@@ -346,8 +339,7 @@ TEST_CASE(test_pageout_empty_map) {
     snprintf(schema.map_name, sizeof(schema.map_name), "test");
 
     LOG("Initializing context");
-    CHECK(cfgpack_init(&ctx, &schema, values, 2, defaults,
-                       str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 2, defaults, str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
     LOG("Context initialized successfully");
 
     LOG("Pageout with no values set");
@@ -391,8 +383,7 @@ TEST_CASE(test_pageout_min_buffer) {
     snprintf(schema.map_name, sizeof(schema.map_name), "x");
 
     LOG("Initializing context");
-    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults,
-                       str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults, str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
     LOG("Context initialized successfully");
 
     LOG("Setting value at index 1 (u8 = 1)");
@@ -430,8 +421,7 @@ TEST_CASE(test_pagein_type_mismatch_map_payload) {
     entries[0].type = CFGPACK_TYPE_STR;
 
     LOG("Initializing context");
-    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults,
-                       str_pool, sizeof(str_pool), str_offsets, 1) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults, str_pool, sizeof(str_pool), str_offsets, 1) == CFGPACK_OK);
     LOG("Context initialized successfully");
 
     LOG("Crafting msgpack with number at index 1 (expects str)");
@@ -466,8 +456,7 @@ TEST_CASE(test_pagein_declared_pairs_exceeds_payload) {
     make_schema(&schema, entries, 1);
 
     LOG("Initializing context");
-    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults,
-                       str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults, str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
     LOG("Context initialized successfully");
 
     LOG("Crafting truncated msgpack: map(1) with key but no value");
@@ -514,8 +503,7 @@ TEST_CASE(test_pageout_pagein_all_types) {
     LOG("Types: u8, u16, u32, u64, i8, i16, i32, i64, f32, f64, str, fstr");
 
     LOG("Initializing context");
-    CHECK(cfgpack_init(&ctx, &schema, values, 12, defaults,
-                       str_pool, sizeof(str_pool), str_offsets, 2) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 12, defaults, str_pool, sizeof(str_pool), str_offsets, 2) == CFGPACK_OK);
     LOG("Context initialized successfully");
 
     LOG("Setting all 12 values:");
@@ -580,12 +568,14 @@ TEST_CASE(test_pageout_pagein_all_types) {
 
     const char *str_out;
     uint16_t str_len;
-    CHECK(cfgpack_get_str(&ctx, 11, &str_out, &str_len) == CFGPACK_OK && str_len == 3 && strncmp(str_out, "foo", 3) == 0);
+    CHECK(cfgpack_get_str(&ctx, 11, &str_out, &str_len) == CFGPACK_OK && str_len == 3 &&
+          strncmp(str_out, "foo", 3) == 0);
     LOG("  [11] str = \"%s\" (ok)", str_out);
 
     const char *fstr_out;
     uint8_t fstr_len;
-    CHECK(cfgpack_get_fstr(&ctx, 12, &fstr_out, &fstr_len) == CFGPACK_OK && fstr_len == 3 && strncmp(fstr_out, "bar", 3) == 0);
+    CHECK(cfgpack_get_fstr(&ctx, 12, &fstr_out, &fstr_len) == CFGPACK_OK && fstr_len == 3 &&
+          strncmp(fstr_out, "bar", 3) == 0);
     LOG("  [12] fstr = \"%s\" (ok)", fstr_out);
 
     LOG("Test completed successfully");
@@ -615,8 +605,7 @@ TEST_CASE(test_peek_name) {
     snprintf(schema.map_name, sizeof(schema.map_name), "myschema");
 
     LOG("Initializing context");
-    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults,
-                       str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults, str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
     LOG("Context initialized successfully");
 
     LOG("Pageout to buffer");
@@ -675,8 +664,7 @@ TEST_CASE(test_peek_name_bounds) {
     snprintf(schema.map_name, sizeof(schema.map_name), "myschema");
 
     LOG("Initializing context");
-    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults,
-                       str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults, str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
     LOG("Context initialized successfully");
 
     LOG("Pageout to buffer");
@@ -732,10 +720,24 @@ TEST_CASE(test_remap_basic) {
     new_entries[0].has_default = 0;
 
     LOG("Initializing both contexts");
-    CHECK(cfgpack_init(&old_ctx, &old_schema, old_values, 1, old_defaults,
-                       old_str_pool, sizeof(old_str_pool), old_str_offsets, 0) == CFGPACK_OK);
-    CHECK(cfgpack_init(&new_ctx, &new_schema, new_values, 1, new_defaults,
-                       new_str_pool, sizeof(new_str_pool), new_str_offsets, 0) == CFGPACK_OK);
+    CHECK(cfgpack_init(&old_ctx,
+                       &old_schema,
+                       old_values,
+                       1,
+                       old_defaults,
+                       old_str_pool,
+                       sizeof(old_str_pool),
+                       old_str_offsets,
+                       0) == CFGPACK_OK);
+    CHECK(cfgpack_init(&new_ctx,
+                       &new_schema,
+                       new_values,
+                       1,
+                       new_defaults,
+                       new_str_pool,
+                       sizeof(new_str_pool),
+                       new_str_offsets,
+                       0) == CFGPACK_OK);
     LOG("Both contexts initialized");
 
     LOG("Setting value in old context: index 10 = 42");
@@ -748,7 +750,7 @@ TEST_CASE(test_remap_basic) {
     LOG_HEX("Old schema buffer", buf, len);
 
     LOG("Pagein to new context with remap: 10 -> 20");
-    cfgpack_remap_entry_t remap[] = { {10, 20} };
+    cfgpack_remap_entry_t remap[] = {{10, 20}};
     CHECK(cfgpack_pagein_remap(&new_ctx, buf, len, remap, 1) == CFGPACK_OK);
     LOG("Pagein with remap succeeded");
 
@@ -802,10 +804,24 @@ TEST_CASE(test_remap_type_widening) {
     new_entries[0].has_default = 0;
 
     LOG("Initializing both contexts");
-    CHECK(cfgpack_init(&old_ctx, &old_schema, old_values, 1, old_defaults,
-                       old_str_pool, sizeof(old_str_pool), old_str_offsets, 0) == CFGPACK_OK);
-    CHECK(cfgpack_init(&new_ctx, &new_schema, new_values, 1, new_defaults,
-                       new_str_pool, sizeof(new_str_pool), new_str_offsets, 0) == CFGPACK_OK);
+    CHECK(cfgpack_init(&old_ctx,
+                       &old_schema,
+                       old_values,
+                       1,
+                       old_defaults,
+                       old_str_pool,
+                       sizeof(old_str_pool),
+                       old_str_offsets,
+                       0) == CFGPACK_OK);
+    CHECK(cfgpack_init(&new_ctx,
+                       &new_schema,
+                       new_values,
+                       1,
+                       new_defaults,
+                       new_str_pool,
+                       sizeof(new_str_pool),
+                       new_str_offsets,
+                       0) == CFGPACK_OK);
     LOG("Both contexts initialized");
 
     LOG("Setting u8 value in old context: index 1 = 200");
@@ -869,10 +885,24 @@ TEST_CASE(test_remap_type_narrowing_rejected) {
     new_entries[0].has_default = 0;
 
     LOG("Initializing both contexts");
-    CHECK(cfgpack_init(&old_ctx, &old_schema, old_values, 1, old_defaults,
-                       old_str_pool, sizeof(old_str_pool), old_str_offsets, 0) == CFGPACK_OK);
-    CHECK(cfgpack_init(&new_ctx, &new_schema, new_values, 1, new_defaults,
-                       new_str_pool, sizeof(new_str_pool), new_str_offsets, 0) == CFGPACK_OK);
+    CHECK(cfgpack_init(&old_ctx,
+                       &old_schema,
+                       old_values,
+                       1,
+                       old_defaults,
+                       old_str_pool,
+                       sizeof(old_str_pool),
+                       old_str_offsets,
+                       0) == CFGPACK_OK);
+    CHECK(cfgpack_init(&new_ctx,
+                       &new_schema,
+                       new_values,
+                       1,
+                       new_defaults,
+                       new_str_pool,
+                       sizeof(new_str_pool),
+                       new_str_offsets,
+                       0) == CFGPACK_OK);
     LOG("Both contexts initialized");
 
     LOG("Setting u16 value in old context: index 1 = 1000");
@@ -910,8 +940,7 @@ TEST_CASE(test_remap_reserved_index_skipped) {
     snprintf(schema.map_name, sizeof(schema.map_name), "test");
 
     LOG("Initializing context");
-    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults,
-                       str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, defaults, str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
     LOG("Context initialized successfully");
 
     LOG("Crafting blob with key 0 = schema name, key 1 = 99");
@@ -961,8 +990,7 @@ TEST_CASE(test_roundtrip_with_name) {
     snprintf(schema.map_name, sizeof(schema.map_name), "config_v1");
 
     LOG("Initializing context");
-    CHECK(cfgpack_init(&ctx, &schema, values, 2, defaults,
-                       str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &schema, values, 2, defaults, str_pool, sizeof(str_pool), str_offsets, 0) == CFGPACK_OK);
     LOG("Context initialized successfully");
 
     LOG("Setting values: index 1 = 10, index 2 = 20");
@@ -1011,8 +1039,10 @@ int main(void) {
     overall |= (test_case_result("pageout_file_roundtrip_and_io", test_pageout_file_roundtrip_and_io()) != TEST_OK);
     overall |= (test_case_result("pageout_empty_map", test_pageout_empty_map()) != TEST_OK);
     overall |= (test_case_result("pageout_min_buffer", test_pageout_min_buffer()) != TEST_OK);
-    overall |= (test_case_result("pagein_type_mismatch_map_payload", test_pagein_type_mismatch_map_payload()) != TEST_OK);
-    overall |= (test_case_result("pagein_declared_pairs_exceeds_payload", test_pagein_declared_pairs_exceeds_payload()) != TEST_OK);
+    overall |= (test_case_result("pagein_type_mismatch_map_payload", test_pagein_type_mismatch_map_payload()) !=
+                TEST_OK);
+    overall |= (test_case_result("pagein_declared_pairs_exceeds_payload",
+                                 test_pagein_declared_pairs_exceeds_payload()) != TEST_OK);
     overall |= (test_case_result("pageout_pagein_all_types", test_pageout_pagein_all_types()) != TEST_OK);
 
     /* Remapping feature tests */

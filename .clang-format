@@ -1,0 +1,64 @@
+---
+Language: Cpp
+BasedOnStyle: LLVM
+
+# Indentation
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ContinuationIndentWidth: 4
+IndentCaseLabels: false
+IndentCaseBlocks: false
+IndentPPDirectives: BeforeHash
+PPIndentWidth: 2
+
+# Column limit
+ColumnLimit: 120
+
+# Braces — K&R (Attach)
+BreakBeforeBraces: Attach
+InsertBraces: true
+
+# Short statements
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: true
+
+# Alignment — the key setting for continuation parameter alignment
+AlignAfterOpenBracket: Align
+AlignConsecutiveDeclarations: false
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 0
+BinPackArguments: false
+BinPackParameters: false
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowAllArgumentsOnNextLine: false
+
+# Pointer style
+PointerAlignment: Right
+
+# Spaces
+SpaceBeforeParens: ControlStatements
+SpaceInEmptyParentheses: false
+SpacesInParentheses: false
+SpaceAfterCStyleCast: false
+SpacesBeforeTrailingComments: 1
+
+# Includes — do not reorder
+SortIncludes: Never
+IncludeBlocks: Preserve
+
+# Comments — do not reflow (preserves section dividers)
+ReflowComments: false
+
+# Blank lines
+MaxEmptyLinesToKeep: 2
+KeepEmptyLinesAtTheStartOfBlocks: false
+
+# Penalties — strongly prefer not breaking function return types to a new line
+PenaltyReturnTypeOnItsOwnLine: 10000
+PenaltyBreakBeforeFirstCallParameter: 100
+PenaltyBreakAssignment: 100

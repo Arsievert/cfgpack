@@ -23,11 +23,11 @@
 /* ═══════════════════════════════════════════════════════════════════════════
  * Buffer Sizes (hardcoded maximums)
  * ═══════════════════════════════════════════════════════════════════════════ */
-#define MAX_ENTRIES         128
+#define MAX_ENTRIES 128
 #define COMPRESSED_BUF_SIZE 4096
-#define JSON_BUF_SIZE       8192    /* Max decompressed JSON schema size */
-#define STORAGE_SIZE        2048    /* MessagePack storage buffer */
-#define JSON_OUT_SIZE       8192    /* JSON export buffer */
+#define JSON_BUF_SIZE 8192 /* Max decompressed JSON schema size */
+#define STORAGE_SIZE 2048  /* MessagePack storage buffer */
+#define JSON_OUT_SIZE 8192 /* JSON export buffer */
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * Schema Storage (parsed from JSON)
@@ -60,9 +60,11 @@ static heatshrink_decoder hsd;
 /* ═══════════════════════════════════════════════════════════════════════════
  * Helper: Decompress heatshrink data
  * ═══════════════════════════════════════════════════════════════════════════ */
-static int decompress_heatshrink(const uint8_t *input, size_t input_len,
-                                  uint8_t *output, size_t output_cap,
-                                  size_t *output_len) {
+static int decompress_heatshrink(const uint8_t *input,
+                                 size_t input_len,
+                                 uint8_t *output,
+                                 size_t output_cap,
+                                 size_t *output_len) {
     size_t input_consumed = 0;
     size_t total_output = 0;
     size_t sink_count, poll_count;
@@ -74,10 +76,8 @@ static int decompress_heatshrink(const uint8_t *input, size_t input_len,
 
     /* Feed input and poll for output */
     while (input_consumed < input_len) {
-        sink_res = heatshrink_decoder_sink(&hsd,
-                                            (uint8_t *)(input + input_consumed),
-                                            input_len - input_consumed,
-                                            &sink_count);
+        sink_res =
+            heatshrink_decoder_sink(&hsd, (uint8_t *)(input + input_consumed), input_len - input_consumed, &sink_count);
         if (sink_res < 0) {
             fprintf(stderr, "Heatshrink sink error: %d\n", sink_res);
             return -1;
@@ -86,10 +86,7 @@ static int decompress_heatshrink(const uint8_t *input, size_t input_len,
 
         /* Poll for decompressed output */
         do {
-            poll_res = heatshrink_decoder_poll(&hsd,
-                                                output + total_output,
-                                                output_cap - total_output,
-                                                &poll_count);
+            poll_res = heatshrink_decoder_poll(&hsd, output + total_output, output_cap - total_output, &poll_count);
             if (poll_res < 0) {
                 fprintf(stderr, "Heatshrink poll error: %d\n", poll_res);
                 return -1;
@@ -113,10 +110,7 @@ static int decompress_heatshrink(const uint8_t *input, size_t input_len,
 
         /* Poll remaining output */
         do {
-            poll_res = heatshrink_decoder_poll(&hsd,
-                                                output + total_output,
-                                                output_cap - total_output,
-                                                &poll_count);
+            poll_res = heatshrink_decoder_poll(&hsd, output + total_output, output_cap - total_output, &poll_count);
             if (poll_res < 0) {
                 fprintf(stderr, "Heatshrink poll error: %d\n", poll_res);
                 return -1;
@@ -139,26 +133,26 @@ static int decompress_heatshrink(const uint8_t *input, size_t input_len,
  * ═══════════════════════════════════════════════════════════════════════════ */
 static const char *type_name(cfgpack_type_t t) {
     switch (t) {
-        case CFGPACK_TYPE_U8:   return "u8";
-        case CFGPACK_TYPE_U16:  return "u16";
-        case CFGPACK_TYPE_U32:  return "u32";
-        case CFGPACK_TYPE_U64:  return "u64";
-        case CFGPACK_TYPE_I8:   return "i8";
-        case CFGPACK_TYPE_I16:  return "i16";
-        case CFGPACK_TYPE_I32:  return "i32";
-        case CFGPACK_TYPE_I64:  return "i64";
-        case CFGPACK_TYPE_F32:  return "f32";
-        case CFGPACK_TYPE_F64:  return "f64";
-        case CFGPACK_TYPE_STR:  return "str";
-        case CFGPACK_TYPE_FSTR: return "fstr";
-        default:                return "???";
+    case CFGPACK_TYPE_U8: return "u8";
+    case CFGPACK_TYPE_U16: return "u16";
+    case CFGPACK_TYPE_U32: return "u32";
+    case CFGPACK_TYPE_U64: return "u64";
+    case CFGPACK_TYPE_I8: return "i8";
+    case CFGPACK_TYPE_I16: return "i16";
+    case CFGPACK_TYPE_I32: return "i32";
+    case CFGPACK_TYPE_I64: return "i64";
+    case CFGPACK_TYPE_F32: return "f32";
+    case CFGPACK_TYPE_F64: return "f64";
+    case CFGPACK_TYPE_STR: return "str";
+    case CFGPACK_TYPE_FSTR: return "fstr";
+    default: return "???";
     }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * Helper: Dump all entries (generic iteration)
  * ═══════════════════════════════════════════════════════════════════════════ */
-#if 0  /* Unused but kept for reference/debugging */
+#if 0 /* Unused but kept for reference/debugging */
 static void dump_all_entries(const cfgpack_ctx_t *c) {
     printf("%-6s %-5s %-5s %s\n", "INDEX", "NAME", "TYPE", "VALUE");
     printf("------ ----- ----- ----------------------------------------\n");
@@ -210,11 +204,13 @@ static void dump_all_entries(const cfgpack_ctx_t *c) {
 static void hexdump(const uint8_t *data, size_t len) {
     for (size_t i = 0; i < len; i++) {
         printf("%02x ", data[i]);
-        if ((i + 1) % 16 == 0)
+        if ((i + 1) % 16 == 0) {
             printf("\n");
+        }
     }
-    if (len % 16 != 0)
+    if (len % 16 != 0) {
         printf("\n");
+    }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -227,8 +223,9 @@ int main(int argc, char **argv) {
     FILE *f;
     size_t compressed_len, json_len, storage_len, json_out_len;
 
-    if (argc > 1)
+    if (argc > 1) {
         schema_path = argv[1];
+    }
 
     /* ═══════════════════════════════════════════════════════════════════════
      * 1. READ COMPRESSED SCHEMA FROM FILE
@@ -249,13 +246,12 @@ int main(int argc, char **argv) {
     /* ═══════════════════════════════════════════════════════════════════════
      * 2. DECOMPRESS WITH HEATSHRINK
      * ═══════════════════════════════════════════════════════════════════════ */
-    if (decompress_heatshrink(compressed_buf, compressed_len,
-                               (uint8_t *)json_buf, sizeof(json_buf) - 1,
-                               &json_len) != 0) {
+    if (decompress_heatshrink(compressed_buf, compressed_len, (uint8_t *)json_buf, sizeof(json_buf) - 1, &json_len) !=
+        0) {
         fprintf(stderr, "Decompression failed\n");
         return 1;
     }
-    json_buf[json_len] = '\0';  /* NUL-terminate for JSON parser */
+    json_buf[json_len] = '\0'; /* NUL-terminate for JSON parser */
 
     printf("Decompressed size: %zu bytes\n", json_len);
     printf("Compression ratio: %.1f%%\n\n", 100.0 * compressed_len / json_len);
@@ -263,23 +259,26 @@ int main(int argc, char **argv) {
     /* ═══════════════════════════════════════════════════════════════════════
      * 3. PARSE JSON SCHEMA
      * ═══════════════════════════════════════════════════════════════════════ */
-    rc = cfgpack_schema_parse_json(json_buf, json_len, &schema, entries,
-                                    MAX_ENTRIES, defaults, &parse_err);
+    rc = cfgpack_schema_parse_json(json_buf, json_len, &schema, entries, MAX_ENTRIES, defaults, &parse_err);
     if (rc != CFGPACK_OK) {
-        fprintf(stderr, "Schema parse error at line %zu: %s\n",
-                parse_err.line, parse_err.message);
+        fprintf(stderr, "Schema parse error at line %zu: %s\n", parse_err.line, parse_err.message);
         return 1;
     }
 
-    printf("Parsed schema: %s v%u (%zu entries)\n\n",
-           schema.map_name, schema.version, schema.entry_count);
+    printf("Parsed schema: %s v%u (%zu entries)\n\n", schema.map_name, schema.version, schema.entry_count);
 
     /* ═══════════════════════════════════════════════════════════════════════
      * 4. INITIALIZE WITH DEFAULTS
      * ═══════════════════════════════════════════════════════════════════════ */
-    rc = cfgpack_init(&ctx, &schema, values, MAX_ENTRIES, defaults,
-                      str_pool, sizeof(str_pool),
-                      str_offsets, MAX_ENTRIES);
+    rc = cfgpack_init(&ctx,
+                      &schema,
+                      values,
+                      MAX_ENTRIES,
+                      defaults,
+                      str_pool,
+                      sizeof(str_pool),
+                      str_offsets,
+                      MAX_ENTRIES);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Init failed: %d\n", rc);
         return 1;
@@ -291,37 +290,36 @@ int main(int argc, char **argv) {
     for (size_t i = 0; i < 10 && i < ctx.schema->entry_count; i++) {
         const cfgpack_entry_t *e = &ctx.schema->entries[i];
         cfgpack_value_t val;
-        if (cfgpack_get(&ctx, e->index, &val) != CFGPACK_OK) continue;
+        if (cfgpack_get(&ctx, e->index, &val) != CFGPACK_OK) {
+            continue;
+        }
         printf("%-6u %-5s %-5s ", e->index, e->name, type_name(e->type));
         switch (val.type) {
-            case CFGPACK_TYPE_U8:
-            case CFGPACK_TYPE_U16:
-            case CFGPACK_TYPE_U32:
-            case CFGPACK_TYPE_U64:
-                printf("%llu", (unsigned long long)val.v.u64);
-                break;
-            case CFGPACK_TYPE_I8:
-            case CFGPACK_TYPE_I16:
-            case CFGPACK_TYPE_I32:
-            case CFGPACK_TYPE_I64:
-                printf("%lld", (long long)val.v.i64);
-                break;
-            case CFGPACK_TYPE_STR: {
-                const char *str;
-                uint16_t len;
-                if (cfgpack_get_str(&ctx, e->index, &str, &len) == CFGPACK_OK)
-                    printf("\"%.*s\"", (int)len, str);
-                break;
+        case CFGPACK_TYPE_U8:
+        case CFGPACK_TYPE_U16:
+        case CFGPACK_TYPE_U32:
+        case CFGPACK_TYPE_U64: printf("%llu", (unsigned long long)val.v.u64); break;
+        case CFGPACK_TYPE_I8:
+        case CFGPACK_TYPE_I16:
+        case CFGPACK_TYPE_I32:
+        case CFGPACK_TYPE_I64: printf("%lld", (long long)val.v.i64); break;
+        case CFGPACK_TYPE_STR: {
+            const char *str;
+            uint16_t len;
+            if (cfgpack_get_str(&ctx, e->index, &str, &len) == CFGPACK_OK) {
+                printf("\"%.*s\"", (int)len, str);
             }
-            case CFGPACK_TYPE_FSTR: {
-                const char *str;
-                uint8_t len;
-                if (cfgpack_get_fstr(&ctx, e->index, &str, &len) == CFGPACK_OK)
-                    printf("\"%.*s\"", (int)len, str);
-                break;
+            break;
+        }
+        case CFGPACK_TYPE_FSTR: {
+            const char *str;
+            uint8_t len;
+            if (cfgpack_get_fstr(&ctx, e->index, &str, &len) == CFGPACK_OK) {
+                printf("\"%.*s\"", (int)len, str);
             }
-            default:
-                break;
+            break;
+        }
+        default: break;
         }
         printf("\n");
     }
@@ -384,8 +382,9 @@ int main(int argc, char **argv) {
 
     printf("--- Serialized to MessagePack (%zu bytes) ---\n", storage_len);
     hexdump(storage, storage_len > 64 ? 64 : storage_len);
-    if (storage_len > 64)
+    if (storage_len > 64) {
         printf("... (%zu more bytes)\n", storage_len - 64);
+    }
     printf("\n");
 
     /* ═══════════════════════════════════════════════════════════════════════
@@ -394,9 +393,15 @@ int main(int argc, char **argv) {
     printf("--- Round-trip verification ---\n");
 
     /* Re-initialize context (simulates device reboot) */
-    rc = cfgpack_init(&ctx, &schema, values, MAX_ENTRIES, defaults,
-                      str_pool, sizeof(str_pool),
-                      str_offsets, MAX_ENTRIES);
+    rc = cfgpack_init(&ctx,
+                      &schema,
+                      values,
+                      MAX_ENTRIES,
+                      defaults,
+                      str_pool,
+                      sizeof(str_pool),
+                      str_offsets,
+                      MAX_ENTRIES);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Re-init failed: %d\n", rc);
         return 1;
@@ -413,47 +418,72 @@ int main(int argc, char **argv) {
     int errors = 0;
 
     cfgpack_get(&ctx, 5, &val);
-    if (val.v.u64 != 8883) { printf("  FAIL: port != 8883\n"); errors++; }
-    else { printf("  OK: port = 8883\n"); }
+    if (val.v.u64 != 8883) {
+        printf("  FAIL: port != 8883\n");
+        errors++;
+    } else {
+        printf("  OK: port = 8883\n");
+    }
 
     cfgpack_get(&ctx, 18, &val);
-    if (val.v.u64 != 1) { printf("  FAIL: mtls != 1\n"); errors++; }
-    else { printf("  OK: mtls = 1\n"); }
+    if (val.v.u64 != 1) {
+        printf("  FAIL: mtls != 1\n");
+        errors++;
+    } else {
+        printf("  OK: mtls = 1\n");
+    }
 
     cfgpack_get(&ctx, 57, &val);
     {
         const char *fstr;
         uint8_t fstr_len;
-        if (cfgpack_get_fstr(&ctx, 57, &fstr, &fstr_len) != CFGPACK_OK ||
-            fstr_len != 5 || memcmp(fstr, "hub01", 5) != 0) {
-            printf("  FAIL: dname != \"hub01\"\n"); errors++;
-        } else { printf("  OK: dname = \"hub01\"\n"); }
+        if (cfgpack_get_fstr(&ctx, 57, &fstr, &fstr_len) != CFGPACK_OK || fstr_len != 5 ||
+            memcmp(fstr, "hub01", 5) != 0) {
+            printf("  FAIL: dname != \"hub01\"\n");
+            errors++;
+        } else {
+            printf("  OK: dname = \"hub01\"\n");
+        }
     }
 
     cfgpack_get(&ctx, 27, &val);
-    if (val.v.u64 != 5000) { printf("  FAIL: s0iv != 5000\n"); errors++; }
-    else { printf("  OK: s0iv = 5000\n"); }
+    if (val.v.u64 != 5000) {
+        printf("  FAIL: s0iv != 5000\n");
+        errors++;
+    } else {
+        printf("  OK: s0iv = 5000\n");
+    }
 
     cfgpack_get(&ctx, 43, &val);
-    if (val.v.i64 != -25) { printf("  FAIL: tcal != -25\n"); errors++; }
-    else { printf("  OK: tcal = -25\n"); }
+    if (val.v.i64 != -25) {
+        printf("  FAIL: tcal != -25\n");
+        errors++;
+    } else {
+        printf("  OK: tcal = -25\n");
+    }
 
     cfgpack_get(&ctx, 53, &val);
-    if (val.v.u64 != 101) { printf("  FAIL: fwver != 101\n"); errors++; }
-    else { printf("  OK: fwver = 101\n"); }
+    if (val.v.u64 != 101) {
+        printf("  FAIL: fwver != 101\n");
+        errors++;
+    } else {
+        printf("  OK: fwver = 101\n");
+    }
 
     cfgpack_get(&ctx, 65, &val);
-    if (val.v.u64 != 3400) { printf("  FAIL: batwn != 3400\n"); errors++; }
-    else { printf("  OK: batwn = 3400\n"); }
+    if (val.v.u64 != 3400) {
+        printf("  FAIL: batwn != 3400\n");
+        errors++;
+    } else {
+        printf("  OK: batwn = 3400\n");
+    }
 
-    printf("\nRound-trip: %s (%d errors)\n\n",
-           errors == 0 ? "PASSED" : "FAILED", errors);
+    printf("\nRound-trip: %s (%d errors)\n\n", errors == 0 ? "PASSED" : "FAILED", errors);
 
     /* ═══════════════════════════════════════════════════════════════════════
      * 8. EXPORT SCHEMA WITH DEFAULTS TO JSON
      * ═══════════════════════════════════════════════════════════════════════ */
-    rc = cfgpack_schema_write_json(&schema, defaults, json_out, sizeof(json_out),
-                                    &json_out_len, &parse_err);
+    rc = cfgpack_schema_write_json(&schema, defaults, json_out, sizeof(json_out), &json_out_len, &parse_err);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "JSON export failed: %d\n", rc);
         return 1;

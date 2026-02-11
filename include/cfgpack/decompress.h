@@ -38,8 +38,7 @@
  *         CFGPACK_ERR_DECODE on decompression failure;
  *         Other errors from cfgpack_pagein_buf().
  */
-cfgpack_err_t cfgpack_pagein_lz4(cfgpack_ctx_t *ctx, const uint8_t *data, size_t len,
-                                  size_t decompressed_size);
+cfgpack_err_t cfgpack_pagein_lz4(cfgpack_ctx_t *ctx, const uint8_t *data, size_t len, size_t decompressed_size);
 #endif /* CFGPACK_LZ4 */
 
 #ifdef CFGPACK_HEATSHRINK

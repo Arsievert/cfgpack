@@ -18,7 +18,7 @@
 typedef struct {
     char *buf;
     size_t cap;
-    size_t len;  /* Always tracks total needed, even if > cap */
+    size_t len; /* Always tracks total needed, even if > cap */
 } wbuf_t;
 
 static void wbuf_init(wbuf_t *w, char *buf, size_t cap) {
@@ -35,7 +35,7 @@ static void wbuf_append(wbuf_t *w, const char *s, size_t n) {
         size_t avail = w->cap - w->len;
         memcpy(w->buf + w->len, s, avail);
     }
-    w->len += n;  /* Always increment to track needed size */
+    w->len += n; /* Always increment to track needed size */
 }
 
 static void wbuf_puts(wbuf_t *w, const char *s) {
@@ -89,7 +89,7 @@ static void wbuf_put_double(wbuf_t *w, double val) {
     wbuf_put_uint(w, ipart);
 
     double frac = val - (double)ipart;
-    if (frac > 1e-10) {  /* Skip if essentially zero */
+    if (frac > 1e-10) { /* Skip if essentially zero */
         wbuf_putc(w, '.');
         /* Multiply by 10^9 and round to get all digits at once - avoids accumulated error */
         uint64_t frac_int = (uint64_t)(frac * 1000000000.0 + 0.5);
@@ -142,7 +142,9 @@ static void line_iter_init(line_iter_t *it, const char *data, size_t len) {
 /* Returns pointer to line start, sets *line_len, advances pos.
  * Returns NULL when no more lines. Line does NOT include newline. */
 static const char *line_iter_next(line_iter_t *it, size_t *line_len) {
-    if (it->pos >= it->len) return NULL;
+    if (it->pos >= it->len) {
+        return NULL;
+    }
 
     const char *start = it->data + it->pos;
     size_t remaining = it->len - it->pos;
@@ -157,8 +159,12 @@ static const char *line_iter_next(line_iter_t *it, size_t *line_len) {
 
     /* Advance past the line and any newline characters */
     it->pos += i;
-    if (it->pos < it->len && it->data[it->pos] == '\r') it->pos++;
-    if (it->pos < it->len && it->data[it->pos] == '\n') it->pos++;
+    if (it->pos < it->len && it->data[it->pos] == '\r') {
+        it->pos++;
+    }
+    if (it->pos < it->len && it->data[it->pos] == '\n') {
+        it->pos++;
+    }
 
     return start;
 }
@@ -171,7 +177,9 @@ static const char *line_iter_next(line_iter_t *it, size_t *line_len) {
  * @brief Populate a parse error structure.
  */
 static void set_err(cfgpack_parse_error_t *err, size_t line, const char *msg) {
-    if (!err) return;
+    if (!err) {
+        return;
+    }
     err->line = line;
     size_t msg_len = strlen(msg);
     if (msg_len >= sizeof(err->message)) {
@@ -193,7 +201,9 @@ static int is_space(unsigned char c) {
  */
 static int is_blank_or_comment_n(const char *line, size_t len) {
     size_t i = 0;
-    while (i < len && is_space((unsigned char)line[i])) i++;
+    while (i < len && is_space((unsigned char)line[i])) {
+        i++;
+    }
     return (i >= len || line[i] == '#');
 }
 
@@ -201,18 +211,54 @@ static int is_blank_or_comment_n(const char *line, size_t len) {
  * @brief Parse a type string into a cfgpack_type_t.
  */
 static cfgpack_err_t parse_type(const char *tok, cfgpack_type_t *out) {
-    if (strcmp(tok, "u8") == 0) { *out = CFGPACK_TYPE_U8; return CFGPACK_OK; }
-    if (strcmp(tok, "u16") == 0) { *out = CFGPACK_TYPE_U16; return CFGPACK_OK; }
-    if (strcmp(tok, "u32") == 0) { *out = CFGPACK_TYPE_U32; return CFGPACK_OK; }
-    if (strcmp(tok, "u64") == 0) { *out = CFGPACK_TYPE_U64; return CFGPACK_OK; }
-    if (strcmp(tok, "i8") == 0) { *out = CFGPACK_TYPE_I8; return CFGPACK_OK; }
-    if (strcmp(tok, "i16") == 0) { *out = CFGPACK_TYPE_I16; return CFGPACK_OK; }
-    if (strcmp(tok, "i32") == 0) { *out = CFGPACK_TYPE_I32; return CFGPACK_OK; }
-    if (strcmp(tok, "i64") == 0) { *out = CFGPACK_TYPE_I64; return CFGPACK_OK; }
-    if (strcmp(tok, "f32") == 0) { *out = CFGPACK_TYPE_F32; return CFGPACK_OK; }
-    if (strcmp(tok, "f64") == 0) { *out = CFGPACK_TYPE_F64; return CFGPACK_OK; }
-    if (strcmp(tok, "str") == 0) { *out = CFGPACK_TYPE_STR; return CFGPACK_OK; }
-    if (strcmp(tok, "fstr") == 0) { *out = CFGPACK_TYPE_FSTR; return CFGPACK_OK; }
+    if (strcmp(tok, "u8") == 0) {
+        *out = CFGPACK_TYPE_U8;
+        return CFGPACK_OK;
+    }
+    if (strcmp(tok, "u16") == 0) {
+        *out = CFGPACK_TYPE_U16;
+        return CFGPACK_OK;
+    }
+    if (strcmp(tok, "u32") == 0) {
+        *out = CFGPACK_TYPE_U32;
+        return CFGPACK_OK;
+    }
+    if (strcmp(tok, "u64") == 0) {
+        *out = CFGPACK_TYPE_U64;
+        return CFGPACK_OK;
+    }
+    if (strcmp(tok, "i8") == 0) {
+        *out = CFGPACK_TYPE_I8;
+        return CFGPACK_OK;
+    }
+    if (strcmp(tok, "i16") == 0) {
+        *out = CFGPACK_TYPE_I16;
+        return CFGPACK_OK;
+    }
+    if (strcmp(tok, "i32") == 0) {
+        *out = CFGPACK_TYPE_I32;
+        return CFGPACK_OK;
+    }
+    if (strcmp(tok, "i64") == 0) {
+        *out = CFGPACK_TYPE_I64;
+        return CFGPACK_OK;
+    }
+    if (strcmp(tok, "f32") == 0) {
+        *out = CFGPACK_TYPE_F32;
+        return CFGPACK_OK;
+    }
+    if (strcmp(tok, "f64") == 0) {
+        *out = CFGPACK_TYPE_F64;
+        return CFGPACK_OK;
+    }
+    if (strcmp(tok, "str") == 0) {
+        *out = CFGPACK_TYPE_STR;
+        return CFGPACK_OK;
+    }
+    if (strcmp(tok, "fstr") == 0) {
+        *out = CFGPACK_TYPE_FSTR;
+        return CFGPACK_OK;
+    }
     return CFGPACK_ERR_INVALID_TYPE;
 }
 
@@ -228,8 +274,12 @@ static int name_too_long(const char *name) {
  */
 static int has_duplicate(const cfgpack_entry_t *entries, size_t count, uint16_t idx, const char *name) {
     for (size_t i = 0; i < count; ++i) {
-        if (entries[i].index == idx) return 1;
-        if (strcmp(entries[i].name, name) == 0) return 1;
+        if (entries[i].index == idx) {
+            return 1;
+        }
+        if (strcmp(entries[i].name, name) == 0) {
+            return 1;
+        }
     }
     return 0;
 }
@@ -256,32 +306,41 @@ static void sort_entries(cfgpack_entry_t *entries, cfgpack_fat_value_t *defaults
  * @brief Skip whitespace and return pointer to next non-space character.
  */
 static const char *skip_space(const char *p) {
-    while (*p && is_space((unsigned char)*p)) p++;
+    while (*p && is_space((unsigned char)*p)) {
+        p++;
+    }
     return p;
 }
 
 /**
  * @brief Parse a quoted string default value.
  */
-static cfgpack_err_t parse_quoted_string(const char *p, cfgpack_fat_value_t *out, cfgpack_type_t type, const char **endp) {
+static cfgpack_err_t parse_quoted_string(const char *p,
+                                         cfgpack_fat_value_t *out,
+                                         cfgpack_type_t type,
+                                         const char **endp) {
     size_t max_len = (type == CFGPACK_TYPE_FSTR) ? CFGPACK_FSTR_MAX : CFGPACK_STR_MAX;
     char *dst = (type == CFGPACK_TYPE_FSTR) ? out->v.fstr.data : out->v.str.data;
     size_t len = 0;
 
-    if (*p != '"') return CFGPACK_ERR_PARSE;
+    if (*p != '"') {
+        return CFGPACK_ERR_PARSE;
+    }
     p++; /* skip opening quote */
 
     while (*p && *p != '"') {
-        if (len >= max_len) return CFGPACK_ERR_STR_TOO_LONG;
+        if (len >= max_len) {
+            return CFGPACK_ERR_STR_TOO_LONG;
+        }
         if (*p == '\\' && *(p + 1)) {
             p++;
             switch (*p) {
-                case 'n': dst[len++] = '\n'; break;
-                case 't': dst[len++] = '\t'; break;
-                case 'r': dst[len++] = '\r'; break;
-                case '\\': dst[len++] = '\\'; break;
-                case '"': dst[len++] = '"'; break;
-                default: dst[len++] = *p; break;
+            case 'n': dst[len++] = '\n'; break;
+            case 't': dst[len++] = '\t'; break;
+            case 'r': dst[len++] = '\r'; break;
+            case '\\': dst[len++] = '\\'; break;
+            case '"': dst[len++] = '"'; break;
+            default: dst[len++] = *p; break;
             }
         } else {
             dst[len++] = *p;
@@ -289,7 +348,9 @@ static cfgpack_err_t parse_quoted_string(const char *p, cfgpack_fat_value_t *out
         p++;
     }
 
-    if (*p != '"') return CFGPACK_ERR_PARSE; /* unterminated string */
+    if (*p != '"') {
+        return CFGPACK_ERR_PARSE; /* unterminated string */
+    }
     p++; /* skip closing quote */
 
     dst[len] = '\0';
@@ -300,7 +361,9 @@ static cfgpack_err_t parse_quoted_string(const char *p, cfgpack_fat_value_t *out
         out->v.str.len = (uint16_t)len;
     }
 
-    if (endp) *endp = p;
+    if (endp) {
+        *endp = p;
+    }
     return CFGPACK_OK;
 }
 
@@ -319,14 +382,16 @@ static cfgpack_err_t parse_uint(const char *tok, cfgpack_fat_value_t *out, cfgpa
     }
 
     switch (type) {
-        case CFGPACK_TYPE_U8:  max_val = 0xFFULL; break;
-        case CFGPACK_TYPE_U16: max_val = 0xFFFFULL; break;
-        case CFGPACK_TYPE_U32: max_val = 0xFFFFFFFFULL; break;
-        case CFGPACK_TYPE_U64: max_val = 0xFFFFFFFFFFFFFFFFULL; break;
-        default: return CFGPACK_ERR_INVALID_TYPE;
+    case CFGPACK_TYPE_U8: max_val = 0xFFULL; break;
+    case CFGPACK_TYPE_U16: max_val = 0xFFFFULL; break;
+    case CFGPACK_TYPE_U32: max_val = 0xFFFFFFFFULL; break;
+    case CFGPACK_TYPE_U64: max_val = 0xFFFFFFFFFFFFFFFFULL; break;
+    default: return CFGPACK_ERR_INVALID_TYPE;
     }
 
-    if (val > max_val) return CFGPACK_ERR_BOUNDS;
+    if (val > max_val) {
+        return CFGPACK_ERR_BOUNDS;
+    }
 
     out->type = type;
     out->v.u64 = val;
@@ -348,14 +413,28 @@ static cfgpack_err_t parse_int(const char *tok, cfgpack_fat_value_t *out, cfgpac
     }
 
     switch (type) {
-        case CFGPACK_TYPE_I8:  min_val = -128; max_val = 127; break;
-        case CFGPACK_TYPE_I16: min_val = -32768; max_val = 32767; break;
-        case CFGPACK_TYPE_I32: min_val = -2147483648LL; max_val = 2147483647LL; break;
-        case CFGPACK_TYPE_I64: min_val = INT64_MIN; max_val = INT64_MAX; break;
-        default: return CFGPACK_ERR_INVALID_TYPE;
+    case CFGPACK_TYPE_I8:
+        min_val = -128;
+        max_val = 127;
+        break;
+    case CFGPACK_TYPE_I16:
+        min_val = -32768;
+        max_val = 32767;
+        break;
+    case CFGPACK_TYPE_I32:
+        min_val = -2147483648LL;
+        max_val = 2147483647LL;
+        break;
+    case CFGPACK_TYPE_I64:
+        min_val = INT64_MIN;
+        max_val = INT64_MAX;
+        break;
+    default: return CFGPACK_ERR_INVALID_TYPE;
     }
 
-    if (val < min_val || val > max_val) return CFGPACK_ERR_BOUNDS;
+    if (val < min_val || val > max_val) {
+        return CFGPACK_ERR_BOUNDS;
+    }
 
     out->type = type;
     out->v.i64 = val;
@@ -429,25 +508,21 @@ static cfgpack_err_t parse_default(const char *tok, cfgpack_type_t type, cfgpack
     *has_def = 1;
 
     switch (type) {
-        case CFGPACK_TYPE_U8:
-        case CFGPACK_TYPE_U16:
-        case CFGPACK_TYPE_U32:
-        case CFGPACK_TYPE_U64:
-            return parse_uint(tok, out, type);
+    case CFGPACK_TYPE_U8:
+    case CFGPACK_TYPE_U16:
+    case CFGPACK_TYPE_U32:
+    case CFGPACK_TYPE_U64: return parse_uint(tok, out, type);
 
-        case CFGPACK_TYPE_I8:
-        case CFGPACK_TYPE_I16:
-        case CFGPACK_TYPE_I32:
-        case CFGPACK_TYPE_I64:
-            return parse_int(tok, out, type);
+    case CFGPACK_TYPE_I8:
+    case CFGPACK_TYPE_I16:
+    case CFGPACK_TYPE_I32:
+    case CFGPACK_TYPE_I64: return parse_int(tok, out, type);
 
-        case CFGPACK_TYPE_F32:
-        case CFGPACK_TYPE_F64:
-            return parse_float(tok, out, type);
+    case CFGPACK_TYPE_F32:
+    case CFGPACK_TYPE_F64: return parse_float(tok, out, type);
 
-        case CFGPACK_TYPE_STR:
-        case CFGPACK_TYPE_FSTR:
-            return parse_quoted_string(tok, out, type, NULL);
+    case CFGPACK_TYPE_STR:
+    case CFGPACK_TYPE_FSTR: return parse_quoted_string(tok, out, type, NULL);
     }
 
     return CFGPACK_ERR_INVALID_TYPE;
@@ -457,7 +532,13 @@ static cfgpack_err_t parse_default(const char *tok, cfgpack_type_t type, cfgpack
  * .map Schema Parser (buffer-based)
  * ───────────────────────────────────────────────────────────────────────────── */
 
-cfgpack_err_t cfgpack_parse_schema(const char *data, size_t data_len, cfgpack_schema_t *out_schema, cfgpack_entry_t *entries, size_t max_entries, cfgpack_fat_value_t *defaults, cfgpack_parse_error_t *err) {
+cfgpack_err_t cfgpack_parse_schema(const char *data,
+                                   size_t data_len,
+                                   cfgpack_schema_t *out_schema,
+                                   cfgpack_entry_t *entries,
+                                   size_t max_entries,
+                                   cfgpack_fat_value_t *defaults,
+                                   cfgpack_parse_error_t *err) {
     line_iter_t iter;
     char line_buf[MAX_LINE_LEN];
     size_t line_no = 0;
@@ -477,7 +558,9 @@ cfgpack_err_t cfgpack_parse_schema(const char *data, size_t data_len, cfgpack_sc
         line_no++;
 
         /* Skip blank lines and comments */
-        if (is_blank_or_comment_n(line, line_len)) continue;
+        if (is_blank_or_comment_n(line, line_len)) {
+            continue;
+        }
 
         /* Copy line to mutable buffer (tokens_find modifies it) */
         if (line_len >= sizeof(line_buf)) {
@@ -615,18 +698,18 @@ void cfgpack_schema_free(cfgpack_schema_t *schema) {
 
 static const char *type_to_str(cfgpack_type_t type) {
     switch (type) {
-        case CFGPACK_TYPE_U8: return "u8";
-        case CFGPACK_TYPE_U16: return "u16";
-        case CFGPACK_TYPE_U32: return "u32";
-        case CFGPACK_TYPE_U64: return "u64";
-        case CFGPACK_TYPE_I8: return "i8";
-        case CFGPACK_TYPE_I16: return "i16";
-        case CFGPACK_TYPE_I32: return "i32";
-        case CFGPACK_TYPE_I64: return "i64";
-        case CFGPACK_TYPE_F32: return "f32";
-        case CFGPACK_TYPE_F64: return "f64";
-        case CFGPACK_TYPE_STR: return "str";
-        case CFGPACK_TYPE_FSTR: return "fstr";
+    case CFGPACK_TYPE_U8: return "u8";
+    case CFGPACK_TYPE_U16: return "u16";
+    case CFGPACK_TYPE_U32: return "u32";
+    case CFGPACK_TYPE_U64: return "u64";
+    case CFGPACK_TYPE_I8: return "i8";
+    case CFGPACK_TYPE_I16: return "i16";
+    case CFGPACK_TYPE_I32: return "i32";
+    case CFGPACK_TYPE_I64: return "i64";
+    case CFGPACK_TYPE_F32: return "f32";
+    case CFGPACK_TYPE_F64: return "f64";
+    case CFGPACK_TYPE_STR: return "str";
+    case CFGPACK_TYPE_FSTR: return "fstr";
     }
     return "unknown";
 }
@@ -640,27 +723,27 @@ static void write_json_string_to_wbuf(wbuf_t *w, const char *str, size_t len) {
     for (size_t i = 0; i < len; ++i) {
         unsigned char c = (unsigned char)str[i];
         switch (c) {
-            case '"':  wbuf_puts(w, "\\\""); break;
-            case '\\': wbuf_puts(w, "\\\\"); break;
-            case '\n': wbuf_puts(w, "\\n"); break;
-            case '\r': wbuf_puts(w, "\\r"); break;
-            case '\t': wbuf_puts(w, "\\t"); break;
-            default:
-                if (c < 0x20) {
-                    /* \uXXXX escape */
-                    char hex[7];
-                    hex[0] = '\\';
-                    hex[1] = 'u';
-                    hex[2] = '0';
-                    hex[3] = '0';
-                    hex[4] = "0123456789abcdef"[(c >> 4) & 0xf];
-                    hex[5] = "0123456789abcdef"[c & 0xf];
-                    hex[6] = '\0';
-                    wbuf_puts(w, hex);
-                } else {
-                    wbuf_putc(w, (char)c);
-                }
-                break;
+        case '"': wbuf_puts(w, "\\\""); break;
+        case '\\': wbuf_puts(w, "\\\\"); break;
+        case '\n': wbuf_puts(w, "\\n"); break;
+        case '\r': wbuf_puts(w, "\\r"); break;
+        case '\t': wbuf_puts(w, "\\t"); break;
+        default:
+            if (c < 0x20) {
+                /* \uXXXX escape */
+                char hex[7];
+                hex[0] = '\\';
+                hex[1] = 'u';
+                hex[2] = '0';
+                hex[3] = '0';
+                hex[4] = "0123456789abcdef"[(c >> 4) & 0xf];
+                hex[5] = "0123456789abcdef"[c & 0xf];
+                hex[6] = '\0';
+                wbuf_puts(w, hex);
+            } else {
+                wbuf_putc(w, (char)c);
+            }
+            break;
         }
     }
     wbuf_putc(w, '"');
@@ -673,34 +756,27 @@ static void write_json_default_to_wbuf(wbuf_t *w, const cfgpack_entry_t *entry, 
     }
 
     switch (entry->type) {
-        case CFGPACK_TYPE_U8:
-        case CFGPACK_TYPE_U16:
-        case CFGPACK_TYPE_U32:
-        case CFGPACK_TYPE_U64:
-            wbuf_put_uint(w, val->v.u64);
-            break;
-        case CFGPACK_TYPE_I8:
-        case CFGPACK_TYPE_I16:
-        case CFGPACK_TYPE_I32:
-        case CFGPACK_TYPE_I64:
-            wbuf_put_int(w, val->v.i64);
-            break;
-        case CFGPACK_TYPE_F32:
-            wbuf_put_float(w, val->v.f32);
-            break;
-        case CFGPACK_TYPE_F64:
-            wbuf_put_double(w, val->v.f64);
-            break;
-        case CFGPACK_TYPE_STR:
-            write_json_string_to_wbuf(w, val->v.str.data, val->v.str.len);
-            break;
-        case CFGPACK_TYPE_FSTR:
-            write_json_string_to_wbuf(w, val->v.fstr.data, val->v.fstr.len);
-            break;
+    case CFGPACK_TYPE_U8:
+    case CFGPACK_TYPE_U16:
+    case CFGPACK_TYPE_U32:
+    case CFGPACK_TYPE_U64: wbuf_put_uint(w, val->v.u64); break;
+    case CFGPACK_TYPE_I8:
+    case CFGPACK_TYPE_I16:
+    case CFGPACK_TYPE_I32:
+    case CFGPACK_TYPE_I64: wbuf_put_int(w, val->v.i64); break;
+    case CFGPACK_TYPE_F32: wbuf_put_float(w, val->v.f32); break;
+    case CFGPACK_TYPE_F64: wbuf_put_double(w, val->v.f64); break;
+    case CFGPACK_TYPE_STR: write_json_string_to_wbuf(w, val->v.str.data, val->v.str.len); break;
+    case CFGPACK_TYPE_FSTR: write_json_string_to_wbuf(w, val->v.fstr.data, val->v.fstr.len); break;
     }
 }
 
-cfgpack_err_t cfgpack_schema_write_json(const cfgpack_schema_t *schema, const cfgpack_fat_value_t *values, char *out, size_t out_cap, size_t *out_len, cfgpack_parse_error_t *err) {
+cfgpack_err_t cfgpack_schema_write_json(const cfgpack_schema_t *schema,
+                                        const cfgpack_fat_value_t *values,
+                                        char *out,
+                                        size_t out_cap,
+                                        size_t *out_len,
+                                        cfgpack_parse_error_t *err) {
     wbuf_t w;
     wbuf_init(&w, out, out_cap);
 
@@ -733,7 +809,9 @@ cfgpack_err_t cfgpack_schema_write_json(const cfgpack_schema_t *schema, const cf
     wbuf_puts(&w, "  ]\n");
     wbuf_puts(&w, "}\n");
 
-    if (out_len) *out_len = w.len;
+    if (out_len) {
+        *out_len = w.len;
+    }
 
     if (w.len > out_cap) {
         set_err(err, 0, "buffer too small");
@@ -777,7 +855,9 @@ static char json_peek(json_parser_t *p) {
 static int json_expect(json_parser_t *p, char c) {
     json_skip_ws(p);
     if (p->pos < p->len && p->data[p->pos] == c) {
-        if (c == '\n') p->line++;
+        if (c == '\n') {
+            p->line++;
+        }
         p->pos++;
         return 1;
     }
@@ -786,40 +866,54 @@ static int json_expect(json_parser_t *p, char c) {
 
 static int json_parse_string(json_parser_t *p, char *out, size_t out_cap, size_t *out_len) {
     json_skip_ws(p);
-    if (!json_expect(p, '"')) return 0;
+    if (!json_expect(p, '"')) {
+        return 0;
+    }
 
     size_t len = 0;
     while (p->pos < p->len && p->data[p->pos] != '"') {
-        if (len >= out_cap - 1) return 0; /* overflow */
+        if (len >= out_cap - 1) {
+            return 0; /* overflow */
+        }
 
         if (p->data[p->pos] == '\\' && p->pos + 1 < p->len) {
             p->pos++;
             switch (p->data[p->pos]) {
-                case 'n': out[len++] = '\n'; break;
-                case 't': out[len++] = '\t'; break;
-                case 'r': out[len++] = '\r'; break;
-                case '\\': out[len++] = '\\'; break;
-                case '"': out[len++] = '"'; break;
-                case 'u':
-                    /* \uXXXX - parse 4 hex digits */
-                    if (p->pos + 4 < p->len) {
-                        char hex[5] = {p->data[p->pos+1], p->data[p->pos+2], p->data[p->pos+3], p->data[p->pos+4], '\0'};
-                        unsigned int val = 0;
-                        int ok = 1;
-                        for (int i = 0; i < 4; i++) {
-                            char h = hex[i];
-                            if (h >= '0' && h <= '9') val = val * 16 + (h - '0');
-                            else if (h >= 'a' && h <= 'f') val = val * 16 + (h - 'a' + 10);
-                            else if (h >= 'A' && h <= 'F') val = val * 16 + (h - 'A' + 10);
-                            else { ok = 0; break; }
+            case 'n': out[len++] = '\n'; break;
+            case 't': out[len++] = '\t'; break;
+            case 'r': out[len++] = '\r'; break;
+            case '\\': out[len++] = '\\'; break;
+            case '"': out[len++] = '"'; break;
+            case 'u':
+                /* \uXXXX - parse 4 hex digits */
+                if (p->pos + 4 < p->len) {
+                    char hex[5] = {p->data[p->pos + 1],
+                                   p->data[p->pos + 2],
+                                   p->data[p->pos + 3],
+                                   p->data[p->pos + 4],
+                                   '\0'};
+                    unsigned int val = 0;
+                    int ok = 1;
+                    for (int i = 0; i < 4; i++) {
+                        char h = hex[i];
+                        if (h >= '0' && h <= '9') {
+                            val = val * 16 + (h - '0');
+                        } else if (h >= 'a' && h <= 'f') {
+                            val = val * 16 + (h - 'a' + 10);
+                        } else if (h >= 'A' && h <= 'F') {
+                            val = val * 16 + (h - 'A' + 10);
+                        } else {
+                            ok = 0;
+                            break;
                         }
-                        if (ok && val < 256) {
-                            out[len++] = (char)val;
-                        }
-                        p->pos += 4;
                     }
-                    break;
-                default: out[len++] = p->data[p->pos]; break;
+                    if (ok && val < 256) {
+                        out[len++] = (char)val;
+                    }
+                    p->pos += 4;
+                }
+                break;
+            default: out[len++] = p->data[p->pos]; break;
             }
         } else {
             out[len++] = p->data[p->pos];
@@ -827,9 +921,13 @@ static int json_parse_string(json_parser_t *p, char *out, size_t out_cap, size_t
         p->pos++;
     }
 
-    if (!json_expect(p, '"')) return 0;
+    if (!json_expect(p, '"')) {
+        return 0;
+    }
     out[len] = '\0';
-    if (out_len) *out_len = len;
+    if (out_len) {
+        *out_len = len;
+    }
     return 1;
 }
 
@@ -839,32 +937,46 @@ static int json_parse_number(json_parser_t *p, int64_t *out_int, double *out_flo
     int has_dot = 0, has_exp = 0;
 
     /* Optional minus */
-    if (p->pos < p->len && p->data[p->pos] == '-') p->pos++;
+    if (p->pos < p->len && p->data[p->pos] == '-') {
+        p->pos++;
+    }
 
     /* Digits */
-    while (p->pos < p->len && (p->data[p->pos] >= '0' && p->data[p->pos] <= '9')) p->pos++;
+    while (p->pos < p->len && (p->data[p->pos] >= '0' && p->data[p->pos] <= '9')) {
+        p->pos++;
+    }
 
     /* Optional decimal */
     if (p->pos < p->len && p->data[p->pos] == '.') {
         has_dot = 1;
         p->pos++;
-        while (p->pos < p->len && (p->data[p->pos] >= '0' && p->data[p->pos] <= '9')) p->pos++;
+        while (p->pos < p->len && (p->data[p->pos] >= '0' && p->data[p->pos] <= '9')) {
+            p->pos++;
+        }
     }
 
     /* Optional exponent */
     if (p->pos < p->len && (p->data[p->pos] == 'e' || p->data[p->pos] == 'E')) {
         has_exp = 1;
         p->pos++;
-        if (p->pos < p->len && (p->data[p->pos] == '+' || p->data[p->pos] == '-')) p->pos++;
-        while (p->pos < p->len && (p->data[p->pos] >= '0' && p->data[p->pos] <= '9')) p->pos++;
+        if (p->pos < p->len && (p->data[p->pos] == '+' || p->data[p->pos] == '-')) {
+            p->pos++;
+        }
+        while (p->pos < p->len && (p->data[p->pos] >= '0' && p->data[p->pos] <= '9')) {
+            p->pos++;
+        }
     }
 
-    if (p->pos == start) return 0;
+    if (p->pos == start) {
+        return 0;
+    }
 
     /* Parse the number */
     char buf[64];
     size_t num_len = p->pos - start;
-    if (num_len >= sizeof(buf)) return 0;
+    if (num_len >= sizeof(buf)) {
+        return 0;
+    }
     memcpy(buf, p->data + start, num_len);
     buf[num_len] = '\0';
 
@@ -891,24 +1003,22 @@ static int json_match_literal(json_parser_t *p, const char *lit) {
  * Schema Sizing
  * ───────────────────────────────────────────────────────────────────────────── */
 
-cfgpack_err_t cfgpack_schema_get_sizing(const cfgpack_schema_t *schema,
-                                         cfgpack_schema_sizing_t *out) {
+cfgpack_err_t cfgpack_schema_get_sizing(const cfgpack_schema_t *schema, cfgpack_schema_sizing_t *out) {
     size_t str_count = 0;
     size_t fstr_count = 0;
     size_t str_pool_size = 0;
 
     for (size_t i = 0; i < schema->entry_count; ++i) {
         switch (schema->entries[i].type) {
-            case CFGPACK_TYPE_STR:
-                str_count++;
-                str_pool_size += CFGPACK_STR_MAX + 1;  /* Fixed slot per entry */
-                break;
-            case CFGPACK_TYPE_FSTR:
-                fstr_count++;
-                str_pool_size += CFGPACK_FSTR_MAX + 1; /* Fixed slot per entry */
-                break;
-            default:
-                break;
+        case CFGPACK_TYPE_STR:
+            str_count++;
+            str_pool_size += CFGPACK_STR_MAX + 1; /* Fixed slot per entry */
+            break;
+        case CFGPACK_TYPE_FSTR:
+            fstr_count++;
+            str_pool_size += CFGPACK_FSTR_MAX + 1; /* Fixed slot per entry */
+            break;
+        default: break;
         }
     }
 
@@ -923,7 +1033,13 @@ cfgpack_err_t cfgpack_schema_get_sizing(const cfgpack_schema_t *schema,
  * JSON Parser (buffer-based, no malloc)
  * ───────────────────────────────────────────────────────────────────────────── */
 
-cfgpack_err_t cfgpack_schema_parse_json(const char *data, size_t data_len, cfgpack_schema_t *out_schema, cfgpack_entry_t *entries, size_t max_entries, cfgpack_fat_value_t *defaults, cfgpack_parse_error_t *err) {
+cfgpack_err_t cfgpack_schema_parse_json(const char *data,
+                                        size_t data_len,
+                                        cfgpack_schema_t *out_schema,
+                                        cfgpack_entry_t *entries,
+                                        size_t max_entries,
+                                        cfgpack_fat_value_t *defaults,
+                                        cfgpack_parse_error_t *err) {
     json_parser_t parser = {data, data_len, 0, 1};
     json_parser_t *p = &parser;
     cfgpack_err_t result = CFGPACK_OK;
@@ -1117,26 +1233,19 @@ cfgpack_err_t cfgpack_schema_parse_json(const char *data, size_t data_len, cfgpa
                     e->has_default = 1;
                     d->type = e->type;
                     switch (e->type) {
-                        case CFGPACK_TYPE_U8:
-                        case CFGPACK_TYPE_U16:
-                        case CFGPACK_TYPE_U32:
-                        case CFGPACK_TYPE_U64:
-                            d->v.u64 = (uint64_t)default_ival;
-                            break;
-                        case CFGPACK_TYPE_I8:
-                        case CFGPACK_TYPE_I16:
-                        case CFGPACK_TYPE_I32:
-                        case CFGPACK_TYPE_I64:
-                            d->v.i64 = default_ival;
-                            break;
-                        case CFGPACK_TYPE_F32:
-                            d->v.f32 = default_is_float ? (float)default_fval : (float)default_ival;
-                            break;
-                        case CFGPACK_TYPE_F64:
-                            d->v.f64 = default_is_float ? default_fval : (double)default_ival;
-                            break;
-                        default:
-                            break;
+                    case CFGPACK_TYPE_U8:
+                    case CFGPACK_TYPE_U16:
+                    case CFGPACK_TYPE_U32:
+                    case CFGPACK_TYPE_U64: d->v.u64 = (uint64_t)default_ival; break;
+                    case CFGPACK_TYPE_I8:
+                    case CFGPACK_TYPE_I16:
+                    case CFGPACK_TYPE_I32:
+                    case CFGPACK_TYPE_I64: d->v.i64 = default_ival; break;
+                    case CFGPACK_TYPE_F32:
+                        d->v.f32 = default_is_float ? (float)default_fval : (float)default_ival;
+                        break;
+                    case CFGPACK_TYPE_F64: d->v.f64 = default_is_float ? default_fval : (double)default_ival; break;
+                    default: break;
                     }
                 }
 

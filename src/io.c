@@ -34,26 +34,29 @@ static int get_str_slot(const cfgpack_schema_t *schema, size_t entry_off) {
  * @param v          Value to encode.
  * @return CFGPACK_OK on success, CFGPACK_ERR_ENCODE or CFGPACK_ERR_INVALID_TYPE on failure.
  */
-static cfgpack_err_t encode_value(cfgpack_buf_t *buf, const cfgpack_ctx_t *ctx, size_t entry_off, const cfgpack_value_t *v) {
+static cfgpack_err_t encode_value(cfgpack_buf_t *buf,
+                                  const cfgpack_ctx_t *ctx,
+                                  size_t entry_off,
+                                  const cfgpack_value_t *v) {
     switch (v->type) {
-        case CFGPACK_TYPE_U8: return cfgpack_msgpack_encode_uint64(buf, v->v.u64);
-        case CFGPACK_TYPE_U16: return cfgpack_msgpack_encode_uint64(buf, v->v.u64);
-        case CFGPACK_TYPE_U32: return cfgpack_msgpack_encode_uint64(buf, v->v.u64);
-        case CFGPACK_TYPE_U64: return cfgpack_msgpack_encode_uint64(buf, v->v.u64);
-        case CFGPACK_TYPE_I8: return cfgpack_msgpack_encode_int64(buf, v->v.i64);
-        case CFGPACK_TYPE_I16: return cfgpack_msgpack_encode_int64(buf, v->v.i64);
-        case CFGPACK_TYPE_I32: return cfgpack_msgpack_encode_int64(buf, v->v.i64);
-        case CFGPACK_TYPE_I64: return cfgpack_msgpack_encode_int64(buf, v->v.i64);
-        case CFGPACK_TYPE_F32: return cfgpack_msgpack_encode_f32(buf, v->v.f32);
-        case CFGPACK_TYPE_F64: return cfgpack_msgpack_encode_f64(buf, v->v.f64);
-        case CFGPACK_TYPE_STR: {
-            const char *str = ctx->str_pool + v->v.str.offset;
-            return cfgpack_msgpack_encode_str(buf, str, v->v.str.len);
-        }
-        case CFGPACK_TYPE_FSTR: {
-            const char *str = ctx->str_pool + v->v.fstr.offset;
-            return cfgpack_msgpack_encode_str(buf, str, v->v.fstr.len);
-        }
+    case CFGPACK_TYPE_U8: return cfgpack_msgpack_encode_uint64(buf, v->v.u64);
+    case CFGPACK_TYPE_U16: return cfgpack_msgpack_encode_uint64(buf, v->v.u64);
+    case CFGPACK_TYPE_U32: return cfgpack_msgpack_encode_uint64(buf, v->v.u64);
+    case CFGPACK_TYPE_U64: return cfgpack_msgpack_encode_uint64(buf, v->v.u64);
+    case CFGPACK_TYPE_I8: return cfgpack_msgpack_encode_int64(buf, v->v.i64);
+    case CFGPACK_TYPE_I16: return cfgpack_msgpack_encode_int64(buf, v->v.i64);
+    case CFGPACK_TYPE_I32: return cfgpack_msgpack_encode_int64(buf, v->v.i64);
+    case CFGPACK_TYPE_I64: return cfgpack_msgpack_encode_int64(buf, v->v.i64);
+    case CFGPACK_TYPE_F32: return cfgpack_msgpack_encode_f32(buf, v->v.f32);
+    case CFGPACK_TYPE_F64: return cfgpack_msgpack_encode_f64(buf, v->v.f64);
+    case CFGPACK_TYPE_STR: {
+        const char *str = ctx->str_pool + v->v.str.offset;
+        return cfgpack_msgpack_encode_str(buf, str, v->v.str.len);
+    }
+    case CFGPACK_TYPE_FSTR: {
+        const char *str = ctx->str_pool + v->v.fstr.offset;
+        return cfgpack_msgpack_encode_str(buf, str, v->v.fstr.len);
+    }
     }
     (void)entry_off; /* May be used in future for bounds checking */
     return CFGPACK_ERR_INVALID_TYPE;
@@ -64,28 +67,46 @@ cfgpack_err_t cfgpack_pageout(const cfgpack_ctx_t *ctx, uint8_t *out, size_t out
     size_t present_count = 0;
 
     /* Minimum headroom: map header + u64 key + u8 value (~12 bytes). */
-    if (out_cap < 12) return CFGPACK_ERR_ENCODE;
+    if (out_cap < 12) {
+        return CFGPACK_ERR_ENCODE;
+    }
 
     for (size_t i = 0; i < ctx->schema->entry_count; ++i) {
-        if (cfgpack_presence_get(ctx, i)) present_count++;
+        if (cfgpack_presence_get(ctx, i)) {
+            present_count++;
+        }
     }
 
     cfgpack_buf_init(&buf, out, out_cap);
     /* Map header includes +1 for reserved index 0 (schema name) */
-    if (cfgpack_msgpack_encode_map_header(&buf, (uint32_t)(present_count + 1)) != CFGPACK_OK) return CFGPACK_ERR_ENCODE;
-
-    /* Write schema name at reserved index 0 */
-    if (cfgpack_msgpack_encode_uint_key(&buf, CFGPACK_INDEX_RESERVED_NAME) != CFGPACK_OK) return CFGPACK_ERR_ENCODE;
-    if (cfgpack_msgpack_encode_str(&buf, ctx->schema->map_name, strlen(ctx->schema->map_name)) != CFGPACK_OK) return CFGPACK_ERR_ENCODE;
-
-    for (size_t i = 0; i < ctx->schema->entry_count; ++i) {
-        if (!cfgpack_presence_get(ctx, i)) continue;
-        const cfgpack_entry_t *e = &ctx->schema->entries[i];
-        if (cfgpack_msgpack_encode_uint_key(&buf, e->index) != CFGPACK_OK) return CFGPACK_ERR_ENCODE;
-        if (encode_value(&buf, ctx, i, &ctx->values[i]) != CFGPACK_OK) return CFGPACK_ERR_ENCODE;
+    if (cfgpack_msgpack_encode_map_header(&buf, (uint32_t)(present_count + 1)) != CFGPACK_OK) {
+        return CFGPACK_ERR_ENCODE;
     }
 
-    if (out_len) *out_len = buf.len;
+    /* Write schema name at reserved index 0 */
+    if (cfgpack_msgpack_encode_uint_key(&buf, CFGPACK_INDEX_RESERVED_NAME) != CFGPACK_OK) {
+        return CFGPACK_ERR_ENCODE;
+    }
+    if (cfgpack_msgpack_encode_str(&buf, ctx->schema->map_name, strlen(ctx->schema->map_name)) != CFGPACK_OK) {
+        return CFGPACK_ERR_ENCODE;
+    }
+
+    for (size_t i = 0; i < ctx->schema->entry_count; ++i) {
+        if (!cfgpack_presence_get(ctx, i)) {
+            continue;
+        }
+        const cfgpack_entry_t *e = &ctx->schema->entries[i];
+        if (cfgpack_msgpack_encode_uint_key(&buf, e->index) != CFGPACK_OK) {
+            return CFGPACK_ERR_ENCODE;
+        }
+        if (encode_value(&buf, ctx, i, &ctx->values[i]) != CFGPACK_OK) {
+            return CFGPACK_ERR_ENCODE;
+        }
+    }
+
+    if (out_len) {
+        *out_len = buf.len;
+    }
     return (buf.len <= out_cap) ? CFGPACK_OK : CFGPACK_ERR_ENCODE;
 }
 
@@ -93,24 +114,34 @@ cfgpack_err_t cfgpack_peek_name(const uint8_t *data, size_t len, char *out_name,
     cfgpack_reader_t r;
     uint32_t map_count;
 
-    if (!data || len == 0 || !out_name || out_cap == 0) return CFGPACK_ERR_DECODE;
+    if (!data || len == 0 || !out_name || out_cap == 0) {
+        return CFGPACK_ERR_DECODE;
+    }
 
     cfgpack_reader_init(&r, data, len);
-    if (cfgpack_msgpack_decode_map_header(&r, &map_count) != CFGPACK_OK) return CFGPACK_ERR_DECODE;
+    if (cfgpack_msgpack_decode_map_header(&r, &map_count) != CFGPACK_OK) {
+        return CFGPACK_ERR_DECODE;
+    }
 
     /* Scan map for key 0 (reserved schema name) */
     for (uint32_t i = 0; i < map_count; ++i) {
         uint64_t key;
-        if (cfgpack_msgpack_decode_uint64(&r, &key) != CFGPACK_OK) return CFGPACK_ERR_DECODE;
+        if (cfgpack_msgpack_decode_uint64(&r, &key) != CFGPACK_OK) {
+            return CFGPACK_ERR_DECODE;
+        }
 
         if (key == CFGPACK_INDEX_RESERVED_NAME) {
             /* Found key 0, expect string value */
             const uint8_t *str_ptr;
             uint32_t str_len;
-            if (cfgpack_msgpack_decode_str(&r, &str_ptr, &str_len) != CFGPACK_OK) return CFGPACK_ERR_DECODE;
+            if (cfgpack_msgpack_decode_str(&r, &str_ptr, &str_len) != CFGPACK_OK) {
+                return CFGPACK_ERR_DECODE;
+            }
 
             /* Check if name fits in output buffer (need space for null terminator) */
-            if (str_len + 1 > out_cap) return CFGPACK_ERR_BOUNDS;
+            if (str_len + 1 > out_cap) {
+                return CFGPACK_ERR_BOUNDS;
+            }
 
             memcpy(out_name, str_ptr, str_len);
             out_name[str_len] = '\0';
@@ -118,7 +149,9 @@ cfgpack_err_t cfgpack_peek_name(const uint8_t *data, size_t len, char *out_name,
         }
 
         /* Skip this value and continue searching */
-        if (cfgpack_msgpack_skip_value(&r) != CFGPACK_OK) return CFGPACK_ERR_DECODE;
+        if (cfgpack_msgpack_skip_value(&r) != CFGPACK_OK) {
+            return CFGPACK_ERR_DECODE;
+        }
     }
 
     /* Key 0 not found */
@@ -134,59 +167,73 @@ cfgpack_err_t cfgpack_peek_name(const uint8_t *data, size_t len, char *out_name,
  * @param out        Output value structure.
  * @return CFGPACK_OK on success, error code on failure.
  */
-static cfgpack_err_t decode_value(cfgpack_reader_t *r, cfgpack_ctx_t *ctx, size_t entry_off, cfgpack_type_t type, cfgpack_value_t *out) {
+static cfgpack_err_t decode_value(cfgpack_reader_t *r,
+                                  cfgpack_ctx_t *ctx,
+                                  size_t entry_off,
+                                  cfgpack_type_t type,
+                                  cfgpack_value_t *out) {
     out->type = type;
     switch (type) {
-        case CFGPACK_TYPE_U8:
-        case CFGPACK_TYPE_U16:
-        case CFGPACK_TYPE_U32:
-        case CFGPACK_TYPE_U64:
-            return cfgpack_msgpack_decode_uint64(r, &out->v.u64);
-        case CFGPACK_TYPE_I8:
-        case CFGPACK_TYPE_I16:
-        case CFGPACK_TYPE_I32:
-        case CFGPACK_TYPE_I64:
-            return cfgpack_msgpack_decode_int64(r, &out->v.i64);
-        case CFGPACK_TYPE_F32:
-            return cfgpack_msgpack_decode_f32(r, &out->v.f32);
-        case CFGPACK_TYPE_F64:
-            return cfgpack_msgpack_decode_f64(r, &out->v.f64);
-        case CFGPACK_TYPE_STR: {
-            const uint8_t *ptr; uint32_t len;
-            if (cfgpack_msgpack_decode_str(r, &ptr, &len) != CFGPACK_OK) return CFGPACK_ERR_DECODE;
-            if (len > CFGPACK_STR_MAX) return CFGPACK_ERR_STR_TOO_LONG;
-            
-            /* Get string slot and write to pool */
-            int slot = get_str_slot(ctx->schema, entry_off);
-            if (slot < 0 || (size_t)slot >= ctx->str_offsets_count) return CFGPACK_ERR_BOUNDS;
-            
-            uint16_t pool_off = ctx->str_offsets[slot];
-            char *dst = ctx->str_pool + pool_off;
-            memcpy(dst, ptr, len);
-            dst[len] = '\0';
-            
-            out->v.str.offset = pool_off;
-            out->v.str.len = (uint16_t)len;
-            return CFGPACK_OK;
+    case CFGPACK_TYPE_U8:
+    case CFGPACK_TYPE_U16:
+    case CFGPACK_TYPE_U32:
+    case CFGPACK_TYPE_U64: return cfgpack_msgpack_decode_uint64(r, &out->v.u64);
+    case CFGPACK_TYPE_I8:
+    case CFGPACK_TYPE_I16:
+    case CFGPACK_TYPE_I32:
+    case CFGPACK_TYPE_I64: return cfgpack_msgpack_decode_int64(r, &out->v.i64);
+    case CFGPACK_TYPE_F32: return cfgpack_msgpack_decode_f32(r, &out->v.f32);
+    case CFGPACK_TYPE_F64: return cfgpack_msgpack_decode_f64(r, &out->v.f64);
+    case CFGPACK_TYPE_STR: {
+        const uint8_t *ptr;
+        uint32_t len;
+        if (cfgpack_msgpack_decode_str(r, &ptr, &len) != CFGPACK_OK) {
+            return CFGPACK_ERR_DECODE;
         }
-        case CFGPACK_TYPE_FSTR: {
-            const uint8_t *ptr; uint32_t len;
-            if (cfgpack_msgpack_decode_str(r, &ptr, &len) != CFGPACK_OK) return CFGPACK_ERR_DECODE;
-            if (len > CFGPACK_FSTR_MAX) return CFGPACK_ERR_STR_TOO_LONG;
-            
-            /* Get string slot and write to pool */
-            int slot = get_str_slot(ctx->schema, entry_off);
-            if (slot < 0 || (size_t)slot >= ctx->str_offsets_count) return CFGPACK_ERR_BOUNDS;
-            
-            uint16_t pool_off = ctx->str_offsets[slot];
-            char *dst = ctx->str_pool + pool_off;
-            memcpy(dst, ptr, len);
-            dst[len] = '\0';
-            
-            out->v.fstr.offset = pool_off;
-            out->v.fstr.len = (uint8_t)len;
-            return CFGPACK_OK;
+        if (len > CFGPACK_STR_MAX) {
+            return CFGPACK_ERR_STR_TOO_LONG;
         }
+
+        /* Get string slot and write to pool */
+        int slot = get_str_slot(ctx->schema, entry_off);
+        if (slot < 0 || (size_t)slot >= ctx->str_offsets_count) {
+            return CFGPACK_ERR_BOUNDS;
+        }
+
+        uint16_t pool_off = ctx->str_offsets[slot];
+        char *dst = ctx->str_pool + pool_off;
+        memcpy(dst, ptr, len);
+        dst[len] = '\0';
+
+        out->v.str.offset = pool_off;
+        out->v.str.len = (uint16_t)len;
+        return CFGPACK_OK;
+    }
+    case CFGPACK_TYPE_FSTR: {
+        const uint8_t *ptr;
+        uint32_t len;
+        if (cfgpack_msgpack_decode_str(r, &ptr, &len) != CFGPACK_OK) {
+            return CFGPACK_ERR_DECODE;
+        }
+        if (len > CFGPACK_FSTR_MAX) {
+            return CFGPACK_ERR_STR_TOO_LONG;
+        }
+
+        /* Get string slot and write to pool */
+        int slot = get_str_slot(ctx->schema, entry_off);
+        if (slot < 0 || (size_t)slot >= ctx->str_offsets_count) {
+            return CFGPACK_ERR_BOUNDS;
+        }
+
+        uint16_t pool_off = ctx->str_offsets[slot];
+        char *dst = ctx->str_pool + pool_off;
+        memcpy(dst, ptr, len);
+        dst[len] = '\0';
+
+        out->v.fstr.offset = pool_off;
+        out->v.fstr.len = (uint8_t)len;
+        return CFGPACK_OK;
+    }
     }
     return CFGPACK_ERR_INVALID_TYPE;
 }
@@ -216,35 +263,44 @@ static cfgpack_err_t decode_value(cfgpack_reader_t *r, cfgpack_ctx_t *ctx, size_
  * @return 1 if coercion is allowed (or exact match), 0 otherwise.
  */
 static int can_coerce_type(cfgpack_type_t wire_type, cfgpack_type_t schema_type) {
-    if (wire_type == schema_type) return 1;
+    if (wire_type == schema_type) {
+        return 1;
+    }
 
     /* Unsigned widening */
     if (wire_type == CFGPACK_TYPE_U8) {
-        if (schema_type == CFGPACK_TYPE_U16 || schema_type == CFGPACK_TYPE_U32 || schema_type == CFGPACK_TYPE_U64)
+        if (schema_type == CFGPACK_TYPE_U16 || schema_type == CFGPACK_TYPE_U32 || schema_type == CFGPACK_TYPE_U64) {
             return 1;
+        }
         /* Small unsigned -> signed (value range checked at decode) */
-        if (schema_type == CFGPACK_TYPE_I8 || schema_type == CFGPACK_TYPE_I16 || 
-            schema_type == CFGPACK_TYPE_I32 || schema_type == CFGPACK_TYPE_I64)
+        if (schema_type == CFGPACK_TYPE_I8 || schema_type == CFGPACK_TYPE_I16 || schema_type == CFGPACK_TYPE_I32 ||
+            schema_type == CFGPACK_TYPE_I64) {
             return 1;
+        }
     }
     if (wire_type == CFGPACK_TYPE_U16) {
-        if (schema_type == CFGPACK_TYPE_U32 || schema_type == CFGPACK_TYPE_U64)
+        if (schema_type == CFGPACK_TYPE_U32 || schema_type == CFGPACK_TYPE_U64) {
             return 1;
+        }
         /* u16 -> signed (value range checked at decode) */
-        if (schema_type == CFGPACK_TYPE_I16 || schema_type == CFGPACK_TYPE_I32 || schema_type == CFGPACK_TYPE_I64)
+        if (schema_type == CFGPACK_TYPE_I16 || schema_type == CFGPACK_TYPE_I32 || schema_type == CFGPACK_TYPE_I64) {
             return 1;
+        }
     }
     if (wire_type == CFGPACK_TYPE_U32) {
-        if (schema_type == CFGPACK_TYPE_U64)
+        if (schema_type == CFGPACK_TYPE_U64) {
             return 1;
+        }
         /* u32 -> signed (value range checked at decode) */
-        if (schema_type == CFGPACK_TYPE_I32 || schema_type == CFGPACK_TYPE_I64)
+        if (schema_type == CFGPACK_TYPE_I32 || schema_type == CFGPACK_TYPE_I64) {
             return 1;
+        }
     }
     if (wire_type == CFGPACK_TYPE_U64) {
         /* u64 -> i64 (value range checked at decode) */
-        if (schema_type == CFGPACK_TYPE_I64)
+        if (schema_type == CFGPACK_TYPE_I64) {
             return 1;
+        }
     }
 
     /* Signed widening */
@@ -285,8 +341,14 @@ static int can_coerce_type(cfgpack_type_t wire_type, cfgpack_type_t schema_type)
  * @return CFGPACK_OK on success, CFGPACK_ERR_TYPE_MISMATCH if incompatible,
  *         CFGPACK_ERR_DECODE on parse error.
  */
-static cfgpack_err_t decode_value_with_coercion(cfgpack_reader_t *r, cfgpack_ctx_t *ctx, size_t entry_off, cfgpack_type_t schema_type, cfgpack_value_t *out) {
-    if (r->pos >= r->len) return CFGPACK_ERR_DECODE;
+static cfgpack_err_t decode_value_with_coercion(cfgpack_reader_t *r,
+                                                cfgpack_ctx_t *ctx,
+                                                size_t entry_off,
+                                                cfgpack_type_t schema_type,
+                                                cfgpack_value_t *out) {
+    if (r->pos >= r->len) {
+        return CFGPACK_ERR_DECODE;
+    }
 
     uint8_t b = r->data[r->pos];
     cfgpack_type_t wire_type;
@@ -339,24 +401,35 @@ static cfgpack_err_t decode_value_with_coercion(cfgpack_reader_t *r, cfgpack_ctx
     return decode_value(r, ctx, entry_off, schema_type, out);
 }
 
-cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx, const uint8_t *data, size_t len,
-                                    const cfgpack_remap_entry_t *remap, size_t remap_count) {
+cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx,
+                                   const uint8_t *data,
+                                   size_t len,
+                                   const cfgpack_remap_entry_t *remap,
+                                   size_t remap_count) {
     cfgpack_reader_t r;
     uint32_t map_count = 0;
 
-    if (!data || len == 0) return CFGPACK_ERR_DECODE;
+    if (!data || len == 0) {
+        return CFGPACK_ERR_DECODE;
+    }
     cfgpack_reader_init(&r, data, len);
-    if (cfgpack_msgpack_decode_map_header(&r, &map_count) != CFGPACK_OK) return CFGPACK_ERR_DECODE;
+    if (cfgpack_msgpack_decode_map_header(&r, &map_count) != CFGPACK_OK) {
+        return CFGPACK_ERR_DECODE;
+    }
 
     memset(ctx->present, 0, sizeof(ctx->present));
 
     for (uint32_t i = 0; i < map_count; ++i) {
         uint64_t key;
-        if (cfgpack_msgpack_decode_uint64(&r, &key) != CFGPACK_OK) return CFGPACK_ERR_DECODE;
+        if (cfgpack_msgpack_decode_uint64(&r, &key) != CFGPACK_OK) {
+            return CFGPACK_ERR_DECODE;
+        }
 
         /* Skip reserved index 0 (schema name) */
         if (key == CFGPACK_INDEX_RESERVED_NAME) {
-            if (cfgpack_msgpack_skip_value(&r) != CFGPACK_OK) return CFGPACK_ERR_DECODE;
+            if (cfgpack_msgpack_skip_value(&r) != CFGPACK_OK) {
+                return CFGPACK_ERR_DECODE;
+            }
             continue;
         }
 
@@ -384,13 +457,17 @@ cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx, const uint8_t *data, size
 
         /* Unknown key: silently skip */
         if (!entry) {
-            if (cfgpack_msgpack_skip_value(&r) != CFGPACK_OK) return CFGPACK_ERR_DECODE;
+            if (cfgpack_msgpack_skip_value(&r) != CFGPACK_OK) {
+                return CFGPACK_ERR_DECODE;
+            }
             continue;
         }
 
         /* Decode value with type coercion support */
         cfgpack_err_t err = decode_value_with_coercion(&r, ctx, idx, entry->type, &ctx->values[idx]);
-        if (err != CFGPACK_OK) return err;
+        if (err != CFGPACK_OK) {
+            return err;
+        }
         cfgpack_presence_set(ctx, idx);
     }
     return CFGPACK_OK;

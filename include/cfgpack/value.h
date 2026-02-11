@@ -46,6 +46,7 @@ typedef enum {
  */
 typedef struct {
     cfgpack_type_t type;
+    /* clang-format off */
     union {
         uint64_t u64;
         int64_t  i64;
@@ -54,6 +55,7 @@ typedef struct {
         struct { uint16_t offset; uint16_t len; } str;
         struct { uint16_t offset; uint8_t len; uint8_t _pad; } fstr;
     } v;
+    /* clang-format on */
 } cfgpack_value_t;
 
 /**
@@ -64,6 +66,7 @@ typedef struct {
  */
 typedef struct {
     cfgpack_type_t type;
+    /* clang-format off */
     union {
         uint64_t u64;
         int64_t  i64;
@@ -72,6 +75,7 @@ typedef struct {
         struct { uint16_t len; char data[CFGPACK_STR_MAX + 1]; } str;
         struct { uint8_t  len; char data[CFGPACK_FSTR_MAX + 1]; } fstr;
     } v;
+    /* clang-format on */
 } cfgpack_fat_value_t;
 
 #endif /* CFGPACK_VALUE_H */

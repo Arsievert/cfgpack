@@ -48,11 +48,12 @@ static void print_usage(const char *prog) {
     fprintf(stderr, "  Raw compressed data. For LZ4, store original size separately.\n");
 }
 
-static int compress_lz4(const uint8_t *input, size_t input_len,
-                        uint8_t *output, size_t output_cap, size_t *output_len) {
-    int compressed_size = LZ4_compress_default(
-        (const char *)input, (char *)output,
-        (int)input_len, (int)output_cap);
+static int compress_lz4(const uint8_t *input,
+                        size_t input_len,
+                        uint8_t *output,
+                        size_t output_cap,
+                        size_t *output_len) {
+    int compressed_size = LZ4_compress_default((const char *)input, (char *)output, (int)input_len, (int)output_cap);
 
     if (compressed_size <= 0) {
         fprintf(stderr, "LZ4 compression failed\n");
@@ -63,8 +64,11 @@ static int compress_lz4(const uint8_t *input, size_t input_len,
     return 0;
 }
 
-static int compress_heatshrink(const uint8_t *input, size_t input_len,
-                                uint8_t *output, size_t output_cap, size_t *output_len) {
+static int compress_heatshrink(const uint8_t *input,
+                               size_t input_len,
+                               uint8_t *output,
+                               size_t output_cap,
+                               size_t *output_len) {
     size_t input_consumed = 0;
     size_t total_output = 0;
     size_t sink_count, poll_count;
@@ -77,9 +81,9 @@ static int compress_heatshrink(const uint8_t *input, size_t input_len,
     /* Feed input and poll for output */
     while (input_consumed < input_len) {
         sink_res = heatshrink_encoder_sink(&hs_encoder,
-                                            (uint8_t *)(input + input_consumed),
-                                            input_len - input_consumed,
-                                            &sink_count);
+                                           (uint8_t *)(input + input_consumed),
+                                           input_len - input_consumed,
+                                           &sink_count);
         if (sink_res < 0) {
             fprintf(stderr, "Heatshrink sink error: %d\n", sink_res);
             return -1;
@@ -88,10 +92,8 @@ static int compress_heatshrink(const uint8_t *input, size_t input_len,
 
         /* Poll for compressed output */
         do {
-            poll_res = heatshrink_encoder_poll(&hs_encoder,
-                                                output + total_output,
-                                                output_cap - total_output,
-                                                &poll_count);
+            poll_res =
+                heatshrink_encoder_poll(&hs_encoder, output + total_output, output_cap - total_output, &poll_count);
             if (poll_res < 0) {
                 fprintf(stderr, "Heatshrink poll error: %d\n", poll_res);
                 return -1;
@@ -115,10 +117,8 @@ static int compress_heatshrink(const uint8_t *input, size_t input_len,
 
         /* Poll remaining output */
         do {
-            poll_res = heatshrink_encoder_poll(&hs_encoder,
-                                                output + total_output,
-                                                output_cap - total_output,
-                                                &poll_count);
+            poll_res =
+                heatshrink_encoder_poll(&hs_encoder, output + total_output, output_cap - total_output, &poll_count);
             if (poll_res < 0) {
                 fprintf(stderr, "Heatshrink poll error: %d\n", poll_res);
                 return -1;
@@ -211,7 +211,9 @@ int main(int argc, char *argv[]) {
 
     /* Print stats */
     printf("%s: %zu -> %zu bytes (%.1f%%)\n",
-           algorithm, input_len, output_len,
+           algorithm,
+           input_len,
+           output_len,
            input_len > 0 ? (100.0 * output_len / input_len) : 0.0);
     printf("Original size: %zu (needed for LZ4 decompression)\n", input_len);
 

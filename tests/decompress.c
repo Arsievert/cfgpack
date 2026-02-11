@@ -52,36 +52,36 @@ static size_t create_large_test_msgpack(uint8_t *buf, size_t cap) {
 
     /* Keys 1-4: unsigned integers */
     cfgpack_msgpack_encode_uint_key(&b, 1);
-    cfgpack_msgpack_encode_uint64(&b, 255);           /* u8 max */
+    cfgpack_msgpack_encode_uint64(&b, 255); /* u8 max */
 
     cfgpack_msgpack_encode_uint_key(&b, 2);
-    cfgpack_msgpack_encode_uint64(&b, 1000);          /* u16 */
+    cfgpack_msgpack_encode_uint64(&b, 1000); /* u16 */
 
     cfgpack_msgpack_encode_uint_key(&b, 3);
-    cfgpack_msgpack_encode_uint64(&b, 100000);        /* u32 */
+    cfgpack_msgpack_encode_uint64(&b, 100000); /* u32 */
 
     cfgpack_msgpack_encode_uint_key(&b, 4);
-    cfgpack_msgpack_encode_uint64(&b, 9999999);       /* u64 */
+    cfgpack_msgpack_encode_uint64(&b, 9999999); /* u64 */
 
     /* Keys 5-8: signed integers */
     cfgpack_msgpack_encode_uint_key(&b, 5);
-    cfgpack_msgpack_encode_int64(&b, -10);            /* i8 */
+    cfgpack_msgpack_encode_int64(&b, -10); /* i8 */
 
     cfgpack_msgpack_encode_uint_key(&b, 6);
-    cfgpack_msgpack_encode_int64(&b, -1000);          /* i16 */
+    cfgpack_msgpack_encode_int64(&b, -1000); /* i16 */
 
     cfgpack_msgpack_encode_uint_key(&b, 7);
-    cfgpack_msgpack_encode_int64(&b, -100000);        /* i32 */
+    cfgpack_msgpack_encode_int64(&b, -100000); /* i32 */
 
     cfgpack_msgpack_encode_uint_key(&b, 8);
-    cfgpack_msgpack_encode_int64(&b, -9999999);       /* i64 */
+    cfgpack_msgpack_encode_int64(&b, -9999999); /* i64 */
 
     /* Keys 9-10: floats */
     cfgpack_msgpack_encode_uint_key(&b, 9);
-    cfgpack_msgpack_encode_f32(&b, 3.14159f);         /* f32 */
+    cfgpack_msgpack_encode_f32(&b, 3.14159f); /* f32 */
 
     cfgpack_msgpack_encode_uint_key(&b, 10);
-    cfgpack_msgpack_encode_f64(&b, 2.718281828);      /* f64 */
+    cfgpack_msgpack_encode_f64(&b, 2.718281828); /* f64 */
 
     /* Keys 11-15: strings with repetitive content for better compression */
     /* Using repetitive patterns that compress well */
@@ -92,7 +92,7 @@ static size_t create_large_test_msgpack(uint8_t *buf, size_t cap) {
     cfgpack_msgpack_encode_str(&b, "config value config value config value cfg", 43);
 
     cfgpack_msgpack_encode_uint_key(&b, 13);
-    cfgpack_msgpack_encode_str(&b, "fixed string!", 13);  /* fstr */
+    cfgpack_msgpack_encode_str(&b, "fixed string!", 13); /* fstr */
 
     cfgpack_msgpack_encode_uint_key(&b, 14);
     cfgpack_msgpack_encode_str(&b, "test data test", 14); /* fstr */
@@ -106,11 +106,15 @@ static size_t create_large_test_msgpack(uint8_t *buf, size_t cap) {
 /**
  * @brief Compress data with LZ4.
  */
-static int compress_with_lz4(const uint8_t *input, size_t input_len,
-                              uint8_t *output, size_t output_cap, size_t *output_len) {
-    int result = LZ4_compress_default((const char *)input, (char *)output,
-                                       (int)input_len, (int)output_cap);
-    if (result <= 0) return -1;
+static int compress_with_lz4(const uint8_t *input,
+                             size_t input_len,
+                             uint8_t *output,
+                             size_t output_cap,
+                             size_t *output_len) {
+    int result = LZ4_compress_default((const char *)input, (char *)output, (int)input_len, (int)output_cap);
+    if (result <= 0) {
+        return -1;
+    }
     *output_len = (size_t)result;
     return 0;
 }
@@ -118,8 +122,11 @@ static int compress_with_lz4(const uint8_t *input, size_t input_len,
 /**
  * @brief Compress data with heatshrink.
  */
-static int compress_with_heatshrink(const uint8_t *input, size_t input_len,
-                                     uint8_t *output, size_t output_cap, size_t *output_len) {
+static int compress_with_heatshrink(const uint8_t *input,
+                                    size_t input_len,
+                                    uint8_t *output,
+                                    size_t output_cap,
+                                    size_t *output_len) {
     size_t sink_count, poll_count;
     size_t input_consumed = 0;
     size_t total_output = 0;
@@ -131,32 +138,36 @@ static int compress_with_heatshrink(const uint8_t *input, size_t input_len,
 
     while (input_consumed < input_len) {
         sink_res = heatshrink_encoder_sink(&hs_encoder,
-                                            (uint8_t *)(input + input_consumed),
-                                            input_len - input_consumed,
-                                            &sink_count);
-        if (sink_res < 0) return -1;
+                                           (uint8_t *)(input + input_consumed),
+                                           input_len - input_consumed,
+                                           &sink_count);
+        if (sink_res < 0) {
+            return -1;
+        }
         input_consumed += sink_count;
 
         do {
-            poll_res = heatshrink_encoder_poll(&hs_encoder,
-                                                output + total_output,
-                                                output_cap - total_output,
-                                                &poll_count);
-            if (poll_res < 0) return -1;
+            poll_res =
+                heatshrink_encoder_poll(&hs_encoder, output + total_output, output_cap - total_output, &poll_count);
+            if (poll_res < 0) {
+                return -1;
+            }
             total_output += poll_count;
         } while (poll_res == HSER_POLL_MORE);
     }
 
     do {
         finish_res = heatshrink_encoder_finish(&hs_encoder);
-        if (finish_res < 0) return -1;
+        if (finish_res < 0) {
+            return -1;
+        }
 
         do {
-            poll_res = heatshrink_encoder_poll(&hs_encoder,
-                                                output + total_output,
-                                                output_cap - total_output,
-                                                &poll_count);
-            if (poll_res < 0) return -1;
+            poll_res =
+                heatshrink_encoder_poll(&hs_encoder, output + total_output, output_cap - total_output, &poll_count);
+            if (poll_res < 0) {
+                return -1;
+            }
             total_output += poll_count;
         } while (poll_res == HSER_POLL_MORE);
     } while (finish_res == HSER_FINISH_MORE);
@@ -168,11 +179,15 @@ static int compress_with_heatshrink(const uint8_t *input, size_t input_len,
 /**
  * @brief Helper to set up a test context with 15 entries matching sample.map.
  */
-static void setup_large_test_context(cfgpack_schema_t *schema, cfgpack_entry_t *entries,
-                                     cfgpack_ctx_t *ctx, cfgpack_value_t *values,
+static void setup_large_test_context(cfgpack_schema_t *schema,
+                                     cfgpack_entry_t *entries,
+                                     cfgpack_ctx_t *ctx,
+                                     cfgpack_value_t *values,
                                      cfgpack_fat_value_t *defaults,
-                                     char *str_pool, size_t str_pool_cap,
-                                     uint16_t *str_offsets, size_t str_offsets_count) {
+                                     char *str_pool,
+                                     size_t str_pool_cap,
+                                     uint16_t *str_offsets,
+                                     size_t str_offsets_count) {
     snprintf(schema->map_name, sizeof(schema->map_name), "demo");
     schema->version = 1;
     schema->entry_count = 15;
@@ -257,18 +272,21 @@ static void setup_large_test_context(cfgpack_schema_t *schema, cfgpack_entry_t *
     entries[14].type = CFGPACK_TYPE_STR;
     entries[14].has_default = 0;
 
-    cfgpack_init(ctx, schema, values, 15, defaults,
-                 str_pool, str_pool_cap, str_offsets, str_offsets_count);
+    cfgpack_init(ctx, schema, values, 15, defaults, str_pool, str_pool_cap, str_offsets, str_offsets_count);
 }
 
 /**
  * @brief Helper to set up a minimal test context (for error tests).
  */
-static void setup_minimal_test_context(cfgpack_schema_t *schema, cfgpack_entry_t *entries,
-                                       cfgpack_ctx_t *ctx, cfgpack_value_t *values,
+static void setup_minimal_test_context(cfgpack_schema_t *schema,
+                                       cfgpack_entry_t *entries,
+                                       cfgpack_ctx_t *ctx,
+                                       cfgpack_value_t *values,
                                        cfgpack_fat_value_t *defaults,
-                                       char *str_pool, size_t str_pool_cap,
-                                       uint16_t *str_offsets, size_t str_offsets_count) {
+                                       char *str_pool,
+                                       size_t str_pool_cap,
+                                       uint16_t *str_offsets,
+                                       size_t str_offsets_count) {
     snprintf(schema->map_name, sizeof(schema->map_name), "test");
     schema->version = 1;
     schema->entry_count = 2;
@@ -284,8 +302,7 @@ static void setup_minimal_test_context(cfgpack_schema_t *schema, cfgpack_entry_t
     entries[1].type = CFGPACK_TYPE_STR;
     entries[1].has_default = 0;
 
-    cfgpack_init(ctx, schema, values, 2, defaults,
-                 str_pool, str_pool_cap, str_offsets, str_offsets_count);
+    cfgpack_init(ctx, schema, values, 2, defaults, str_pool, str_pool_cap, str_offsets, str_offsets_count);
 }
 
 TEST_CASE(test_lz4_basic) {
@@ -296,8 +313,8 @@ TEST_CASE(test_lz4_basic) {
     cfgpack_ctx_t ctx;
     cfgpack_value_t values[15];
     cfgpack_fat_value_t defaults[15];
-    char str_pool[512];           /* String pool for str/fstr values */
-    uint16_t str_offsets[5];      /* 5 string entries: s1, s2, fs1, fs2, s3 */
+    char str_pool[512];      /* String pool for str/fstr values */
+    uint16_t str_offsets[5]; /* 5 string entries: s1, s2, fs1, fs2, s3 */
     size_t msgpack_len, compressed_len;
     cfgpack_err_t err;
 
@@ -310,15 +327,16 @@ TEST_CASE(test_lz4_basic) {
     LOG("Compressing with LZ4...");
     CHECK(compress_with_lz4(msgpack_buf, msgpack_len, compressed_buf, BUF_SIZE, &compressed_len) == 0);
     CHECK(compressed_len > 0);
-    LOG("Compressed: %zu -> %zu bytes (%.1f%% of original)", 
-        msgpack_len, compressed_len, (double)compressed_len / msgpack_len * 100);
-    CHECK(compressed_len < msgpack_len);  /* Verify actual compression occurred */
+    LOG("Compressed: %zu -> %zu bytes (%.1f%% of original)",
+        msgpack_len,
+        compressed_len,
+        (double)compressed_len / msgpack_len * 100);
+    CHECK(compressed_len < msgpack_len); /* Verify actual compression occurred */
     LOG("Compression verified: output smaller than input");
     LOG_HEX("LZ4 compressed (first 64 bytes)", compressed_buf, compressed_len > 64 ? 64 : compressed_len);
 
     LOG("Setting up test context with 15-entry schema");
-    setup_large_test_context(&schema, entries, &ctx, values, defaults,
-                             str_pool, sizeof(str_pool), str_offsets, 5);
+    setup_large_test_context(&schema, entries, &ctx, values, defaults, str_pool, sizeof(str_pool), str_offsets, 5);
 
     LOG("Calling cfgpack_pagein_lz4() to decompress and load...");
     err = cfgpack_pagein_lz4(&ctx, compressed_buf, compressed_len, msgpack_len);
@@ -382,11 +400,10 @@ TEST_CASE(test_lz4_null_args) {
     cfgpack_value_t values[2];
     cfgpack_fat_value_t defaults[2];
     char str_pool[64];
-    uint16_t str_offsets[1];  /* 1 string entry */
+    uint16_t str_offsets[1]; /* 1 string entry */
 
     LOG("Setting up minimal test context");
-    setup_minimal_test_context(&schema, entries, &ctx, values, defaults,
-                               str_pool, sizeof(str_pool), str_offsets, 1);
+    setup_minimal_test_context(&schema, entries, &ctx, values, defaults, str_pool, sizeof(str_pool), str_offsets, 1);
 
     LOG("Testing cfgpack_pagein_lz4(NULL, data, 10, 20)");
     CHECK(cfgpack_pagein_lz4(NULL, compressed_buf, 10, 20) == CFGPACK_ERR_DECODE);
@@ -412,8 +429,7 @@ TEST_CASE(test_lz4_size_too_large) {
     uint16_t str_offsets[1];
 
     LOG("Setting up minimal test context");
-    setup_minimal_test_context(&schema, entries, &ctx, values, defaults,
-                               str_pool, sizeof(str_pool), str_offsets, 1);
+    setup_minimal_test_context(&schema, entries, &ctx, values, defaults, str_pool, sizeof(str_pool), str_offsets, 1);
 
     LOG("Testing cfgpack_pagein_lz4() with decompressed_size=5000 (max is 4096)");
     CHECK(cfgpack_pagein_lz4(&ctx, compressed_buf, 10, 5000) == CFGPACK_ERR_BOUNDS);
@@ -436,8 +452,7 @@ TEST_CASE(test_lz4_corrupted_data) {
     uint8_t garbage[32] = {0xff, 0xfe, 0xfd, 0xfc, 0x00, 0x01, 0x02, 0x03};
 
     LOG("Setting up minimal test context");
-    setup_minimal_test_context(&schema, entries, &ctx, values, defaults,
-                               str_pool, sizeof(str_pool), str_offsets, 1);
+    setup_minimal_test_context(&schema, entries, &ctx, values, defaults, str_pool, sizeof(str_pool), str_offsets, 1);
 
     LOG("Testing cfgpack_pagein_lz4() with garbage data:");
     LOG_HEX("Garbage input", garbage, sizeof(garbage));
@@ -470,15 +485,16 @@ TEST_CASE(test_heatshrink_basic) {
     LOG("Compressing with heatshrink...");
     CHECK(compress_with_heatshrink(msgpack_buf, msgpack_len, compressed_buf, BUF_SIZE, &compressed_len) == 0);
     CHECK(compressed_len > 0);
-    LOG("Compressed: %zu -> %zu bytes (%.1f%% of original)", 
-        msgpack_len, compressed_len, (double)compressed_len / msgpack_len * 100);
-    CHECK(compressed_len < msgpack_len);  /* Verify actual compression occurred */
+    LOG("Compressed: %zu -> %zu bytes (%.1f%% of original)",
+        msgpack_len,
+        compressed_len,
+        (double)compressed_len / msgpack_len * 100);
+    CHECK(compressed_len < msgpack_len); /* Verify actual compression occurred */
     LOG("Compression verified: output smaller than input");
     LOG_HEX("Heatshrink compressed (first 64 bytes)", compressed_buf, compressed_len > 64 ? 64 : compressed_len);
 
     LOG("Setting up test context with 15-entry schema");
-    setup_large_test_context(&schema, entries, &ctx, values, defaults,
-                             str_pool, sizeof(str_pool), str_offsets, 5);
+    setup_large_test_context(&schema, entries, &ctx, values, defaults, str_pool, sizeof(str_pool), str_offsets, 5);
 
     LOG("Calling cfgpack_pagein_heatshrink() to decompress and load...");
     err = cfgpack_pagein_heatshrink(&ctx, compressed_buf, compressed_len);
@@ -545,8 +561,7 @@ TEST_CASE(test_heatshrink_null_args) {
     uint16_t str_offsets[1];
 
     LOG("Setting up minimal test context");
-    setup_minimal_test_context(&schema, entries, &ctx, values, defaults,
-                               str_pool, sizeof(str_pool), str_offsets, 1);
+    setup_minimal_test_context(&schema, entries, &ctx, values, defaults, str_pool, sizeof(str_pool), str_offsets, 1);
 
     LOG("Testing cfgpack_pagein_heatshrink(NULL, data, 10)");
     CHECK(cfgpack_pagein_heatshrink(NULL, compressed_buf, 10) == CFGPACK_ERR_DECODE);
@@ -573,8 +588,7 @@ TEST_CASE(test_heatshrink_empty_input) {
     uint8_t empty[1] = {0};
 
     LOG("Setting up minimal test context");
-    setup_minimal_test_context(&schema, entries, &ctx, values, defaults,
-                               str_pool, sizeof(str_pool), str_offsets, 1);
+    setup_minimal_test_context(&schema, entries, &ctx, values, defaults, str_pool, sizeof(str_pool), str_offsets, 1);
 
     LOG("Testing cfgpack_pagein_heatshrink() with empty input (len=0)");
     /* heatshrink with 0 bytes will fail to decode any valid msgpack */
@@ -621,8 +635,7 @@ TEST_CASE(test_roundtrip_both_algorithms) {
     LOG("Both algorithms achieved compression (output < input)");
 
     LOG("Testing LZ4 decompression and load...");
-    setup_large_test_context(&schema, entries, &ctx, values, defaults,
-                             str_pool, sizeof(str_pool), str_offsets, 5);
+    setup_large_test_context(&schema, entries, &ctx, values, defaults, str_pool, sizeof(str_pool), str_offsets, 5);
     CHECK(cfgpack_pagein_lz4(&ctx, compressed_buf, lz4_len, msgpack_len) == CFGPACK_OK);
     cfgpack_value_t v;
     const char *str_out;
@@ -637,8 +650,7 @@ TEST_CASE(test_roundtrip_both_algorithms) {
     memset(values, 0, sizeof(values));
     memset(ctx.present, 0, sizeof(ctx.present));
     memset(str_pool, 0, sizeof(str_pool));
-    setup_large_test_context(&schema, entries, &ctx, values, defaults,
-                             str_pool, sizeof(str_pool), str_offsets, 5);
+    setup_large_test_context(&schema, entries, &ctx, values, defaults, str_pool, sizeof(str_pool), str_offsets, 5);
     CHECK(cfgpack_pagein_heatshrink(&ctx, scratch_buf, hs_len) == CFGPACK_OK);
     CHECK(cfgpack_get(&ctx, 1, &v) == CFGPACK_OK && v.v.u64 == 255);
     CHECK(cfgpack_get_str(&ctx, 11, &str_out, &str_len) == CFGPACK_OK && str_len == 41);

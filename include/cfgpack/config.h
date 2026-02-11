@@ -16,7 +16,7 @@
 #ifndef CFGPACK_CONFIG_H
 #define CFGPACK_CONFIG_H
 
-#include <limits.h>  /* CHAR_BIT */
+#include <limits.h> /* CHAR_BIT */
 
 #ifndef CFGPACK_HOSTED
   #define CFGPACK_EMBEDDED 1
@@ -36,7 +36,7 @@
  * Override by defining CFGPACK_MAX_ENTRIES before including cfgpack headers.
  */
 #ifndef CFGPACK_MAX_ENTRIES
-#define CFGPACK_MAX_ENTRIES 128
+  #define CFGPACK_MAX_ENTRIES 128
 #endif
 
 /**

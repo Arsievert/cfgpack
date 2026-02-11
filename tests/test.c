@@ -2,7 +2,7 @@
 
 /* ANSI color codes */
 #define COLOR_GREEN "\033[32m"
-#define COLOR_RED   "\033[31m"
+#define COLOR_RED "\033[31m"
 #define COLOR_RESET "\033[0m"
 
 test_result_t test_case_result(const char *name, test_result_t r) {

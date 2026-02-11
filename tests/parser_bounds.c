@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 
-static char scratch[16384];  /* Scratch buffer for file parsing */
+static char scratch[16384]; /* Scratch buffer for file parsing */
 
 static test_result_t write_file(const char *path, const char *body) {
     FILE *f = fopen(path, "w");
@@ -314,7 +314,9 @@ TEST_CASE(test_unsorted_input_sorted_output) {
     cfgpack_err_t rc;
 
     LOG("Creating test file with unsorted indices: 3, 1, 2");
-    CHECK(write_file(path, "demo 1\n3 c u8 0  # third by index\n1 a u8 0  # first by index\n2 b u8 0  # second by index\n") == TEST_OK);
+    CHECK(write_file(path,
+                     "demo 1\n3 c u8 0  # third by index\n1 a u8 0  # first by index\n2 b u8 0  # second by index\n") ==
+          TEST_OK);
     LOG("File order: index 3, then 1, then 2");
 
     LOG("Parsing file");
@@ -534,7 +536,9 @@ static void print_file(const char *label, const char *path) {
     while (fgets(line, sizeof(line), f)) {
         /* Remove trailing newline for cleaner log output */
         size_t len = strlen(line);
-        if (len > 0 && line[len-1] == '\n') line[len-1] = '\0';
+        if (len > 0 && line[len - 1] == '\n') {
+            line[len - 1] = '\0';
+        }
         LOG("  %s", line);
     }
     fclose(f);
@@ -625,32 +629,24 @@ TEST_CASE(test_json_roundtrip) {
 
         if (entries1[i].has_default) {
             switch (entries1[i].type) {
-                case CFGPACK_TYPE_U8:
-                case CFGPACK_TYPE_U16:
-                case CFGPACK_TYPE_U32:
-                case CFGPACK_TYPE_U64:
-                    CHECK(defaults1[i].v.u64 == defaults2[i].v.u64);
-                    break;
-                case CFGPACK_TYPE_I8:
-                case CFGPACK_TYPE_I16:
-                case CFGPACK_TYPE_I32:
-                case CFGPACK_TYPE_I64:
-                    CHECK(defaults1[i].v.i64 == defaults2[i].v.i64);
-                    break;
-                case CFGPACK_TYPE_F32:
-                    CHECK(defaults1[i].v.f32 == defaults2[i].v.f32);
-                    break;
-                case CFGPACK_TYPE_F64:
-                    CHECK(defaults1[i].v.f64 == defaults2[i].v.f64);
-                    break;
-                case CFGPACK_TYPE_STR:
-                    CHECK(defaults1[i].v.str.len == defaults2[i].v.str.len);
-                    CHECK(strcmp(defaults1[i].v.str.data, defaults2[i].v.str.data) == 0);
-                    break;
-                case CFGPACK_TYPE_FSTR:
-                    CHECK(defaults1[i].v.fstr.len == defaults2[i].v.fstr.len);
-                    CHECK(strcmp(defaults1[i].v.fstr.data, defaults2[i].v.fstr.data) == 0);
-                    break;
+            case CFGPACK_TYPE_U8:
+            case CFGPACK_TYPE_U16:
+            case CFGPACK_TYPE_U32:
+            case CFGPACK_TYPE_U64: CHECK(defaults1[i].v.u64 == defaults2[i].v.u64); break;
+            case CFGPACK_TYPE_I8:
+            case CFGPACK_TYPE_I16:
+            case CFGPACK_TYPE_I32:
+            case CFGPACK_TYPE_I64: CHECK(defaults1[i].v.i64 == defaults2[i].v.i64); break;
+            case CFGPACK_TYPE_F32: CHECK(defaults1[i].v.f32 == defaults2[i].v.f32); break;
+            case CFGPACK_TYPE_F64: CHECK(defaults1[i].v.f64 == defaults2[i].v.f64); break;
+            case CFGPACK_TYPE_STR:
+                CHECK(defaults1[i].v.str.len == defaults2[i].v.str.len);
+                CHECK(strcmp(defaults1[i].v.str.data, defaults2[i].v.str.data) == 0);
+                break;
+            case CFGPACK_TYPE_FSTR:
+                CHECK(defaults1[i].v.fstr.len == defaults2[i].v.fstr.len);
+                CHECK(strcmp(defaults1[i].v.fstr.data, defaults2[i].v.fstr.data) == 0);
+                break;
             }
         }
     }
@@ -677,18 +673,17 @@ TEST_CASE(test_json_parse_direct) {
     cfgpack_err_t rc;
 
     LOG("Creating JSON schema file");
-    const char *json_content =
-        "{\n"
-        "  \"name\": \"test\",\n"
-        "  \"version\": 42,\n"
-        "  \"entries\": [\n"
-        "    {\"index\": 1, \"name\": \"speed\", \"type\": \"u16\", \"value\": 100},\n"
-        "    {\"index\": 2, \"name\": \"name\", \"type\": \"fstr\", \"value\": \"hello\"},\n"
-        "    {\"index\": 3, \"name\": \"temp\", \"type\": \"i8\", \"value\": -10},\n"
-        "    {\"index\": 4, \"name\": \"ratio\", \"type\": \"f32\", \"value\": 3.14},\n"
-        "    {\"index\": 5, \"name\": \"desc\", \"type\": \"str\", \"value\": null}\n"
-        "  ]\n"
-        "}\n";
+    const char *json_content = "{\n"
+                               "  \"name\": \"test\",\n"
+                               "  \"version\": 42,\n"
+                               "  \"entries\": [\n"
+                               "    {\"index\": 1, \"name\": \"speed\", \"type\": \"u16\", \"value\": 100},\n"
+                               "    {\"index\": 2, \"name\": \"name\", \"type\": \"fstr\", \"value\": \"hello\"},\n"
+                               "    {\"index\": 3, \"name\": \"temp\", \"type\": \"i8\", \"value\": -10},\n"
+                               "    {\"index\": 4, \"name\": \"ratio\", \"type\": \"f32\", \"value\": 3.14},\n"
+                               "    {\"index\": 5, \"name\": \"desc\", \"type\": \"str\", \"value\": null}\n"
+                               "  ]\n"
+                               "}\n";
 
     CHECK(write_file(json_path, json_content) == TEST_OK);
     print_file("Input JSON", json_path);
@@ -786,14 +781,13 @@ TEST_CASE(test_reserved_index_zero_json) {
     cfgpack_err_t rc;
 
     LOG("Creating JSON file with index 0 (reserved)");
-    const char *json_content =
-        "{\n"
-        "  \"name\": \"test\",\n"
-        "  \"version\": 1,\n"
-        "  \"entries\": [\n"
-        "    {\"index\": 0, \"name\": \"foo\", \"type\": \"u8\", \"value\": 0}\n"
-        "  ]\n"
-        "}\n";
+    const char *json_content = "{\n"
+                               "  \"name\": \"test\",\n"
+                               "  \"version\": 1,\n"
+                               "  \"entries\": [\n"
+                               "    {\"index\": 0, \"name\": \"foo\", \"type\": \"u8\", \"value\": 0}\n"
+                               "  ]\n"
+                               "}\n";
 
     CHECK(write_file(json_path, json_content) == TEST_OK);
     print_file("Input JSON", json_path);

@@ -116,6 +116,16 @@ $(COMPRESS_TOOL): $(COMPRESS_SRC) $(COMPRESS_DEPS)
 	@echo "CC $(COMPRESS_TOOL)"
 	@$(CC) $(CFLAGS_HOSTED) -Ithird_party/lz4 -Ithird_party/heatshrink -o $@ $(COMPRESS_SRC) $(COMPRESS_DEPS)
 
-.PHONY: all tests clean clean-docs help docs tools
+# Formatting
+CLANG_FORMAT ?= clang-format
+FORMAT_FILES := $(shell find src include tests examples tools -name '*.c' -o -name '*.h' | grep -v third_party)
+
+format: ## Auto-format all source files with clang-format
+	$(CLANG_FORMAT) -i $(FORMAT_FILES)
+
+format-check: ## Check formatting without modifying files
+	$(CLANG_FORMAT) --dry-run --Werror $(FORMAT_FILES)
+
+.PHONY: all tests clean clean-docs help docs tools format format-check
 
 -include $(DEPS)

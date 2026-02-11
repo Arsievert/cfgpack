@@ -18,7 +18,14 @@ TEST_CASE(test_parse_ok) {
     cfgpack_err_t rc;
 
     LOG("Parsing tests/data/sample.map");
-    rc = cfgpack_parse_schema_file("tests/data/sample.map", &schema, entries, 128, defaults, scratch, sizeof(scratch), &err);
+    rc = cfgpack_parse_schema_file("tests/data/sample.map",
+                                   &schema,
+                                   entries,
+                                   128,
+                                   defaults,
+                                   scratch,
+                                   sizeof(scratch),
+                                   &err);
     CHECK(rc == CFGPACK_OK);
     LOG("Parse succeeded");
 
@@ -32,7 +39,7 @@ TEST_CASE(test_parse_ok) {
     LOG("Verifying first entry:");
     LOG("  index = %u (expected: 1)", schema.entries[0].index);
     LOG("  type = %d (expected: %d = U8)", schema.entries[0].type, CFGPACK_TYPE_U8);
-    CHECK(schema.entries[0].index == 1);  /* Index 0 is reserved for schema name */
+    CHECK(schema.entries[0].index == 1); /* Index 0 is reserved for schema name */
     CHECK(schema.entries[0].type == CFGPACK_TYPE_U8);
 
     LOG("Verifying last entry (index 14):");

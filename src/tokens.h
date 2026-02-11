@@ -28,8 +28,8 @@ typedef struct tokens_struct {
     bool owns;
 } tokens_t;
 
-int  tokens_create(tokens_t *, uint16_t, char **);
-int  tokens_find(tokens_t *, char *, const char *, uint16_t, size_t *);
-int  tokens_destroy(tokens_t *);
+int tokens_create(tokens_t *, uint16_t, char **);
+int tokens_find(tokens_t *, char *, const char *, uint16_t, size_t *);
+int tokens_destroy(tokens_t *);
 
 #endif /* _TOKENS_H_ */

@@ -13,9 +13,7 @@
 
 #include "tokens.h"
 
-int
-tokens_create(tokens_t *tokens, uint16_t n, char **provided)
-{
+int tokens_create(tokens_t *tokens, uint16_t n, char **provided) {
     tokens->max = 0;
     tokens->used = 0;
     tokens->owns = false;
@@ -42,9 +40,7 @@ tokens_create(tokens_t *tokens, uint16_t n, char **provided)
  * @param d NUL-terminated delimiter string.
  * @return 1 if delimiter, 0 otherwise.
  */
-static int
-_is_delimeter(char s, const char *d)
-{
+static int _is_delimeter(char s, const char *d) {
     int len;
 
     if (!d) {
@@ -72,16 +68,11 @@ _is_delimeter(char s, const char *d)
  * @param stop_offset  Optional offset where parsing stopped.
  * @return 0 on success; -1 on invalid args or capacity issues.
  */
-int
-tokens_find(tokens_t *tokens, char *input, const char *delimeters, uint16_t n_tokens, size_t *stop_offset)
-{
+int tokens_find(tokens_t *tokens, char *input, const char *delimeters, uint16_t n_tokens, size_t *stop_offset) {
     size_t len;
     bool new_token;
 
-    if ((!input) ||
-        (!delimeters) ||
-        (!n_tokens) ||
-        (!tokens->index)) {
+    if ((!input) || (!delimeters) || (!n_tokens) || (!tokens->index)) {
         return (-1);
     }
 
@@ -122,9 +113,7 @@ tokens_find(tokens_t *tokens, char *input, const char *delimeters, uint16_t n_to
     return (0);
 }
 
-int
-tokens_destroy(tokens_t *tokens)
-{
+int tokens_destroy(tokens_t *tokens) {
     if (tokens->index && tokens->owns) {
         free(tokens->index);
     }

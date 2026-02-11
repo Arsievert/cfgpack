@@ -82,7 +82,9 @@ static int get_str_slot(const cfgpack_schema_t *schema, size_t entry_off) {
  */
 static void copy_string_default(cfgpack_ctx_t *ctx, size_t entry_off, const cfgpack_fat_value_t *fat) {
     int slot = get_str_slot(ctx->schema, entry_off);
-    if (slot < 0) return;
+    if (slot < 0) {
+        return;
+    }
 
     uint16_t offset = ctx->str_offsets[slot];
     char *dst = ctx->str_pool + offset;
@@ -104,10 +106,13 @@ static void copy_string_default(cfgpack_ctx_t *ctx, size_t entry_off, const cfgp
 
 cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx,
                            const cfgpack_schema_t *schema,
-                           cfgpack_value_t *values, size_t values_count,
+                           cfgpack_value_t *values,
+                           size_t values_count,
                            const cfgpack_fat_value_t *defaults,
-                           char *str_pool, size_t str_pool_cap,
-                           uint16_t *str_offsets, size_t str_offsets_count) {
+                           char *str_pool,
+                           size_t str_pool_cap,
+                           uint16_t *str_offsets,
+                           size_t str_offsets_count) {
     if (schema->entry_count > CFGPACK_MAX_ENTRIES) {
         return CFGPACK_ERR_BOUNDS;
     }
@@ -132,11 +137,15 @@ cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx,
     for (size_t i = 0; i < schema->entry_count; ++i) {
         cfgpack_type_t t = schema->entries[i].type;
         if (t == CFGPACK_TYPE_STR) {
-            if (str_slot >= str_offsets_count) return CFGPACK_ERR_BOUNDS;
+            if (str_slot >= str_offsets_count) {
+                return CFGPACK_ERR_BOUNDS;
+            }
             str_offsets[str_slot++] = (uint16_t)pool_offset;
             pool_offset += CFGPACK_STR_MAX + 1;
         } else if (t == CFGPACK_TYPE_FSTR) {
-            if (str_slot >= str_offsets_count) return CFGPACK_ERR_BOUNDS;
+            if (str_slot >= str_offsets_count) {
+                return CFGPACK_ERR_BOUNDS;
+            }
             str_offsets[str_slot++] = (uint16_t)pool_offset;
             pool_offset += CFGPACK_FSTR_MAX + 1;
         }
@@ -164,23 +173,14 @@ cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx,
                 case CFGPACK_TYPE_U8:
                 case CFGPACK_TYPE_U16:
                 case CFGPACK_TYPE_U32:
-                case CFGPACK_TYPE_U64:
-                    ctx->values[i].v.u64 = defaults[i].v.u64;
-                    break;
+                case CFGPACK_TYPE_U64: ctx->values[i].v.u64 = defaults[i].v.u64; break;
                 case CFGPACK_TYPE_I8:
                 case CFGPACK_TYPE_I16:
                 case CFGPACK_TYPE_I32:
-                case CFGPACK_TYPE_I64:
-                    ctx->values[i].v.i64 = defaults[i].v.i64;
-                    break;
-                case CFGPACK_TYPE_F32:
-                    ctx->values[i].v.f32 = defaults[i].v.f32;
-                    break;
-                case CFGPACK_TYPE_F64:
-                    ctx->values[i].v.f64 = defaults[i].v.f64;
-                    break;
-                default:
-                    break;
+                case CFGPACK_TYPE_I64: ctx->values[i].v.i64 = defaults[i].v.i64; break;
+                case CFGPACK_TYPE_F32: ctx->values[i].v.f32 = defaults[i].v.f32; break;
+                case CFGPACK_TYPE_F64: ctx->values[i].v.f64 = defaults[i].v.f64; break;
+                default: break;
                 }
             }
             cfgpack_presence_set(ctx, i);
@@ -216,23 +216,14 @@ void cfgpack_reset_to_defaults(cfgpack_ctx_t *ctx) {
                 case CFGPACK_TYPE_U8:
                 case CFGPACK_TYPE_U16:
                 case CFGPACK_TYPE_U32:
-                case CFGPACK_TYPE_U64:
-                    ctx->values[i].v.u64 = ctx->defaults[i].v.u64;
-                    break;
+                case CFGPACK_TYPE_U64: ctx->values[i].v.u64 = ctx->defaults[i].v.u64; break;
                 case CFGPACK_TYPE_I8:
                 case CFGPACK_TYPE_I16:
                 case CFGPACK_TYPE_I32:
-                case CFGPACK_TYPE_I64:
-                    ctx->values[i].v.i64 = ctx->defaults[i].v.i64;
-                    break;
-                case CFGPACK_TYPE_F32:
-                    ctx->values[i].v.f32 = ctx->defaults[i].v.f32;
-                    break;
-                case CFGPACK_TYPE_F64:
-                    ctx->values[i].v.f64 = ctx->defaults[i].v.f64;
-                    break;
-                default:
-                    break;
+                case CFGPACK_TYPE_I64: ctx->values[i].v.i64 = ctx->defaults[i].v.i64; break;
+                case CFGPACK_TYPE_F32: ctx->values[i].v.f32 = ctx->defaults[i].v.f32; break;
+                case CFGPACK_TYPE_F64: ctx->values[i].v.f64 = ctx->defaults[i].v.f64; break;
+                default: break;
                 }
             }
             cfgpack_presence_set(ctx, i);
@@ -334,18 +325,28 @@ cfgpack_err_t cfgpack_set_str(cfgpack_ctx_t *ctx, uint16_t index, const char *st
     const cfgpack_entry_t *entry;
     size_t off, len;
 
-    if (index == 0) return CFGPACK_ERR_RESERVED_INDEX;
+    if (index == 0) {
+        return CFGPACK_ERR_RESERVED_INDEX;
+    }
 
     entry = find_entry(ctx->schema, index);
-    if (!entry) return CFGPACK_ERR_MISSING;
-    if (entry->type != CFGPACK_TYPE_STR) return CFGPACK_ERR_TYPE_MISMATCH;
+    if (!entry) {
+        return CFGPACK_ERR_MISSING;
+    }
+    if (entry->type != CFGPACK_TYPE_STR) {
+        return CFGPACK_ERR_TYPE_MISMATCH;
+    }
 
     len = strlen(str);
-    if (len > CFGPACK_STR_MAX) return CFGPACK_ERR_STR_TOO_LONG;
+    if (len > CFGPACK_STR_MAX) {
+        return CFGPACK_ERR_STR_TOO_LONG;
+    }
 
     off = entry_offset(ctx->schema, entry);
     int slot = get_str_slot(ctx->schema, off);
-    if (slot < 0 || (size_t)slot >= ctx->str_offsets_count) return CFGPACK_ERR_BOUNDS;
+    if (slot < 0 || (size_t)slot >= ctx->str_offsets_count) {
+        return CFGPACK_ERR_BOUNDS;
+    }
 
     uint16_t pool_off = ctx->str_offsets[slot];
     char *dst = ctx->str_pool + pool_off;
@@ -364,18 +365,28 @@ cfgpack_err_t cfgpack_set_fstr(cfgpack_ctx_t *ctx, uint16_t index, const char *s
     const cfgpack_entry_t *entry;
     size_t off, len;
 
-    if (index == 0) return CFGPACK_ERR_RESERVED_INDEX;
+    if (index == 0) {
+        return CFGPACK_ERR_RESERVED_INDEX;
+    }
 
     entry = find_entry(ctx->schema, index);
-    if (!entry) return CFGPACK_ERR_MISSING;
-    if (entry->type != CFGPACK_TYPE_FSTR) return CFGPACK_ERR_TYPE_MISMATCH;
+    if (!entry) {
+        return CFGPACK_ERR_MISSING;
+    }
+    if (entry->type != CFGPACK_TYPE_FSTR) {
+        return CFGPACK_ERR_TYPE_MISMATCH;
+    }
 
     len = strlen(str);
-    if (len > CFGPACK_FSTR_MAX) return CFGPACK_ERR_STR_TOO_LONG;
+    if (len > CFGPACK_FSTR_MAX) {
+        return CFGPACK_ERR_STR_TOO_LONG;
+    }
 
     off = entry_offset(ctx->schema, entry);
     int slot = get_str_slot(ctx->schema, off);
-    if (slot < 0 || (size_t)slot >= ctx->str_offsets_count) return CFGPACK_ERR_BOUNDS;
+    if (slot < 0 || (size_t)slot >= ctx->str_offsets_count) {
+        return CFGPACK_ERR_BOUNDS;
+    }
 
     uint16_t pool_off = ctx->str_offsets[slot];
     char *dst = ctx->str_pool + pool_off;
@@ -392,13 +403,17 @@ cfgpack_err_t cfgpack_set_fstr(cfgpack_ctx_t *ctx, uint16_t index, const char *s
 
 cfgpack_err_t cfgpack_set_str_by_name(cfgpack_ctx_t *ctx, const char *name, const char *str) {
     const cfgpack_entry_t *entry = find_entry_by_name(ctx->schema, name);
-    if (!entry) return CFGPACK_ERR_MISSING;
+    if (!entry) {
+        return CFGPACK_ERR_MISSING;
+    }
     return cfgpack_set_str(ctx, entry->index, str);
 }
 
 cfgpack_err_t cfgpack_set_fstr_by_name(cfgpack_ctx_t *ctx, const char *name, const char *str) {
     const cfgpack_entry_t *entry = find_entry_by_name(ctx->schema, name);
-    if (!entry) return CFGPACK_ERR_MISSING;
+    if (!entry) {
+        return CFGPACK_ERR_MISSING;
+    }
     return cfgpack_set_fstr(ctx, entry->index, str);
 }
 
@@ -406,14 +421,22 @@ cfgpack_err_t cfgpack_get_str(const cfgpack_ctx_t *ctx, uint16_t index, const ch
     const cfgpack_entry_t *entry;
     size_t off;
 
-    if (index == 0) return CFGPACK_ERR_RESERVED_INDEX;
+    if (index == 0) {
+        return CFGPACK_ERR_RESERVED_INDEX;
+    }
 
     entry = find_entry(ctx->schema, index);
-    if (!entry) return CFGPACK_ERR_MISSING;
-    if (entry->type != CFGPACK_TYPE_STR) return CFGPACK_ERR_TYPE_MISMATCH;
+    if (!entry) {
+        return CFGPACK_ERR_MISSING;
+    }
+    if (entry->type != CFGPACK_TYPE_STR) {
+        return CFGPACK_ERR_TYPE_MISMATCH;
+    }
 
     off = entry_offset(ctx->schema, entry);
-    if (!cfgpack_presence_get(ctx, off)) return CFGPACK_ERR_MISSING;
+    if (!cfgpack_presence_get(ctx, off)) {
+        return CFGPACK_ERR_MISSING;
+    }
 
     *out = ctx->str_pool + ctx->values[off].v.str.offset;
     *len = ctx->values[off].v.str.len;
@@ -424,14 +447,22 @@ cfgpack_err_t cfgpack_get_fstr(const cfgpack_ctx_t *ctx, uint16_t index, const c
     const cfgpack_entry_t *entry;
     size_t off;
 
-    if (index == 0) return CFGPACK_ERR_RESERVED_INDEX;
+    if (index == 0) {
+        return CFGPACK_ERR_RESERVED_INDEX;
+    }
 
     entry = find_entry(ctx->schema, index);
-    if (!entry) return CFGPACK_ERR_MISSING;
-    if (entry->type != CFGPACK_TYPE_FSTR) return CFGPACK_ERR_TYPE_MISMATCH;
+    if (!entry) {
+        return CFGPACK_ERR_MISSING;
+    }
+    if (entry->type != CFGPACK_TYPE_FSTR) {
+        return CFGPACK_ERR_TYPE_MISMATCH;
+    }
 
     off = entry_offset(ctx->schema, entry);
-    if (!cfgpack_presence_get(ctx, off)) return CFGPACK_ERR_MISSING;
+    if (!cfgpack_presence_get(ctx, off)) {
+        return CFGPACK_ERR_MISSING;
+    }
 
     *out = ctx->str_pool + ctx->values[off].v.fstr.offset;
     *len = ctx->values[off].v.fstr.len;
@@ -440,13 +471,17 @@ cfgpack_err_t cfgpack_get_fstr(const cfgpack_ctx_t *ctx, uint16_t index, const c
 
 cfgpack_err_t cfgpack_get_str_by_name(const cfgpack_ctx_t *ctx, const char *name, const char **out, uint16_t *len) {
     const cfgpack_entry_t *entry = find_entry_by_name(ctx->schema, name);
-    if (!entry) return CFGPACK_ERR_MISSING;
+    if (!entry) {
+        return CFGPACK_ERR_MISSING;
+    }
     return cfgpack_get_str(ctx, entry->index, out, len);
 }
 
 cfgpack_err_t cfgpack_get_fstr_by_name(const cfgpack_ctx_t *ctx, const char *name, const char **out, uint8_t *len) {
     const cfgpack_entry_t *entry = find_entry_by_name(ctx->schema, name);
-    if (!entry) return CFGPACK_ERR_MISSING;
+    if (!entry) {
+        return CFGPACK_ERR_MISSING;
+    }
     return cfgpack_get_fstr(ctx, entry->index, out, len);
 }
 
@@ -461,33 +496,31 @@ uint32_t cfgpack_get_version(const cfgpack_ctx_t *ctx) {
 size_t cfgpack_get_size(const cfgpack_ctx_t *ctx) {
     size_t count = 0;
     for (size_t i = 0; i < ctx->schema->entry_count; ++i) {
-        if (cfgpack_presence_get(ctx, i)) count++;
+        if (cfgpack_presence_get(ctx, i)) {
+            count++;
+        }
     }
     return count;
 }
 
 #ifdef CFGPACK_HOSTED
-#include <stdio.h>
+  #include <stdio.h>
 
 static void print_value(const cfgpack_ctx_t *ctx, size_t entry_off) {
     const cfgpack_value_t *v = &ctx->values[entry_off];
     switch (v->type) {
-        case CFGPACK_TYPE_U8: printf("%u", (unsigned)v->v.u64); break;
-        case CFGPACK_TYPE_U16: printf("%u", (unsigned)v->v.u64); break;
-        case CFGPACK_TYPE_U32: printf("%u", (unsigned)v->v.u64); break;
-        case CFGPACK_TYPE_U64: printf("%llu", (unsigned long long)v->v.u64); break;
-        case CFGPACK_TYPE_I8: printf("%d", (int)v->v.i64); break;
-        case CFGPACK_TYPE_I16: printf("%d", (int)v->v.i64); break;
-        case CFGPACK_TYPE_I32: printf("%d", (int)v->v.i64); break;
-        case CFGPACK_TYPE_I64: printf("%lld", (long long)v->v.i64); break;
-        case CFGPACK_TYPE_F32: printf("%f", v->v.f32); break;
-        case CFGPACK_TYPE_F64: printf("%lf", v->v.f64); break;
-        case CFGPACK_TYPE_STR:
-            printf("%.*s", v->v.str.len, ctx->str_pool + v->v.str.offset);
-            break;
-        case CFGPACK_TYPE_FSTR:
-            printf("%.*s", v->v.fstr.len, ctx->str_pool + v->v.fstr.offset);
-            break;
+    case CFGPACK_TYPE_U8: printf("%u", (unsigned)v->v.u64); break;
+    case CFGPACK_TYPE_U16: printf("%u", (unsigned)v->v.u64); break;
+    case CFGPACK_TYPE_U32: printf("%u", (unsigned)v->v.u64); break;
+    case CFGPACK_TYPE_U64: printf("%llu", (unsigned long long)v->v.u64); break;
+    case CFGPACK_TYPE_I8: printf("%d", (int)v->v.i64); break;
+    case CFGPACK_TYPE_I16: printf("%d", (int)v->v.i64); break;
+    case CFGPACK_TYPE_I32: printf("%d", (int)v->v.i64); break;
+    case CFGPACK_TYPE_I64: printf("%lld", (long long)v->v.i64); break;
+    case CFGPACK_TYPE_F32: printf("%f", v->v.f32); break;
+    case CFGPACK_TYPE_F64: printf("%lf", v->v.f64); break;
+    case CFGPACK_TYPE_STR: printf("%.*s", v->v.str.len, ctx->str_pool + v->v.str.offset); break;
+    case CFGPACK_TYPE_FSTR: printf("%.*s", v->v.fstr.len, ctx->str_pool + v->v.fstr.offset); break;
     }
 }
 
@@ -510,7 +543,9 @@ cfgpack_err_t cfgpack_print(const cfgpack_ctx_t *ctx, uint16_t index) {
 
 cfgpack_err_t cfgpack_print_all(const cfgpack_ctx_t *ctx) {
     for (size_t i = 0; i < ctx->schema->entry_count; ++i) {
-        if (!cfgpack_presence_get(ctx, i)) continue;
+        if (!cfgpack_presence_get(ctx, i)) {
+            continue;
+        }
         const cfgpack_entry_t *e = &ctx->schema->entries[i];
         printf("[%u] %s = ", e->index, e->name);
         print_value(ctx, i);
