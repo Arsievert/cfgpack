@@ -79,10 +79,11 @@ vehicle 1
   - `msgpack.h` — minimal MessagePack buffer + encode/decode helpers.
   - `api.h` — main cfgpack runtime API (set/get/pagein/pageout/print/version/size).
   - `decompress.h` — optional LZ4/heatshrink decompression support.
+  - `io_file.h` — optional FILE*-based convenience wrappers for desktop/POSIX systems.
 - `src/` — library implementation (`core.c`, `io.c`, `msgpack.c`, `schema_parser.c`, `decompress.c`).
 - `tests/` — C test programs plus sample data under `tests/data/`.
 - `tools/` — CLI tools source (`cfgpack-compress.c` for LZ4/heatshrink compression).
-- `examples/` — complete usage examples (`datalogger/`, `sensor_hub/`).
+- `examples/` — complete usage examples (`allocate-once/`, `datalogger/`, `sensor_hub/`).
 - `third_party/` — vendored dependencies (`lz4/`, `heatshrink/`).
 - `Makefile` — builds `build/out/libcfgpack.a`, test binaries, and tools.
 
@@ -117,18 +118,26 @@ Output:
 ```
 Running tests...
 
-  basic:         5/5 passed
+  basic:         4/4 passed
   decompress:    8/8 passed
   parser_bounds: 23/23 passed
   parser:        3/3 passed
   runtime:       21/21 passed
 
-TOTAL: 60/60 passed
+TOTAL: 59/59 passed
 ```
 
 ## Examples
 
-Two complete examples are provided in the `examples/` directory:
+Three complete examples are provided in the `examples/` directory:
+
+### allocate-once
+
+Dynamic allocation example demonstrating two-phase init: a discovery parse to learn sizes, then right-sized `malloc`. Uses `cfgpack_schema_get_sizing()` to compute exact buffer requirements.
+
+```bash
+cd examples/allocate-once && make run
+```
 
 ### datalogger
 

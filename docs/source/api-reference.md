@@ -25,11 +25,6 @@ typedef enum {
 
 ## Values
 
-Two value types are provided:
-
-- **`cfgpack_value_t`**: Compact runtime storage (~16 bytes). Strings use pointer + length (data stored in string pool).
-- **`cfgpack_fat_value_t`**: Inline string storage (~72 bytes). Used for parsing schema defaults.
-
 ```c
 #include "cfgpack/value.h"
 
@@ -43,7 +38,7 @@ typedef enum {
     CFGPACK_TYPE_STR, CFGPACK_TYPE_FSTR
 } cfgpack_type_t;
 
-/* Compact runtime value (strings use pointer + length) */
+/* Compact runtime value (strings use offset + length into external pool) */
 typedef struct {
     cfgpack_type_t type;
     union {
@@ -51,24 +46,13 @@ typedef struct {
         int64_t i64;
         float   f32;
         double  f64;
-        struct { const char *data; uint16_t len; } str;
-        struct { const char *data; uint8_t len; } fstr;
+        struct { uint16_t offset; uint16_t len; } str;
+        struct { uint16_t offset; uint8_t len; uint8_t _pad; } fstr;
     } v;
 } cfgpack_value_t;
-
-/* Fat value with inline string storage (for schema defaults) */
-typedef struct {
-    cfgpack_type_t type;
-    union {
-        uint64_t u64;
-        int64_t i64;
-        float   f32;
-        double  f64;
-        struct { uint16_t len; char data[CFGPACK_STR_MAX + 1]; } str;
-        struct { uint8_t  len; char data[CFGPACK_FSTR_MAX + 1]; } fstr;
-    } v;
-} cfgpack_fat_value_t;
 ```
+
+String data is stored in a caller-owned pool buffer; the `str` and `fstr` union members contain an offset into that pool and the current length.
 
 ## Schema
 
@@ -89,25 +73,54 @@ typedef struct {
     size_t entry_count;
 } cfgpack_schema_t;
 
+typedef struct {
+    char message[128];
+    size_t line;
+} cfgpack_parse_error_t;
+```
+
+### Schema Sizing
+
+Use `cfgpack_schema_get_sizing()` after parsing to determine how much memory to allocate for the string pool and offsets array:
+
+```c
+typedef struct {
+    size_t str_pool_size; /* Total bytes needed for string pool */
+    size_t str_count;     /* Number of str-type entries */
+    size_t fstr_count;    /* Number of fstr-type entries */
+} cfgpack_schema_sizing_t;
+
+cfgpack_err_t cfgpack_schema_get_sizing(const cfgpack_schema_t *schema,
+                                        cfgpack_schema_sizing_t *out);
+```
+
+### Parsing and Serialization
+
+Default values are written directly into the caller-provided `values` array and `str_pool` during parsing. There is no separate defaults storage.
+
+```c
 /* Parse schema from .map buffer */
 cfgpack_err_t cfgpack_parse_schema(const char *data, size_t data_len,
                                    cfgpack_schema_t *out, cfgpack_entry_t *entries,
-                                   size_t max_entries, cfgpack_fat_value_t *defaults,
+                                   size_t max_entries, cfgpack_value_t *values,
+                                   char *str_pool, size_t str_pool_cap,
+                                   uint16_t *str_offsets, size_t str_offsets_count,
                                    cfgpack_parse_error_t *err);
 
 /* Parse schema from JSON buffer */
 cfgpack_err_t cfgpack_schema_parse_json(const char *data, size_t data_len,
                                         cfgpack_schema_t *out, cfgpack_entry_t *entries,
-                                        size_t max_entries, cfgpack_fat_value_t *defaults,
+                                        size_t max_entries, cfgpack_value_t *values,
+                                        char *str_pool, size_t str_pool_cap,
+                                        uint16_t *str_offsets, size_t str_offsets_count,
+                                        cfgpack_parse_error_t *err);
+
+/* Write schema and current values to JSON buffer */
+cfgpack_err_t cfgpack_schema_write_json(const cfgpack_ctx_t *ctx,
+                                        char *out, size_t out_cap, size_t *out_len,
                                         cfgpack_parse_error_t *err);
 
 void cfgpack_schema_free(cfgpack_schema_t *schema); /* no-op for caller-owned arrays */
-
-/* Write schema to JSON buffer */
-cfgpack_err_t cfgpack_schema_write_json(const cfgpack_schema_t *schema,
-                                        const cfgpack_fat_value_t *defaults,
-                                        char *out, size_t out_cap, size_t *out_len,
-                                        cfgpack_parse_error_t *err);
 ```
 
 ### JSON Schema Format
@@ -136,15 +149,14 @@ Schemas can be read from and written to JSON for interoperability with other too
 ```c
 #include "cfgpack/api.h"
 
-/* Initialize runtime context. Presence bitmap is embedded in cfgpack_ctx_t
- * (sized by CFGPACK_MAX_ENTRIES, default 128). */
+/* Initialize runtime context. The values and string pool should already
+ * contain defaults from schema parsing. Presence bitmap is embedded in
+ * cfgpack_ctx_t (sized by CFGPACK_MAX_ENTRIES, default 128). */
 cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx, const cfgpack_schema_t *schema,
                            cfgpack_value_t *values, size_t values_count,
-                           const cfgpack_fat_value_t *defaults,
                            char *str_pool, size_t str_pool_cap,
                            uint16_t *str_offsets, size_t str_offsets_count);
 void          cfgpack_free(cfgpack_ctx_t *ctx);
-void          cfgpack_reset_to_defaults(cfgpack_ctx_t *ctx);
 
 cfgpack_err_t cfgpack_set(cfgpack_ctx_t *ctx, uint16_t index, const cfgpack_value_t *value);
 cfgpack_err_t cfgpack_get(const cfgpack_ctx_t *ctx, uint16_t index, cfgpack_value_t *out_value);
@@ -152,9 +164,7 @@ cfgpack_err_t cfgpack_set_by_name(cfgpack_ctx_t *ctx, const char *name, const cf
 cfgpack_err_t cfgpack_get_by_name(const cfgpack_ctx_t *ctx, const char *name, cfgpack_value_t *out_value);
 
 cfgpack_err_t cfgpack_pageout(const cfgpack_ctx_t *ctx, uint8_t *out, size_t out_cap, size_t *out_len);
-cfgpack_err_t cfgpack_pageout_file(const cfgpack_ctx_t *ctx, const char *path, uint8_t *scratch, size_t scratch_cap);
 cfgpack_err_t cfgpack_pagein_buf(cfgpack_ctx_t *ctx, const uint8_t *data, size_t len);
-cfgpack_err_t cfgpack_pagein_file(cfgpack_ctx_t *ctx, const char *path, uint8_t *scratch, size_t scratch_cap);
 
 /* Schema versioning and remapping */
 cfgpack_err_t cfgpack_peek_name(const uint8_t *data, size_t len, char *out_name, size_t out_cap);
@@ -180,8 +190,8 @@ cfgpack_set_u16(ctx, index, val)   cfgpack_set_i16(ctx, index, val)
 cfgpack_set_u32(ctx, index, val)   cfgpack_set_i32(ctx, index, val)
 cfgpack_set_u64(ctx, index, val)   cfgpack_set_i64(ctx, index, val)
 cfgpack_set_f32(ctx, index, val)   cfgpack_set_f64(ctx, index, val)
-cfgpack_set_str(ctx, index, str, len)
-cfgpack_set_fstr(ctx, index, str, len)
+cfgpack_set_str(ctx, index, str)
+cfgpack_set_fstr(ctx, index, str)
 ```
 
 ### Setters by name
@@ -192,8 +202,8 @@ cfgpack_set_u16_by_name(ctx, name, val)   cfgpack_set_i16_by_name(ctx, name, val
 cfgpack_set_u32_by_name(ctx, name, val)   cfgpack_set_i32_by_name(ctx, name, val)
 cfgpack_set_u64_by_name(ctx, name, val)   cfgpack_set_i64_by_name(ctx, name, val)
 cfgpack_set_f32_by_name(ctx, name, val)   cfgpack_set_f64_by_name(ctx, name, val)
-cfgpack_set_str_by_name(ctx, name, str, len)
-cfgpack_set_fstr_by_name(ctx, name, str, len)
+cfgpack_set_str_by_name(ctx, name, str)
+cfgpack_set_fstr_by_name(ctx, name, str)
 ```
 
 ### Getters by index
@@ -224,7 +234,6 @@ cfgpack_get_fstr_by_name(ctx, name, &ptr, &len)
 
 ```c
 cfgpack_entry_t entries[128];
-cfgpack_fat_value_t defaults[128];
 cfgpack_schema_t schema;
 cfgpack_parse_error_t err;
 cfgpack_value_t values[128];
@@ -232,8 +241,13 @@ char str_pool[256];
 uint16_t str_offsets[128];
 uint8_t scratch[4096];
 
-cfgpack_parse_schema(map_data, map_len, &schema, entries, 128, defaults, &err);
-cfgpack_init(&ctx, &schema, values, 128, defaults,
+/* Parse schema — defaults are written directly into values[] and str_pool[] */
+cfgpack_parse_schema(map_data, map_len, &schema, entries, 128,
+                     values, str_pool, sizeof(str_pool), str_offsets, 128, &err);
+
+/* Initialize context — values and str_pool already contain defaults from parsing */
+cfgpack_ctx_t ctx;
+cfgpack_init(&ctx, &schema, values, 128,
              str_pool, sizeof(str_pool), str_offsets, 128);
 // At this point, entries with defaults are already present and populated
 // Presence bitmap is embedded in ctx (no separate allocation needed)
@@ -246,7 +260,7 @@ cfgpack_set_u16_by_name(&ctx, "maxsp", 100);
 const char *model;
 uint8_t model_len;
 cfgpack_get_fstr_by_name(&ctx, "model", &model, &model_len);
-cfgpack_set_fstr_by_name(&ctx, "model", "MX600", 5);
+cfgpack_set_fstr_by_name(&ctx, "model", "MX600");
 
 // Using generic API (for dynamic type handling):
 cfgpack_value_t v;
@@ -254,8 +268,50 @@ cfgpack_get_by_name(&ctx, "maxsp", &v);
 v.v.u64 = 120;
 cfgpack_set_by_name(&ctx, "maxsp", &v);
 
+size_t len;
 cfgpack_pageout(&ctx, scratch, sizeof(scratch), &len);
 cfgpack_pagein_buf(&ctx, scratch, len);
+```
+
+## File I/O Wrappers (Optional)
+
+These functions use `FILE*` operations and are provided for convenience on desktop/POSIX systems. For embedded systems without file I/O, use the buffer-based functions in `api.h` and `schema.h` instead. To use these, compile and link `src/io_file.c` with your project.
+
+```c
+#include "cfgpack/io_file.h"
+
+/* Parse a .map schema from a file */
+cfgpack_err_t cfgpack_parse_schema_file(const char *path,
+                                        cfgpack_schema_t *out_schema,
+                                        cfgpack_entry_t *entries, size_t max_entries,
+                                        cfgpack_value_t *values,
+                                        char *str_pool, size_t str_pool_cap,
+                                        uint16_t *str_offsets, size_t str_offsets_count,
+                                        char *scratch, size_t scratch_cap,
+                                        cfgpack_parse_error_t *err);
+
+/* Parse a JSON schema from a file */
+cfgpack_err_t cfgpack_schema_parse_json_file(const char *path,
+                                             cfgpack_schema_t *out_schema,
+                                             cfgpack_entry_t *entries, size_t max_entries,
+                                             cfgpack_value_t *values,
+                                             char *str_pool, size_t str_pool_cap,
+                                             uint16_t *str_offsets, size_t str_offsets_count,
+                                             char *scratch, size_t scratch_cap,
+                                             cfgpack_parse_error_t *err);
+
+/* Write schema and values as JSON to a file */
+cfgpack_err_t cfgpack_schema_write_json_file(const cfgpack_ctx_t *ctx, const char *path,
+                                             char *scratch, size_t scratch_cap,
+                                             cfgpack_parse_error_t *err);
+
+/* Encode to a file using caller scratch buffer */
+cfgpack_err_t cfgpack_pageout_file(const cfgpack_ctx_t *ctx, const char *path,
+                                   uint8_t *scratch, size_t scratch_cap);
+
+/* Decode from a file using caller scratch buffer */
+cfgpack_err_t cfgpack_pagein_file(cfgpack_ctx_t *ctx, const char *path,
+                                  uint8_t *scratch, size_t scratch_cap);
 ```
 
 ## MessagePack Helpers (Internal-Facing)
@@ -284,4 +340,5 @@ cfgpack_err_t cfgpack_msgpack_decode_f32(cfgpack_reader_t *r, float *out);
 cfgpack_err_t cfgpack_msgpack_decode_f64(cfgpack_reader_t *r, double *out);
 cfgpack_err_t cfgpack_msgpack_decode_str(cfgpack_reader_t *r, const uint8_t **ptr, uint32_t *len);
 cfgpack_err_t cfgpack_msgpack_decode_map_header(cfgpack_reader_t *r, uint32_t *count);
+cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r);
 ```
