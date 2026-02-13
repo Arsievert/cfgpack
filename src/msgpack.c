@@ -1,5 +1,7 @@
 #include "cfgpack/msgpack.h"
 
+#include "cfgpack/config.h"
+
 #include <string.h>
 
 void cfgpack_buf_init(cfgpack_buf_t *buf, uint8_t *storage, size_t cap) {
@@ -360,215 +362,260 @@ cfgpack_err_t cfgpack_msgpack_decode_str(cfgpack_reader_t *r,
 }
 
 cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
-    if (r->pos >= r->len) {
-        return CFGPACK_ERR_DECODE;
-    }
-    uint8_t b = r->data[r->pos++];
+    /*
+     * Iterative msgpack value skipper with bounded stack usage.
+     *
+     * Instead of recursing for each nested container, we maintain an explicit
+     * stack of "values remaining to skip" counters.  When a container (map or
+     * array) is encountered, the number of child values is pushed; when a
+     * scalar is consumed, the top counter is decremented until the container
+     * is fully skipped.
+     *
+     * Stack budget: CFGPACK_SKIP_MAX_DEPTH * sizeof(uint32_t) bytes.
+     * Default 32 levels = 128 bytes, which is safe for embedded targets.
+     */
+    uint32_t depth = 0;
+    uint32_t remaining[CFGPACK_SKIP_MAX_DEPTH];
+    remaining[0] = 1; /* skip exactly one top-level value */
 
-    /* Positive fixint (0x00-0x7f) and negative fixint (0xe0-0xff) */
-    if (b <= 0x7f || b >= 0xe0) {
-        return CFGPACK_OK;
-    }
-
-    /* Fixstr (0xa0-0xbf): length in low 5 bits */
-    if ((b & 0xe0) == 0xa0) {
-        uint32_t len = b & 0x1f;
-        if (r->pos + len > r->len) {
-            return CFGPACK_ERR_DECODE;
-        }
-        r->pos += len;
-        return CFGPACK_OK;
-    }
-
-    /* Fixmap (0x80-0x8f): count in low 4 bits */
-    if ((b & 0xf0) == 0x80) {
-        uint32_t count = b & 0x0f;
-        for (uint32_t i = 0; i < count; i++) {
-            if (cfgpack_msgpack_skip_value(r) != CFGPACK_OK) {
-                return CFGPACK_ERR_DECODE; /* key */
-            }
-            if (cfgpack_msgpack_skip_value(r) != CFGPACK_OK) {
-                return CFGPACK_ERR_DECODE; /* value */
-            }
-        }
-        return CFGPACK_OK;
-    }
-
-    /* Fixarray (0x90-0x9f): count in low 4 bits */
-    if ((b & 0xf0) == 0x90) {
-        uint32_t count = b & 0x0f;
-        for (uint32_t i = 0; i < count; i++) {
-            if (cfgpack_msgpack_skip_value(r) != CFGPACK_OK) {
-                return CFGPACK_ERR_DECODE;
-            }
-        }
-        return CFGPACK_OK;
-    }
-
-    /* Handle other types by format byte */
-    switch (b) {
-    /* nil, false, true */
-    case 0xc0:
-    case 0xc2:
-    case 0xc3: return CFGPACK_OK;
-
-    /* bin 8, str 8 */
-    case 0xc4:
-    case 0xd9: {
+    do {
         if (r->pos >= r->len) {
             return CFGPACK_ERR_DECODE;
         }
-        uint8_t len = r->data[r->pos++];
-        if (r->pos + len > r->len) {
-            return CFGPACK_ERR_DECODE;
-        }
-        r->pos += len;
-        return CFGPACK_OK;
-    }
+        uint8_t b = r->data[r->pos++];
 
-    /* bin 16, str 16 */
-    case 0xc5:
-    case 0xda: {
-        if (r->pos + 2 > r->len) {
-            return CFGPACK_ERR_DECODE;
+        /* Positive fixint (0x00-0x7f) and negative fixint (0xe0-0xff) */
+        if (b <= 0x7f || b >= 0xe0) {
+            goto value_done;
         }
-        uint32_t len = ((uint32_t)r->data[r->pos] << 8) | r->data[r->pos + 1];
-        r->pos += 2;
-        if (r->pos + len > r->len) {
-            return CFGPACK_ERR_DECODE;
-        }
-        r->pos += len;
-        return CFGPACK_OK;
-    }
 
-    /* bin 32, str 32 */
-    case 0xc6:
-    case 0xdb: {
-        if (r->pos + 4 > r->len) {
-            return CFGPACK_ERR_DECODE;
-        }
-        uint32_t len = ((uint32_t)r->data[r->pos] << 24) |
-                       ((uint32_t)r->data[r->pos + 1] << 16) |
-                       ((uint32_t)r->data[r->pos + 2] << 8) |
-                       r->data[r->pos + 3];
-        r->pos += 4;
-        if (r->pos + len > r->len) {
-            return CFGPACK_ERR_DECODE;
-        }
-        r->pos += len;
-        return CFGPACK_OK;
-    }
-
-    /* float 32, uint 32, int 32 */
-    case 0xca:
-    case 0xce:
-    case 0xd2:
-        if (r->pos + 4 > r->len) {
-            return CFGPACK_ERR_DECODE;
-        }
-        r->pos += 4;
-        return CFGPACK_OK;
-
-    /* float 64, uint 64, int 64 */
-    case 0xcb:
-    case 0xcf:
-    case 0xd3:
-        if (r->pos + 8 > r->len) {
-            return CFGPACK_ERR_DECODE;
-        }
-        r->pos += 8;
-        return CFGPACK_OK;
-
-    /* uint 8, int 8 */
-    case 0xcc:
-    case 0xd0:
-        if (r->pos + 1 > r->len) {
-            return CFGPACK_ERR_DECODE;
-        }
-        r->pos += 1;
-        return CFGPACK_OK;
-
-    /* uint 16, int 16 */
-    case 0xcd:
-    case 0xd1:
-        if (r->pos + 2 > r->len) {
-            return CFGPACK_ERR_DECODE;
-        }
-        r->pos += 2;
-        return CFGPACK_OK;
-
-    /* array 16 */
-    case 0xdc: {
-        if (r->pos + 2 > r->len) {
-            return CFGPACK_ERR_DECODE;
-        }
-        uint32_t count = ((uint32_t)r->data[r->pos] << 8) | r->data[r->pos + 1];
-        r->pos += 2;
-        for (uint32_t i = 0; i < count; i++) {
-            if (cfgpack_msgpack_skip_value(r) != CFGPACK_OK) {
+        /* Fixstr (0xa0-0xbf): length in low 5 bits */
+        if ((b & 0xe0) == 0xa0) {
+            uint32_t len = b & 0x1f;
+            if (r->pos + len > r->len) {
                 return CFGPACK_ERR_DECODE;
             }
+            r->pos += len;
+            goto value_done;
         }
-        return CFGPACK_OK;
-    }
 
-    /* array 32 */
-    case 0xdd: {
-        if (r->pos + 4 > r->len) {
-            return CFGPACK_ERR_DECODE;
-        }
-        uint32_t count = ((uint32_t)r->data[r->pos] << 24) |
-                         ((uint32_t)r->data[r->pos + 1] << 16) |
-                         ((uint32_t)r->data[r->pos + 2] << 8) |
-                         r->data[r->pos + 3];
-        r->pos += 4;
-        for (uint32_t i = 0; i < count; i++) {
-            if (cfgpack_msgpack_skip_value(r) != CFGPACK_OK) {
+        /* Fixmap (0x80-0x8f): count in low 4 bits, each entry = 2 values */
+        if ((b & 0xf0) == 0x80) {
+            uint32_t count = (uint32_t)(b & 0x0f) * 2;
+            if (count == 0) {
+                goto value_done;
+            }
+            if (depth + 1 >= CFGPACK_SKIP_MAX_DEPTH) {
                 return CFGPACK_ERR_DECODE;
             }
+            remaining[depth + 1] = count;
+            depth++;
+            continue;
         }
-        return CFGPACK_OK;
-    }
 
-    /* map 16 */
-    case 0xde: {
-        if (r->pos + 2 > r->len) {
-            return CFGPACK_ERR_DECODE;
-        }
-        uint32_t count = ((uint32_t)r->data[r->pos] << 8) | r->data[r->pos + 1];
-        r->pos += 2;
-        for (uint32_t i = 0; i < count; i++) {
-            if (cfgpack_msgpack_skip_value(r) != CFGPACK_OK) {
+        /* Fixarray (0x90-0x9f): count in low 4 bits */
+        if ((b & 0xf0) == 0x90) {
+            uint32_t count = b & 0x0f;
+            if (count == 0) {
+                goto value_done;
+            }
+            if (depth + 1 >= CFGPACK_SKIP_MAX_DEPTH) {
                 return CFGPACK_ERR_DECODE;
             }
-            if (cfgpack_msgpack_skip_value(r) != CFGPACK_OK) {
-                return CFGPACK_ERR_DECODE;
-            }
+            remaining[depth + 1] = count;
+            depth++;
+            continue;
         }
-        return CFGPACK_OK;
-    }
 
-    /* map 32 */
-    case 0xdf: {
-        if (r->pos + 4 > r->len) {
-            return CFGPACK_ERR_DECODE;
-        }
-        uint32_t count = ((uint32_t)r->data[r->pos] << 24) |
-                         ((uint32_t)r->data[r->pos + 1] << 16) |
-                         ((uint32_t)r->data[r->pos + 2] << 8) |
-                         r->data[r->pos + 3];
-        r->pos += 4;
-        for (uint32_t i = 0; i < count; i++) {
-            if (cfgpack_msgpack_skip_value(r) != CFGPACK_OK) {
-                return CFGPACK_ERR_DECODE;
-            }
-            if (cfgpack_msgpack_skip_value(r) != CFGPACK_OK) {
-                return CFGPACK_ERR_DECODE;
-            }
-        }
-        return CFGPACK_OK;
-    }
+        /* Handle other types by format byte */
+        switch (b) {
+        /* nil, false, true */
+        case 0xc0:
+        case 0xc2:
+        case 0xc3: goto value_done;
 
-    default: return CFGPACK_ERR_DECODE;
-    }
+        /* bin 8, str 8 */
+        case 0xc4:
+        case 0xd9: {
+            if (r->pos >= r->len) {
+                return CFGPACK_ERR_DECODE;
+            }
+            uint8_t len = r->data[r->pos++];
+            if (r->pos + len > r->len) {
+                return CFGPACK_ERR_DECODE;
+            }
+            r->pos += len;
+            goto value_done;
+        }
+
+        /* bin 16, str 16 */
+        case 0xc5:
+        case 0xda: {
+            if (r->pos + 2 > r->len) {
+                return CFGPACK_ERR_DECODE;
+            }
+            uint32_t len =
+                ((uint32_t)r->data[r->pos] << 8) | r->data[r->pos + 1];
+            r->pos += 2;
+            if (r->pos + len > r->len) {
+                return CFGPACK_ERR_DECODE;
+            }
+            r->pos += len;
+            goto value_done;
+        }
+
+        /* bin 32, str 32 */
+        case 0xc6:
+        case 0xdb: {
+            if (r->pos + 4 > r->len) {
+                return CFGPACK_ERR_DECODE;
+            }
+            uint32_t len = ((uint32_t)r->data[r->pos] << 24) |
+                           ((uint32_t)r->data[r->pos + 1] << 16) |
+                           ((uint32_t)r->data[r->pos + 2] << 8) |
+                           r->data[r->pos + 3];
+            r->pos += 4;
+            if (r->pos + len > r->len) {
+                return CFGPACK_ERR_DECODE;
+            }
+            r->pos += len;
+            goto value_done;
+        }
+
+        /* float 32, uint 32, int 32 */
+        case 0xca:
+        case 0xce:
+        case 0xd2:
+            if (r->pos + 4 > r->len) {
+                return CFGPACK_ERR_DECODE;
+            }
+            r->pos += 4;
+            goto value_done;
+
+        /* float 64, uint 64, int 64 */
+        case 0xcb:
+        case 0xcf:
+        case 0xd3:
+            if (r->pos + 8 > r->len) {
+                return CFGPACK_ERR_DECODE;
+            }
+            r->pos += 8;
+            goto value_done;
+
+        /* uint 8, int 8 */
+        case 0xcc:
+        case 0xd0:
+            if (r->pos + 1 > r->len) {
+                return CFGPACK_ERR_DECODE;
+            }
+            r->pos += 1;
+            goto value_done;
+
+        /* uint 16, int 16 */
+        case 0xcd:
+        case 0xd1:
+            if (r->pos + 2 > r->len) {
+                return CFGPACK_ERR_DECODE;
+            }
+            r->pos += 2;
+            goto value_done;
+
+        /* array 16 */
+        case 0xdc: {
+            if (r->pos + 2 > r->len) {
+                return CFGPACK_ERR_DECODE;
+            }
+            uint32_t count =
+                ((uint32_t)r->data[r->pos] << 8) | r->data[r->pos + 1];
+            r->pos += 2;
+            if (count == 0) {
+                goto value_done;
+            }
+            if (depth + 1 >= CFGPACK_SKIP_MAX_DEPTH) {
+                return CFGPACK_ERR_DECODE;
+            }
+            remaining[depth + 1] = count;
+            depth++;
+            continue;
+        }
+
+        /* array 32 */
+        case 0xdd: {
+            if (r->pos + 4 > r->len) {
+                return CFGPACK_ERR_DECODE;
+            }
+            uint32_t count = ((uint32_t)r->data[r->pos] << 24) |
+                             ((uint32_t)r->data[r->pos + 1] << 16) |
+                             ((uint32_t)r->data[r->pos + 2] << 8) |
+                             r->data[r->pos + 3];
+            r->pos += 4;
+            if (count == 0) {
+                goto value_done;
+            }
+            if (depth + 1 >= CFGPACK_SKIP_MAX_DEPTH) {
+                return CFGPACK_ERR_DECODE;
+            }
+            remaining[depth + 1] = count;
+            depth++;
+            continue;
+        }
+
+        /* map 16 */
+        case 0xde: {
+            if (r->pos + 2 > r->len) {
+                return CFGPACK_ERR_DECODE;
+            }
+            uint32_t count =
+                ((uint32_t)r->data[r->pos] << 8) | r->data[r->pos + 1];
+            r->pos += 2;
+            if (count == 0) {
+                goto value_done;
+            }
+            if (depth + 1 >= CFGPACK_SKIP_MAX_DEPTH) {
+                return CFGPACK_ERR_DECODE;
+            }
+            remaining[depth + 1] = count * 2;
+            depth++;
+            continue;
+        }
+
+        /* map 32 */
+        case 0xdf: {
+            if (r->pos + 4 > r->len) {
+                return CFGPACK_ERR_DECODE;
+            }
+            uint32_t count = ((uint32_t)r->data[r->pos] << 24) |
+                             ((uint32_t)r->data[r->pos + 1] << 16) |
+                             ((uint32_t)r->data[r->pos + 2] << 8) |
+                             r->data[r->pos + 3];
+            r->pos += 4;
+            if (count == 0) {
+                goto value_done;
+            }
+            if (depth + 1 >= CFGPACK_SKIP_MAX_DEPTH) {
+                return CFGPACK_ERR_DECODE;
+            }
+            remaining[depth + 1] = count * 2;
+            depth++;
+            continue;
+        }
+
+        default: return CFGPACK_ERR_DECODE;
+        }
+
+    value_done:
+        /* Decrement the current container's remaining count and unwind. */
+        while (remaining[depth] > 0) {
+            remaining[depth]--;
+            if (remaining[depth] > 0) {
+                break; /* more values to skip at this level */
+            }
+            if (depth == 0) {
+                return CFGPACK_OK; /* all done */
+            }
+            depth--; /* pop to parent container */
+        }
+    } while (depth > 0 || remaining[0] > 0);
+
+    return CFGPACK_OK;
 }

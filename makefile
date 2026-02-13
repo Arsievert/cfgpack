@@ -52,6 +52,7 @@ TESTSRC := tests/basic.c         \
            tests/decompress.c    \
            tests/io_edge.c      \
            tests/json_edge.c    \
+           tests/measure.c      \
            tests/msgpack.c      \
            tests/parser.c        \
            tests/parser_bounds.c \
@@ -133,6 +134,16 @@ compile_commands: $(OBJECTS) ## Generate compile_commands.json from dep JSON
 	@cat $(JSON)/* > $(JSON)/temp.json
 	@sed -e '1s/^/[\n/' -e '$$s/,$$/\n]/' $(JSON)/temp.json > compile_commands.json
 	@rm $(JSON)/temp.json
+
+stack-usage-O0: clean ## Build with -fstack-usage at -O0 and report per-function stack sizes
+	@$(MAKE) all CFLAGS="-Wall -Wextra -std=c99 -DCFGPACK_LZ4 -DCFGPACK_HEATSHRINK -O0 -fstack-usage"
+	@echo "--- Stack usage at -O0 ---"
+	@find $(OBJ) -name '*.su' -exec cat {} + | sort -t$$'\t' -k2 -n -r
+
+stack-usage-Os: clean ## Build with -fstack-usage at -Os and report per-function stack sizes
+	@$(MAKE) all CFLAGS="-Wall -Wextra -std=c99 -DCFGPACK_LZ4 -DCFGPACK_HEATSHRINK -Os -fstack-usage"
+	@echo "--- Stack usage at -Os ---"
+	@find $(OBJ) -name '*.su' -exec cat {} + | sort -t$$'\t' -k2 -n -r
 
 format: ## Auto-format all source files with clang-format
 	$(CLANG_FORMAT) -i $(FORMAT_FILES)

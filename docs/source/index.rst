@@ -15,6 +15,7 @@ Hard caps: max 128 schema entries.
    api-reference
    versioning
    compression
+   stack-analysis
 
 Features
 --------

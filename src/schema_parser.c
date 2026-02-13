@@ -1327,6 +1327,369 @@ cfgpack_err_t cfgpack_schema_get_sizing(const cfgpack_schema_t *schema,
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
+ * Schema Measure (.map format) — count entries and types, no output buffers
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+cfgpack_err_t cfgpack_schema_measure(const char *data,
+                                     size_t data_len,
+                                     cfgpack_schema_measure_t *out,
+                                     cfgpack_parse_error_t *err) {
+    line_iter_t iter;
+    char line_buf[MAX_LINE_LEN];
+    size_t line_no = 0;
+    int header_read = 0;
+    size_t count = 0;
+    size_t str_count = 0;
+    size_t fstr_count = 0;
+
+    line_iter_init(&iter, data, data_len);
+
+    const char *line;
+    size_t line_len;
+
+    while ((line = line_iter_next(&iter, &line_len)) != NULL) {
+        char *slots[4];
+        tokens_t tok;
+        size_t stop_offset = 0;
+
+        line_no++;
+
+        if (is_blank_or_comment_n(line, line_len)) {
+            continue;
+        }
+
+        if (line_len >= sizeof(line_buf)) {
+            set_err(err, line_no, "line too long");
+            return CFGPACK_ERR_PARSE;
+        }
+        memcpy(line_buf, line, line_len);
+        line_buf[line_len] = '\0';
+
+        if (tokens_create(&tok, 4, slots) != 0) {
+            return CFGPACK_ERR_PARSE;
+        }
+
+        if (!header_read) {
+            tokens_find(&tok, line_buf, " \t\r\n", 2, NULL);
+            if (tok.used != 2) {
+                set_err(err, line_no, "invalid header");
+                tokens_destroy(&tok);
+                return CFGPACK_ERR_PARSE;
+            }
+            if (strlen(tok.index[0]) >= 64) {
+                set_err(err, line_no, "map name too long");
+                tokens_destroy(&tok);
+                return CFGPACK_ERR_BOUNDS;
+            }
+            char *endp = NULL;
+            unsigned long ver = strtoul(tok.index[1], &endp, 10);
+            if (tok.index[1][0] == '\0' || (endp && *endp != '\0')) {
+                set_err(err, line_no, "invalid header");
+                tokens_destroy(&tok);
+                return CFGPACK_ERR_PARSE;
+            }
+            if (ver > 0xfffffffful) {
+                set_err(err, line_no, "version out of range");
+                tokens_destroy(&tok);
+                return CFGPACK_ERR_BOUNDS;
+            }
+            tokens_destroy(&tok);
+            header_read = 1;
+            continue;
+        }
+
+        /* Parse first 3 tokens: index, name, type */
+        tokens_find(&tok, line_buf, " \t\r\n", 3, &stop_offset);
+
+        if (tok.used < 3) {
+            set_err(err, line_no, "invalid entry");
+            tokens_destroy(&tok);
+            return CFGPACK_ERR_PARSE;
+        }
+
+        unsigned long idx_ul = strtoul(tok.index[0], NULL, 10);
+        if (idx_ul > 65535ul) {
+            set_err(err, line_no, "index out of range");
+            tokens_destroy(&tok);
+            return CFGPACK_ERR_BOUNDS;
+        }
+        if (idx_ul == 0) {
+            set_err(err, line_no, "index 0 is reserved for schema name");
+            tokens_destroy(&tok);
+            return CFGPACK_ERR_RESERVED_INDEX;
+        }
+
+        cfgpack_type_t type;
+        cfgpack_err_t trc = parse_type(tok.index[2], &type);
+        if (trc != CFGPACK_OK) {
+            set_err(err, line_no, "invalid type");
+            tokens_destroy(&tok);
+            return trc;
+        }
+        if (name_too_long(tok.index[1])) {
+            set_err(err, line_no, "name too long");
+            tokens_destroy(&tok);
+            return CFGPACK_ERR_BOUNDS;
+        }
+
+        /* Validate that a default token exists */
+        char default_tok[MAX_LINE_LEN];
+        const char *remainder = line_buf + stop_offset;
+        const char *def_str = extract_default_token(remainder, default_tok,
+                                                    sizeof(default_tok));
+        if (!def_str || def_str[0] == '\0') {
+            set_err(err, line_no, "missing default value");
+            tokens_destroy(&tok);
+            return CFGPACK_ERR_PARSE;
+        }
+
+        /* Validate the default value parses correctly */
+        cfgpack_fat_value_t fat_default;
+        uint8_t has_def = 0;
+        cfgpack_err_t drc = parse_default(def_str, type, &fat_default,
+                                          &has_def);
+        if (drc != CFGPACK_OK) {
+            set_err(err, line_no, "invalid default value");
+            tokens_destroy(&tok);
+            return drc;
+        }
+
+        /* Tally types */
+        if (type == CFGPACK_TYPE_STR) {
+            str_count++;
+        } else if (type == CFGPACK_TYPE_FSTR) {
+            fstr_count++;
+        }
+
+        count++;
+        tokens_destroy(&tok);
+    }
+
+    if (!header_read) {
+        set_err(err, 0, "missing header");
+        return CFGPACK_ERR_PARSE;
+    }
+
+    out->entry_count = count;
+    out->str_count = str_count;
+    out->fstr_count = fstr_count;
+    out->str_pool_size = str_count * (CFGPACK_STR_MAX + 1) +
+                         fstr_count * (CFGPACK_FSTR_MAX + 1);
+
+    return CFGPACK_OK;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Schema Measure (JSON) — count entries and types, no output buffers
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+cfgpack_err_t cfgpack_schema_measure_json(const char *data,
+                                          size_t data_len,
+                                          cfgpack_schema_measure_t *out,
+                                          cfgpack_parse_error_t *err) {
+    json_parser_t parser = {data, data_len, 0, 1};
+    json_parser_t *p = &parser;
+    size_t count = 0;
+    size_t str_count = 0;
+    size_t fstr_count = 0;
+
+    if (!json_expect(p, '{')) {
+        set_err(err, p->line, "expected '{'");
+        return CFGPACK_ERR_PARSE;
+    }
+
+    int got_name = 0, got_version = 0, got_entries = 0;
+
+    while (json_peek(p) != '}' && json_peek(p) != '\0') {
+        char key[32];
+        size_t key_len;
+        if (!json_parse_string(p, key, sizeof(key), &key_len)) {
+            set_err(err, p->line, "expected key");
+            return CFGPACK_ERR_PARSE;
+        }
+        if (!json_expect(p, ':')) {
+            set_err(err, p->line, "expected ':'");
+            return CFGPACK_ERR_PARSE;
+        }
+
+        if (strcmp(key, "name") == 0) {
+            char name_buf[64];
+            if (!json_parse_string(p, name_buf, sizeof(name_buf), NULL)) {
+                set_err(err, p->line, "invalid name");
+                return CFGPACK_ERR_PARSE;
+            }
+            got_name = 1;
+        } else if (strcmp(key, "version") == 0) {
+            int64_t ver;
+            double ver_f;
+            int is_float;
+            if (!json_parse_number(p, &ver, &ver_f, &is_float) || is_float ||
+                ver < 0) {
+                set_err(err, p->line, "invalid version");
+                return CFGPACK_ERR_PARSE;
+            }
+            got_version = 1;
+        } else if (strcmp(key, "entries") == 0) {
+            if (!json_expect(p, '[')) {
+                set_err(err, p->line, "expected '['");
+                return CFGPACK_ERR_PARSE;
+            }
+
+            while (json_peek(p) != ']' && json_peek(p) != '\0') {
+                if (!json_expect(p, '{')) {
+                    set_err(err, p->line, "expected '{'");
+                    return CFGPACK_ERR_PARSE;
+                }
+
+                int got_index = 0, got_ename = 0, got_type = 0, got_default = 0;
+                cfgpack_type_t entry_type = CFGPACK_TYPE_U8;
+
+                while (json_peek(p) != '}' && json_peek(p) != '\0') {
+                    char ekey[32];
+                    size_t ekey_len;
+                    if (!json_parse_string(p, ekey, sizeof(ekey), &ekey_len)) {
+                        set_err(err, p->line, "expected entry key");
+                        return CFGPACK_ERR_PARSE;
+                    }
+                    if (!json_expect(p, ':')) {
+                        set_err(err, p->line, "expected ':'");
+                        return CFGPACK_ERR_PARSE;
+                    }
+
+                    if (strcmp(ekey, "index") == 0) {
+                        int64_t idx;
+                        double idx_f;
+                        int is_float;
+                        if (!json_parse_number(p, &idx, &idx_f, &is_float) ||
+                            is_float || idx < 0 || idx > 65535) {
+                            set_err(err, p->line, "invalid index");
+                            return CFGPACK_ERR_BOUNDS;
+                        }
+                        if (idx == 0) {
+                            set_err(err, p->line,
+                                    "index 0 is reserved for schema name");
+                            return CFGPACK_ERR_RESERVED_INDEX;
+                        }
+                        got_index = 1;
+                    } else if (strcmp(ekey, "name") == 0) {
+                        char name_buf[32];
+                        if (!json_parse_string(p, name_buf, sizeof(name_buf),
+                                               NULL)) {
+                            set_err(err, p->line, "invalid entry name");
+                            return CFGPACK_ERR_PARSE;
+                        }
+                        if (name_too_long(name_buf)) {
+                            set_err(err, p->line, "name too long");
+                            return CFGPACK_ERR_BOUNDS;
+                        }
+                        got_ename = 1;
+                    } else if (strcmp(ekey, "type") == 0) {
+                        char type_buf[16];
+                        if (!json_parse_string(p, type_buf, sizeof(type_buf),
+                                               NULL)) {
+                            set_err(err, p->line, "invalid type");
+                            return CFGPACK_ERR_PARSE;
+                        }
+                        cfgpack_err_t trc = parse_type(type_buf, &entry_type);
+                        if (trc != CFGPACK_OK) {
+                            set_err(err, p->line, "invalid type");
+                            return trc;
+                        }
+                        got_type = 1;
+                    } else if (strcmp(ekey, "value") == 0) {
+                        char c = json_peek(p);
+                        if (json_match_literal(p, "null")) {
+                            /* null default — fine */
+                        } else if (c == '"') {
+                            char str_buf[CFGPACK_STR_MAX + 1];
+                            size_t str_len = 0;
+                            if (!json_parse_string(p, str_buf, sizeof(str_buf),
+                                                   &str_len)) {
+                                set_err(err, p->line,
+                                        "invalid string default");
+                                return CFGPACK_ERR_PARSE;
+                            }
+                            /* Validate string length against type if known */
+                            if (got_type &&
+                                entry_type == CFGPACK_TYPE_FSTR &&
+                                str_len > CFGPACK_FSTR_MAX) {
+                                set_err(err, p->line, "fstr too long");
+                                return CFGPACK_ERR_STR_TOO_LONG;
+                            }
+                        } else {
+                            int64_t ival;
+                            double fval;
+                            int is_float;
+                            if (!json_parse_number(p, &ival, &fval,
+                                                   &is_float)) {
+                                set_err(err, p->line,
+                                        "invalid default value");
+                                return CFGPACK_ERR_PARSE;
+                            }
+                        }
+                        got_default = 1;
+                    } else {
+                        set_err(err, p->line, "unknown entry key");
+                        return CFGPACK_ERR_PARSE;
+                    }
+
+                    json_expect(p, ',');
+                }
+
+                if (!json_expect(p, '}')) {
+                    set_err(err, p->line, "expected '}'");
+                    return CFGPACK_ERR_PARSE;
+                }
+
+                if (!got_index || !got_ename || !got_type || !got_default) {
+                    set_err(err, p->line, "missing entry field");
+                    return CFGPACK_ERR_PARSE;
+                }
+
+                /* Tally types */
+                if (entry_type == CFGPACK_TYPE_STR) {
+                    str_count++;
+                } else if (entry_type == CFGPACK_TYPE_FSTR) {
+                    fstr_count++;
+                }
+
+                count++;
+                json_expect(p, ',');
+            }
+
+            if (!json_expect(p, ']')) {
+                set_err(err, p->line, "expected ']'");
+                return CFGPACK_ERR_PARSE;
+            }
+            got_entries = 1;
+        } else {
+            set_err(err, p->line, "unknown key");
+            return CFGPACK_ERR_PARSE;
+        }
+
+        json_expect(p, ',');
+    }
+
+    if (!json_expect(p, '}')) {
+        set_err(err, p->line, "expected '}'");
+        return CFGPACK_ERR_PARSE;
+    }
+
+    if (!got_name || !got_version || !got_entries) {
+        set_err(err, p->line, "missing required field");
+        return CFGPACK_ERR_PARSE;
+    }
+
+    out->entry_count = count;
+    out->str_count = str_count;
+    out->fstr_count = fstr_count;
+    out->str_pool_size = str_count * (CFGPACK_STR_MAX + 1) +
+                         fstr_count * (CFGPACK_FSTR_MAX + 1);
+
+    return CFGPACK_OK;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
  * JSON Schema Parser (buffer-based, no malloc, two-phase string defaults)
  * ───────────────────────────────────────────────────────────────────────────── */
 

@@ -36,6 +36,15 @@ Include just ``cfgpack/cfgpack.h``; it re-exports the public API surface.
    size_t len;
    cfgpack_pageout(&ctx, scratch, sizeof(scratch), &len);
 
+.. note::
+
+   The example above uses fixed-size arrays (128 entries). If the schema size
+   is not known at compile time, use ``cfgpack_schema_measure()`` to learn
+   exact buffer sizes before allocating. This requires only 32 bytes of stack
+   instead of ~8KB for oversized discovery buffers. See the
+   `API Reference <api-reference.html>`_ and ``examples/allocate-once/`` for
+   the full measure-then-allocate pattern.
+
 Map Format
 ----------
 

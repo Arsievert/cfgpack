@@ -82,6 +82,42 @@ cfgpack_err_t cfgpack_schema_parse_json_file(const char *path,
                                              cfgpack_parse_error_t *err);
 
 /**
+ * @brief Measure buffer requirements for a .map schema file.
+ *
+ * Reads the file into a scratch buffer and calls cfgpack_schema_measure().
+ *
+ * @param path        File path to read.
+ * @param out         Filled with measurement results.
+ * @param scratch     Scratch buffer to hold file contents.
+ * @param scratch_cap Capacity of scratch buffer.
+ * @param err         Optional parse error info on failure.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_IO on read error; CFGPACK_ERR_* on parse error.
+ */
+cfgpack_err_t cfgpack_schema_measure_file(const char *path,
+                                          cfgpack_schema_measure_t *out,
+                                          char *scratch,
+                                          size_t scratch_cap,
+                                          cfgpack_parse_error_t *err);
+
+/**
+ * @brief Measure buffer requirements for a JSON schema file.
+ *
+ * Reads the file into a scratch buffer and calls cfgpack_schema_measure_json().
+ *
+ * @param path        File path to read.
+ * @param out         Filled with measurement results.
+ * @param scratch     Scratch buffer to hold file contents.
+ * @param scratch_cap Capacity of scratch buffer.
+ * @param err         Optional parse error info on failure.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_IO on read error; CFGPACK_ERR_* on parse error.
+ */
+cfgpack_err_t cfgpack_schema_measure_json_file(const char *path,
+                                               cfgpack_schema_measure_t *out,
+                                               char *scratch,
+                                               size_t scratch_cap,
+                                               cfgpack_parse_error_t *err);
+
+/**
  * @brief Write schema and values as JSON to a file.
  *
  * Writes to a scratch buffer and then writes the buffer to the file.

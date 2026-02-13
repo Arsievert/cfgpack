@@ -75,7 +75,7 @@ vehicle 1
   - `config.h` — build configuration (`CFGPACK_EMBEDDED`/`CFGPACK_HOSTED` modes).
   - `error.h` — error codes enum.
   - `value.h` — value types and limits (`CFGPACK_STR_MAX`, `CFGPACK_FSTR_MAX`).
-  - `schema.h` — schema structs and parser/JSON APIs.
+  - `schema.h` — schema structs, parser/JSON APIs, and measure functions.
   - `msgpack.h` — minimal MessagePack buffer + encode/decode helpers.
   - `api.h` — main cfgpack runtime API (set/get/pagein/pageout/print/version/size).
   - `decompress.h` — optional LZ4/heatshrink decompression support.
@@ -119,12 +119,17 @@ Output:
 Running tests...
 
   basic:         4/4 passed
+  core_edge:     11/11 passed
   decompress:    8/8 passed
+  io_edge:       11/11 passed
+  json_edge:     8/8 passed
+  measure:       15/15 passed
+  msgpack:       16/16 passed
   parser_bounds: 23/23 passed
   parser:        3/3 passed
-  runtime:       21/21 passed
+  runtime:       24/24 passed
 
-TOTAL: 59/59 passed
+TOTAL: 123/123 passed
 ```
 
 ## Examples
@@ -133,7 +138,7 @@ Three complete examples are provided in the `examples/` directory:
 
 ### allocate-once
 
-Dynamic allocation example demonstrating two-phase init: a discovery parse to learn sizes, then right-sized `malloc`. Uses `cfgpack_schema_get_sizing()` to compute exact buffer requirements.
+Dynamic allocation example demonstrating two-phase init: `cfgpack_schema_measure()` to learn sizes (32 bytes of stack), then right-sized `malloc`. This replaces the old discovery-parse pattern that required ~8KB of temporary stack buffers.
 
 ```bash
 cd examples/allocate-once && make run

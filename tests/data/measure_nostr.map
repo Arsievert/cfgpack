@@ -1,0 +1,4 @@
+demo 1
+1 foo u8 0
+2 bar i32 -5
+3 baz f64 1.0

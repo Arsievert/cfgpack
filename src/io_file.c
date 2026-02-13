@@ -119,6 +119,40 @@ static cfgpack_err_t write_file_binary(const char *path,
     return CFGPACK_OK;
 }
 
+cfgpack_err_t cfgpack_schema_measure_file(const char *path,
+                                          cfgpack_schema_measure_t *out,
+                                          char *scratch,
+                                          size_t scratch_cap,
+                                          cfgpack_parse_error_t *err) {
+    size_t len = 0;
+    cfgpack_err_t rc = read_file(path, scratch, scratch_cap, &len);
+    if (rc != CFGPACK_OK) {
+        if (err) {
+            err->line = 0;
+            snprintf(err->message, sizeof(err->message), "unable to open file");
+        }
+        return rc;
+    }
+    return cfgpack_schema_measure(scratch, len, out, err);
+}
+
+cfgpack_err_t cfgpack_schema_measure_json_file(const char *path,
+                                               cfgpack_schema_measure_t *out,
+                                               char *scratch,
+                                               size_t scratch_cap,
+                                               cfgpack_parse_error_t *err) {
+    size_t len = 0;
+    cfgpack_err_t rc = read_file(path, scratch, scratch_cap, &len);
+    if (rc != CFGPACK_OK) {
+        if (err) {
+            err->line = 0;
+            snprintf(err->message, sizeof(err->message), "unable to open file");
+        }
+        return rc;
+    }
+    return cfgpack_schema_measure_json(scratch, len, out, err);
+}
+
 cfgpack_err_t cfgpack_parse_schema_file(const char *path,
                                         cfgpack_schema_t *out_schema,
                                         cfgpack_entry_t *entries,

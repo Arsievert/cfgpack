@@ -94,6 +94,47 @@ cfgpack_err_t cfgpack_schema_get_sizing(const cfgpack_schema_t *schema,
                                         cfgpack_schema_sizing_t *out);
 ```
 
+### Schema Measurement (Pre-Parse)
+
+Use the measure functions to determine buffer sizes **before** parsing, without allocating any output buffers. This is the recommended approach when schema size is not known at compile time (e.g., loading from external storage). The measure pass requires only ~32 bytes of stack vs ~8KB for a full discovery parse into oversized buffers.
+
+```c
+typedef struct {
+    size_t entry_count;   /* Number of entries in the schema */
+    size_t str_pool_size; /* Total bytes needed for string pool */
+    size_t str_count;     /* Number of str-type entries */
+    size_t fstr_count;    /* Number of fstr-type entries */
+} cfgpack_schema_measure_t;
+
+/* Measure a .map schema buffer */
+cfgpack_err_t cfgpack_schema_measure(const char *data, size_t data_len,
+                                     cfgpack_schema_measure_t *out,
+                                     cfgpack_parse_error_t *err);
+
+/* Measure a JSON schema buffer */
+cfgpack_err_t cfgpack_schema_measure_json(const char *data, size_t data_len,
+                                          cfgpack_schema_measure_t *out,
+                                          cfgpack_parse_error_t *err);
+```
+
+Both functions validate structure, types, reserved index 0, name length, and default values. Duplicate checking (which requires O(n) storage) is deferred to the subsequent `cfgpack_parse_schema()` / `cfgpack_schema_parse_json()` call.
+
+After measuring, allocate exact-sized buffers and parse:
+
+```c
+cfgpack_schema_measure_t m;
+cfgpack_schema_measure(data, len, &m, &err);
+
+cfgpack_entry_t *entries   = malloc(m.entry_count * sizeof(cfgpack_entry_t));
+cfgpack_value_t *values    = malloc(m.entry_count * sizeof(cfgpack_value_t));
+char            *str_pool  = malloc(m.str_pool_size);
+uint16_t        *str_off   = malloc((m.str_count + m.fstr_count) * sizeof(uint16_t));
+
+cfgpack_parse_schema(data, len, &schema, entries, m.entry_count,
+                     values, str_pool, m.str_pool_size,
+                     str_off, m.str_count + m.fstr_count, &err);
+```
+
 ### Parsing and Serialization
 
 Default values are written directly into the caller-provided `values` array and `str_pool` during parsing. There is no separate defaults storage.
@@ -273,12 +314,54 @@ cfgpack_pageout(&ctx, scratch, sizeof(scratch), &len);
 cfgpack_pagein_buf(&ctx, scratch, len);
 ```
 
+## Dynamic Allocation Example
+
+When schema size is not known at compile time, use `cfgpack_schema_measure()` to learn buffer sizes before allocating. This is the pattern used in the `examples/allocate-once/` example.
+
+```c
+/* 1. Measure — only 32 bytes of stack */
+cfgpack_schema_measure_t m;
+cfgpack_parse_error_t err;
+cfgpack_schema_measure(map_data, map_len, &m, &err);
+
+/* 2. Allocate right-sized buffers */
+cfgpack_entry_t *entries  = malloc(m.entry_count * sizeof(cfgpack_entry_t));
+cfgpack_value_t *values   = malloc(m.entry_count * sizeof(cfgpack_value_t));
+char            *str_pool = malloc(m.str_pool_size);
+uint16_t        *str_off  = malloc((m.str_count + m.fstr_count) * sizeof(uint16_t));
+
+/* 3. Parse into exact-sized buffers */
+cfgpack_schema_t schema;
+cfgpack_parse_schema(map_data, map_len, &schema, entries, m.entry_count,
+                     values, str_pool, m.str_pool_size,
+                     str_off, m.str_count + m.fstr_count, &err);
+
+/* 4. Initialize context — identical to the static example from here on */
+cfgpack_ctx_t ctx;
+cfgpack_init(&ctx, &schema, values, m.entry_count,
+             str_pool, m.str_pool_size, str_off, m.str_count + m.fstr_count);
+```
+
+The same pattern works with `cfgpack_schema_measure_json()` for JSON schemas.
+
 ## File I/O Wrappers (Optional)
 
 These functions use `FILE*` operations and are provided for convenience on desktop/POSIX systems. For embedded systems without file I/O, use the buffer-based functions in `api.h` and `schema.h` instead. To use these, compile and link `src/io_file.c` with your project.
 
 ```c
 #include "cfgpack/io_file.h"
+
+/* Measure a .map schema from a file */
+cfgpack_err_t cfgpack_schema_measure_file(const char *path,
+                                          cfgpack_schema_measure_t *out,
+                                          char *scratch, size_t scratch_cap,
+                                          cfgpack_parse_error_t *err);
+
+/* Measure a JSON schema from a file */
+cfgpack_err_t cfgpack_schema_measure_json_file(const char *path,
+                                               cfgpack_schema_measure_t *out,
+                                               char *scratch, size_t scratch_cap,
+                                               cfgpack_parse_error_t *err);
 
 /* Parse a .map schema from a file */
 cfgpack_err_t cfgpack_parse_schema_file(const char *path,

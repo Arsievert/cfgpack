@@ -57,6 +57,36 @@ typedef struct {
 } cfgpack_schema_sizing_t;
 
 /**
+ * @brief Lightweight measurement of schema buffer requirements.
+ *
+ * Returned by cfgpack_schema_measure() and cfgpack_schema_measure_json().
+ * Contains all the information needed to allocate right-sized buffers for
+ * a subsequent parse, without requiring any caller-provided output buffers.
+ *
+ * Typical usage:
+ * @code
+ *   cfgpack_schema_measure_t m;
+ *   cfgpack_schema_measure_json(json, len, &m, &err);
+ *
+ *   cfgpack_entry_t *entries = malloc(m.entry_count * sizeof(*entries));
+ *   cfgpack_value_t *values  = malloc(m.entry_count * sizeof(*values));
+ *   char     *str_pool    = m.str_pool_size > 0 ? malloc(m.str_pool_size) : NULL;
+ *   uint16_t *str_offsets = (m.str_count + m.fstr_count) > 0
+ *       ? malloc((m.str_count + m.fstr_count) * sizeof(*str_offsets)) : NULL;
+ *
+ *   cfgpack_schema_parse_json(json, len, &schema, entries, m.entry_count,
+ *                             values, str_pool, m.str_pool_size,
+ *                             str_offsets, m.str_count + m.fstr_count, &err);
+ * @endcode
+ */
+typedef struct {
+    size_t entry_count;   /**< Number of entries in the schema */
+    size_t str_pool_size; /**< Total bytes needed for string pool */
+    size_t str_count;     /**< Number of str-type entries */
+    size_t fstr_count;    /**< Number of fstr-type entries */
+} cfgpack_schema_measure_t;
+
+/**
  * @brief Compute sizing information for a parsed schema.
  *
  * Call this after cfgpack_parse_schema() to determine how much memory
@@ -68,6 +98,48 @@ typedef struct {
  */
 cfgpack_err_t cfgpack_schema_get_sizing(const cfgpack_schema_t *schema,
                                         cfgpack_schema_sizing_t *out);
+
+/**
+ * @brief Measure buffer requirements for a .map schema without allocating.
+ *
+ * Walks the .map data to count entries and string types, reporting the
+ * exact buffer sizes needed for cfgpack_parse_schema(). No output buffers
+ * are required — only the input data.
+ *
+ * Validates structure, types, reserved index 0, and name length.
+ * Duplicate checking is deferred to the subsequent parse.
+ *
+ * @param data     Input buffer containing .map schema data.
+ * @param data_len Length of data in bytes.
+ * @param out      Filled with measurement results.
+ * @param err      Optional parse error info on failure.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_* on failure.
+ */
+cfgpack_err_t cfgpack_schema_measure(const char *data,
+                                     size_t data_len,
+                                     cfgpack_schema_measure_t *out,
+                                     cfgpack_parse_error_t *err);
+
+/**
+ * @brief Measure buffer requirements for a JSON schema without allocating.
+ *
+ * Walks the JSON to count entries and string types, reporting the
+ * exact buffer sizes needed for cfgpack_schema_parse_json(). No output
+ * buffers are required — only the input JSON.
+ *
+ * Validates structure, types, reserved index 0, and name length.
+ * Duplicate checking is deferred to the subsequent parse.
+ *
+ * @param data     Input buffer containing JSON schema data.
+ * @param data_len Length of data in bytes.
+ * @param out      Filled with measurement results.
+ * @param err      Optional parse error info on failure.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_* on failure.
+ */
+cfgpack_err_t cfgpack_schema_measure_json(const char *data,
+                                          size_t data_len,
+                                          cfgpack_schema_measure_t *out,
+                                          cfgpack_parse_error_t *err);
 
 /**
  * @brief Parse a schema from a buffer into caller-provided buffers (no heap).

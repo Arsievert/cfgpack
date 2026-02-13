@@ -44,4 +44,15 @@
  */
 #define CFGPACK_PRESENCE_BYTES ((CFGPACK_MAX_ENTRIES + CHAR_BIT - 1) / CHAR_BIT)
 
+/**
+ * @brief Maximum nesting depth for cfgpack_msgpack_skip_value().
+ *
+ * Limits the depth of nested msgpack maps/arrays that can be skipped.
+ * Each level costs 8 bytes of stack (32 levels = 256 bytes).
+ * Override by defining CFGPACK_SKIP_MAX_DEPTH before including cfgpack headers.
+ */
+#ifndef CFGPACK_SKIP_MAX_DEPTH
+  #define CFGPACK_SKIP_MAX_DEPTH 32
+#endif
+
 #endif /* CFGPACK_CONFIG_H */

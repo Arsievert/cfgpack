@@ -4,8 +4,7 @@
  *
  * Demonstrates:
  * - Heap-allocated buffers with malloc (no free — "allocate once" pattern)
- * - Two-phase init: discovery parse to learn sizes, then right-sized malloc
- * - cfgpack_schema_get_sizing() for computing exact buffer requirements
+ * - Two-phase init: cfgpack_schema_measure() to learn sizes, then right-sized malloc
  * - The library doesn't care where memory comes from (stack, static, heap)
  *
  * Contrast with the datalogger and sensor_hub examples which use statically-
@@ -117,45 +116,28 @@ int main(int argc, char **argv) {
     fclose(f);
     file_buf[file_len] = '\0';
 
-    /* ── 2. Discovery parse: learn entry count and sizing ──────────────
+    /* ── 2. Measure: learn entry count and sizing ────────────────────────
      *
      * We don't know how many entries the schema has at compile time, so
-     * we parse once into oversized stack-local buffers just to discover
-     * the entry count and string sizing. These temporaries are only used
-     * briefly and can be large because they live on the stack for a short
-     * time during startup. */
+     * we use cfgpack_schema_measure() to walk the data and count entries
+     * and string types. This requires only ~300 bytes of stack (vs ~8KB
+     * for a full discovery parse with oversized buffers). */
 
-    cfgpack_schema_t disc_schema;
-    cfgpack_entry_t disc_entries[CFGPACK_MAX_ENTRIES];
-    cfgpack_value_t disc_values[CFGPACK_MAX_ENTRIES];
-    char disc_str_pool[4096];
-    uint16_t disc_str_offsets[CFGPACK_MAX_ENTRIES];
-
-    rc = cfgpack_parse_schema(file_buf, file_len, &disc_schema, disc_entries,
-                              CFGPACK_MAX_ENTRIES, disc_values, disc_str_pool,
-                              sizeof(disc_str_pool), disc_str_offsets,
-                              CFGPACK_MAX_ENTRIES, &parse_err);
+    cfgpack_schema_measure_t m;
+    rc = cfgpack_schema_measure(file_buf, file_len, &m, &parse_err);
     if (rc != CFGPACK_OK) {
-        fprintf(stderr, "Schema parse error at line %zu: %s\n", parse_err.line,
-                parse_err.message);
+        fprintf(stderr, "Schema measure error at line %zu: %s\n",
+                parse_err.line, parse_err.message);
         return (1);
     }
 
-    /* Query sizing information */
-    cfgpack_schema_sizing_t sizing;
-    cfgpack_schema_get_sizing(&disc_schema, &sizing);
+    size_t entry_count = m.entry_count;
+    size_t str_offset_count = m.str_count + m.fstr_count;
 
-    size_t entry_count = disc_schema.entry_count;
-    size_t str_offset_count = sizing.str_count + sizing.fstr_count;
-
-    printf("Schema: %s v%u\n", disc_schema.map_name, disc_schema.version);
-    printf("Discovered: %zu entries, %zu str + %zu fstr\n", entry_count,
-           sizing.str_count, sizing.fstr_count);
-    printf("Sizing:     str_pool=%zu bytes, str_offsets=%zu slots\n",
-           sizing.str_pool_size, str_offset_count);
-    printf(
-        "Compare:    static example would reserve %d entries, %d str_offsets\n",
-        CFGPACK_MAX_ENTRIES, CFGPACK_MAX_ENTRIES);
+    printf("Measured: %zu entries, %zu str + %zu fstr\n", entry_count,
+           m.str_count, m.fstr_count);
+    printf("Sizing:   str_pool=%zu bytes, str_offsets=%zu slots\n",
+           m.str_pool_size, str_offset_count);
     printf("\n");
 
     /* ── 3. Malloc right-sized buffers ─────────────────────────────────
@@ -170,14 +152,14 @@ int main(int argc, char **argv) {
     char *str_pool = NULL;
     uint16_t *str_offsets = NULL;
 
-    if (sizing.str_pool_size > 0) {
-        str_pool = malloc(sizing.str_pool_size);
+    if (m.str_pool_size > 0) {
+        str_pool = malloc(m.str_pool_size);
     }
     if (str_offset_count > 0) {
         str_offsets = malloc(str_offset_count * sizeof(uint16_t));
     }
 
-    if (!entries || !values || (sizing.str_pool_size > 0 && !str_pool) ||
+    if (!entries || !values || (m.str_pool_size > 0 && !str_pool) ||
         (str_offset_count > 0 && !str_offsets)) {
         fprintf(stderr, "malloc failed\n");
         return (1);
@@ -190,7 +172,7 @@ int main(int argc, char **argv) {
     printf("  values:      %zu bytes (%zu x %zu)\n",
            entry_count * sizeof(cfgpack_value_t), entry_count,
            sizeof(cfgpack_value_t));
-    printf("  str_pool:    %zu bytes\n", sizing.str_pool_size);
+    printf("  str_pool:    %zu bytes\n", m.str_pool_size);
     printf("  str_offsets: %zu bytes (%zu x %zu)\n",
            str_offset_count * sizeof(uint16_t), str_offset_count,
            sizeof(uint16_t));
@@ -203,7 +185,7 @@ int main(int argc, char **argv) {
 
     cfgpack_schema_t schema;
     rc = cfgpack_parse_schema(file_buf, file_len, &schema, entries, entry_count,
-                              values, str_pool, sizing.str_pool_size,
+                              values, str_pool, m.str_pool_size,
                               str_offsets, str_offset_count, &parse_err);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Final parse error at line %zu: %s\n", parse_err.line,
@@ -218,7 +200,7 @@ int main(int argc, char **argv) {
 
     cfgpack_ctx_t ctx;
     rc = cfgpack_init(&ctx, &schema, values, entry_count, str_pool,
-                      sizing.str_pool_size, str_offsets, str_offset_count);
+                      m.str_pool_size, str_offsets, str_offset_count);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Init failed: %d\n", rc);
         return (1);
@@ -259,7 +241,7 @@ int main(int argc, char **argv) {
     /* ── 8. Simulate reboot: re-parse schema, re-init, pagein ──────── */
 
     rc = cfgpack_parse_schema(file_buf, file_len, &schema, entries, entry_count,
-                              values, str_pool, sizing.str_pool_size,
+                              values, str_pool, m.str_pool_size,
                               str_offsets, str_offset_count, &parse_err);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Re-parse error: %s\n", parse_err.message);
@@ -267,7 +249,7 @@ int main(int argc, char **argv) {
     }
 
     rc = cfgpack_init(&ctx, &schema, values, entry_count, str_pool,
-                      sizing.str_pool_size, str_offsets, str_offset_count);
+                      m.str_pool_size, str_offsets, str_offset_count);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Re-init failed: %d\n", rc);
         return (1);
