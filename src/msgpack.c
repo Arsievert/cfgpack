@@ -454,8 +454,8 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
             if (r->pos + 2 > r->len) {
                 return CFGPACK_ERR_DECODE;
             }
-            uint32_t len =
-                ((uint32_t)r->data[r->pos] << 8) | r->data[r->pos + 1];
+            uint32_t len = ((uint32_t)r->data[r->pos] << 8) |
+                           r->data[r->pos + 1];
             r->pos += 2;
             if (r->pos + len > r->len) {
                 return CFGPACK_ERR_DECODE;
@@ -525,8 +525,8 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
             if (r->pos + 2 > r->len) {
                 return CFGPACK_ERR_DECODE;
             }
-            uint32_t count =
-                ((uint32_t)r->data[r->pos] << 8) | r->data[r->pos + 1];
+            uint32_t count = ((uint32_t)r->data[r->pos] << 8) |
+                             r->data[r->pos + 1];
             r->pos += 2;
             if (count == 0) {
                 goto value_done;
@@ -565,8 +565,8 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
             if (r->pos + 2 > r->len) {
                 return CFGPACK_ERR_DECODE;
             }
-            uint32_t count =
-                ((uint32_t)r->data[r->pos] << 8) | r->data[r->pos + 1];
+            uint32_t count = ((uint32_t)r->data[r->pos] << 8) |
+                             r->data[r->pos + 1];
             r->pos += 2;
             if (count == 0) {
                 goto value_done;

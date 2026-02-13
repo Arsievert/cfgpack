@@ -1093,7 +1093,8 @@ TEST_CASE(test_schema_get_sizing) {
     LOG("  fstr_count = %zu (expected 1)", sizing.fstr_count);
     CHECK(sizing.fstr_count == 1);
 
-    size_t expected_pool = 2 * (CFGPACK_STR_MAX + 1) + 1 * (CFGPACK_FSTR_MAX + 1);
+    size_t expected_pool = 2 * (CFGPACK_STR_MAX + 1) +
+                           1 * (CFGPACK_FSTR_MAX + 1);
     LOG("  str_pool_size = %zu (expected %zu)", sizing.str_pool_size,
         expected_pool);
     CHECK(sizing.str_pool_size == expected_pool);

@@ -44,8 +44,8 @@ TEST_CASE(test_pagein_file_nonexistent) {
     LOG("Context initialized");
 
     LOG("Testing pagein_file with nonexistent path");
-    CHECK(cfgpack_pagein_file(&ctx, "/tmp/cfgpack_does_not_exist.bin",
-                              scratch, sizeof(scratch)) == CFGPACK_ERR_IO);
+    CHECK(cfgpack_pagein_file(&ctx, "/tmp/cfgpack_does_not_exist.bin", scratch,
+                              sizeof(scratch)) == CFGPACK_ERR_IO);
     LOG("Correctly returned: CFGPACK_ERR_IO");
 
     return TEST_OK;
@@ -236,11 +236,17 @@ TEST_CASE(test_remap_multiple_entries) {
     old_schema.version = 1;
     old_schema.entry_count = 3;
     old_schema.entries = old_entries;
-    old_entries[0] = (cfgpack_entry_t){.index = 10, .type = CFGPACK_TYPE_U8, .has_default = 0};
+    old_entries[0] = (cfgpack_entry_t){.index = 10,
+                                       .type = CFGPACK_TYPE_U8,
+                                       .has_default = 0};
     snprintf(old_entries[0].name, sizeof(old_entries[0].name), "a");
-    old_entries[1] = (cfgpack_entry_t){.index = 11, .type = CFGPACK_TYPE_U16, .has_default = 0};
+    old_entries[1] = (cfgpack_entry_t){.index = 11,
+                                       .type = CFGPACK_TYPE_U16,
+                                       .has_default = 0};
     snprintf(old_entries[1].name, sizeof(old_entries[1].name), "b");
-    old_entries[2] = (cfgpack_entry_t){.index = 12, .type = CFGPACK_TYPE_U32, .has_default = 0};
+    old_entries[2] = (cfgpack_entry_t){.index = 12,
+                                       .type = CFGPACK_TYPE_U32,
+                                       .has_default = 0};
     snprintf(old_entries[2].name, sizeof(old_entries[2].name), "c");
 
     LOG("Setting up new schema: u8@20, u16@21, u32@22");
@@ -248,11 +254,17 @@ TEST_CASE(test_remap_multiple_entries) {
     new_schema.version = 2;
     new_schema.entry_count = 3;
     new_schema.entries = new_entries;
-    new_entries[0] = (cfgpack_entry_t){.index = 20, .type = CFGPACK_TYPE_U8, .has_default = 0};
+    new_entries[0] = (cfgpack_entry_t){.index = 20,
+                                       .type = CFGPACK_TYPE_U8,
+                                       .has_default = 0};
     snprintf(new_entries[0].name, sizeof(new_entries[0].name), "a");
-    new_entries[1] = (cfgpack_entry_t){.index = 21, .type = CFGPACK_TYPE_U16, .has_default = 0};
+    new_entries[1] = (cfgpack_entry_t){.index = 21,
+                                       .type = CFGPACK_TYPE_U16,
+                                       .has_default = 0};
     snprintf(new_entries[1].name, sizeof(new_entries[1].name), "b");
-    new_entries[2] = (cfgpack_entry_t){.index = 22, .type = CFGPACK_TYPE_U32, .has_default = 0};
+    new_entries[2] = (cfgpack_entry_t){.index = 22,
+                                       .type = CFGPACK_TYPE_U32,
+                                       .has_default = 0};
     snprintf(new_entries[2].name, sizeof(new_entries[2].name), "c");
 
     CHECK(cfgpack_init(&old_ctx, &old_schema, old_values, 3, old_str_pool,
@@ -356,8 +368,10 @@ TEST_CASE(test_coerce_signed_widening) {
         make_schema(&new_s, new_e, 1);
         new_e[0].type = CFGPACK_TYPE_I16;
 
-        CHECK(cfgpack_init(&old_c, &old_s, old_v, 1, osp, 1, oso, 0) == CFGPACK_OK);
-        CHECK(cfgpack_init(&new_c, &new_s, new_v, 1, nsp, 1, nso, 0) == CFGPACK_OK);
+        CHECK(cfgpack_init(&old_c, &old_s, old_v, 1, osp, 1, oso, 0) ==
+              CFGPACK_OK);
+        CHECK(cfgpack_init(&new_c, &new_s, new_v, 1, nsp, 1, nso, 0) ==
+              CFGPACK_OK);
 
         CHECK(cfgpack_set_i8(&old_c, 1, -42) == CFGPACK_OK);
         CHECK(cfgpack_pageout(&old_c, buf, sizeof(buf), &len) == CFGPACK_OK);
@@ -384,8 +398,10 @@ TEST_CASE(test_coerce_signed_widening) {
         make_schema(&new_s, new_e, 1);
         new_e[0].type = CFGPACK_TYPE_I32;
 
-        CHECK(cfgpack_init(&old_c, &old_s, old_v, 1, osp, 1, oso, 0) == CFGPACK_OK);
-        CHECK(cfgpack_init(&new_c, &new_s, new_v, 1, nsp, 1, nso, 0) == CFGPACK_OK);
+        CHECK(cfgpack_init(&old_c, &old_s, old_v, 1, osp, 1, oso, 0) ==
+              CFGPACK_OK);
+        CHECK(cfgpack_init(&new_c, &new_s, new_v, 1, nsp, 1, nso, 0) ==
+              CFGPACK_OK);
 
         CHECK(cfgpack_set_i16(&old_c, 1, -1000) == CFGPACK_OK);
         CHECK(cfgpack_pageout(&old_c, buf, sizeof(buf), &len) == CFGPACK_OK);
@@ -412,8 +428,10 @@ TEST_CASE(test_coerce_signed_widening) {
         make_schema(&new_s, new_e, 1);
         new_e[0].type = CFGPACK_TYPE_I64;
 
-        CHECK(cfgpack_init(&old_c, &old_s, old_v, 1, osp, 1, oso, 0) == CFGPACK_OK);
-        CHECK(cfgpack_init(&new_c, &new_s, new_v, 1, nsp, 1, nso, 0) == CFGPACK_OK);
+        CHECK(cfgpack_init(&old_c, &old_s, old_v, 1, osp, 1, oso, 0) ==
+              CFGPACK_OK);
+        CHECK(cfgpack_init(&new_c, &new_s, new_v, 1, nsp, 1, nso, 0) ==
+              CFGPACK_OK);
 
         CHECK(cfgpack_set_i32(&old_c, 1, -100000) == CFGPACK_OK);
         CHECK(cfgpack_pageout(&old_c, buf, sizeof(buf), &len) == CFGPACK_OK);
@@ -449,8 +467,10 @@ TEST_CASE(test_coerce_unsigned_to_signed) {
         make_schema(&new_s, new_e, 1);
         new_e[0].type = CFGPACK_TYPE_I16;
 
-        CHECK(cfgpack_init(&old_c, &old_s, old_v, 1, osp, 1, oso, 0) == CFGPACK_OK);
-        CHECK(cfgpack_init(&new_c, &new_s, new_v, 1, nsp, 1, nso, 0) == CFGPACK_OK);
+        CHECK(cfgpack_init(&old_c, &old_s, old_v, 1, osp, 1, oso, 0) ==
+              CFGPACK_OK);
+        CHECK(cfgpack_init(&new_c, &new_s, new_v, 1, nsp, 1, nso, 0) ==
+              CFGPACK_OK);
 
         CHECK(cfgpack_set_u8(&old_c, 1, 200) == CFGPACK_OK);
         CHECK(cfgpack_pageout(&old_c, buf, sizeof(buf), &len) == CFGPACK_OK);
@@ -477,8 +497,10 @@ TEST_CASE(test_coerce_unsigned_to_signed) {
         make_schema(&new_s, new_e, 1);
         new_e[0].type = CFGPACK_TYPE_I32;
 
-        CHECK(cfgpack_init(&old_c, &old_s, old_v, 1, osp, 1, oso, 0) == CFGPACK_OK);
-        CHECK(cfgpack_init(&new_c, &new_s, new_v, 1, nsp, 1, nso, 0) == CFGPACK_OK);
+        CHECK(cfgpack_init(&old_c, &old_s, old_v, 1, osp, 1, oso, 0) ==
+              CFGPACK_OK);
+        CHECK(cfgpack_init(&new_c, &new_s, new_v, 1, nsp, 1, nso, 0) ==
+              CFGPACK_OK);
 
         CHECK(cfgpack_set_u16(&old_c, 1, 50000) == CFGPACK_OK);
         CHECK(cfgpack_pageout(&old_c, buf, sizeof(buf), &len) == CFGPACK_OK);
@@ -552,10 +574,10 @@ TEST_CASE(test_coerce_fstr_to_str) {
     make_schema(&new_s, new_e, 1);
     new_e[0].type = CFGPACK_TYPE_STR;
 
-    CHECK(cfgpack_init(&old_c, &old_s, old_v, 1, old_sp, sizeof(old_sp),
-                       old_so, 1) == CFGPACK_OK);
-    CHECK(cfgpack_init(&new_c, &new_s, new_v, 1, new_sp, sizeof(new_sp),
-                       new_so, 1) == CFGPACK_OK);
+    CHECK(cfgpack_init(&old_c, &old_s, old_v, 1, old_sp, sizeof(old_sp), old_so,
+                       1) == CFGPACK_OK);
+    CHECK(cfgpack_init(&new_c, &new_s, new_v, 1, new_sp, sizeof(new_sp), new_so,
+                       1) == CFGPACK_OK);
 
     CHECK(cfgpack_set_fstr(&old_c, 1, "short") == CFGPACK_OK);
     LOG("Set old fstr = 'short'");

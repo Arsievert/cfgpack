@@ -44,7 +44,8 @@ TEST_CASE(test_measure_map_sample) {
     CHECK(m.fstr_count == 2);
 
     /* Verify str_pool_size calculation */
-    size_t expected_pool = 3 * (CFGPACK_STR_MAX + 1) + 2 * (CFGPACK_FSTR_MAX + 1);
+    size_t expected_pool = 3 * (CFGPACK_STR_MAX + 1) +
+                           2 * (CFGPACK_FSTR_MAX + 1);
     CHECK(m.str_pool_size == expected_pool);
     LOG("  expected str_pool_size = %zu (correct)", expected_pool);
 
@@ -64,10 +65,14 @@ TEST_CASE(test_measure_map_sample) {
     cfgpack_schema_get_sizing(&schema, &sizing);
 
     LOG("Comparing measure vs get_sizing:");
-    LOG("  entry_count: measure=%zu, parse=%zu", m.entry_count, schema.entry_count);
-    LOG("  str_count:   measure=%zu, sizing=%zu", m.str_count, sizing.str_count);
-    LOG("  fstr_count:  measure=%zu, sizing=%zu", m.fstr_count, sizing.fstr_count);
-    LOG("  str_pool:    measure=%zu, sizing=%zu", m.str_pool_size, sizing.str_pool_size);
+    LOG("  entry_count: measure=%zu, parse=%zu", m.entry_count,
+        schema.entry_count);
+    LOG("  str_count:   measure=%zu, sizing=%zu", m.str_count,
+        sizing.str_count);
+    LOG("  fstr_count:  measure=%zu, sizing=%zu", m.fstr_count,
+        sizing.fstr_count);
+    LOG("  str_pool:    measure=%zu, sizing=%zu", m.str_pool_size,
+        sizing.str_pool_size);
 
     CHECK(m.entry_count == schema.entry_count);
     CHECK(m.str_count == sizing.str_count);
@@ -86,7 +91,9 @@ TEST_CASE(test_measure_map_no_strings) {
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
-    CHECK(write_file(path, "demo 1\n1 foo u8 0\n2 bar i32 -5\n3 baz f64 1.0\n") == TEST_OK);
+    CHECK(
+        write_file(path, "demo 1\n1 foo u8 0\n2 bar i32 -5\n3 baz f64 1.0\n") ==
+        TEST_OK);
 
     rc = cfgpack_schema_measure_file(path, &m, scratch, sizeof(scratch), &err);
     CHECK(rc == CFGPACK_OK);
@@ -201,17 +208,20 @@ TEST_CASE(test_measure_json_valid) {
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
-    const char *json =
-        "{\n"
-        "  \"name\": \"test\",\n"
-        "  \"version\": 1,\n"
-        "  \"entries\": [\n"
-        "    {\"index\": 1, \"name\": \"foo\", \"type\": \"u8\", \"value\": 0},\n"
-        "    {\"index\": 2, \"name\": \"bar\", \"type\": \"str\", \"value\": \"hi\"},\n"
-        "    {\"index\": 3, \"name\": \"baz\", \"type\": \"fstr\", \"value\": \"yo\"},\n"
-        "    {\"index\": 4, \"name\": \"qux\", \"type\": \"i32\", \"value\": -5}\n"
-        "  ]\n"
-        "}\n";
+    const char *json = "{\n"
+                       "  \"name\": \"test\",\n"
+                       "  \"version\": 1,\n"
+                       "  \"entries\": [\n"
+                       "    {\"index\": 1, \"name\": \"foo\", \"type\": "
+                       "\"u8\", \"value\": 0},\n"
+                       "    {\"index\": 2, \"name\": \"bar\", \"type\": "
+                       "\"str\", \"value\": \"hi\"},\n"
+                       "    {\"index\": 3, \"name\": \"baz\", \"type\": "
+                       "\"fstr\", \"value\": \"yo\"},\n"
+                       "    {\"index\": 4, \"name\": \"qux\", \"type\": "
+                       "\"i32\", \"value\": -5}\n"
+                       "  ]\n"
+                       "}\n";
     size_t json_len = strlen(json);
 
     LOG("Measuring JSON schema");
@@ -228,7 +238,8 @@ TEST_CASE(test_measure_json_valid) {
     CHECK(m.str_count == 1);
     CHECK(m.fstr_count == 1);
 
-    size_t expected_pool = 1 * (CFGPACK_STR_MAX + 1) + 1 * (CFGPACK_FSTR_MAX + 1);
+    size_t expected_pool = 1 * (CFGPACK_STR_MAX + 1) +
+                           1 * (CFGPACK_FSTR_MAX + 1);
     CHECK(m.str_pool_size == expected_pool);
     LOG("  expected str_pool_size = %zu (correct)", expected_pool);
 
@@ -239,9 +250,9 @@ TEST_CASE(test_measure_json_valid) {
     char str_pool[512];
     uint16_t str_offsets[16];
 
-    rc = cfgpack_schema_parse_json(json, json_len, &schema, entries, 16,
-                                   values, str_pool, sizeof(str_pool),
-                                   str_offsets, 16, &err);
+    rc = cfgpack_schema_parse_json(json, json_len, &schema, entries, 16, values,
+                                   str_pool, sizeof(str_pool), str_offsets, 16,
+                                   &err);
     CHECK(rc == CFGPACK_OK);
 
     cfgpack_schema_sizing_t sizing;
@@ -280,14 +291,14 @@ TEST_CASE(test_measure_json_reserved_index) {
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
-    const char *json =
-        "{\n"
-        "  \"name\": \"test\",\n"
-        "  \"version\": 1,\n"
-        "  \"entries\": [\n"
-        "    {\"index\": 0, \"name\": \"foo\", \"type\": \"u8\", \"value\": 0}\n"
-        "  ]\n"
-        "}\n";
+    const char *json = "{\n"
+                       "  \"name\": \"test\",\n"
+                       "  \"version\": 1,\n"
+                       "  \"entries\": [\n"
+                       "    {\"index\": 0, \"name\": \"foo\", \"type\": "
+                       "\"u8\", \"value\": 0}\n"
+                       "  ]\n"
+                       "}\n";
     rc = cfgpack_schema_measure_json(json, strlen(json), &m, &err);
     CHECK(rc == CFGPACK_ERR_RESERVED_INDEX);
     LOG("Correctly rejected: CFGPACK_ERR_RESERVED_INDEX");
@@ -303,14 +314,14 @@ TEST_CASE(test_measure_json_invalid_type) {
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
-    const char *json =
-        "{\n"
-        "  \"name\": \"test\",\n"
-        "  \"version\": 1,\n"
-        "  \"entries\": [\n"
-        "    {\"index\": 1, \"name\": \"foo\", \"type\": \"nope\", \"value\": 0}\n"
-        "  ]\n"
-        "}\n";
+    const char *json = "{\n"
+                       "  \"name\": \"test\",\n"
+                       "  \"version\": 1,\n"
+                       "  \"entries\": [\n"
+                       "    {\"index\": 1, \"name\": \"foo\", \"type\": "
+                       "\"nope\", \"value\": 0}\n"
+                       "  ]\n"
+                       "}\n";
     rc = cfgpack_schema_measure_json(json, strlen(json), &m, &err);
     CHECK(rc == CFGPACK_ERR_INVALID_TYPE);
     LOG("Correctly rejected: CFGPACK_ERR_INVALID_TYPE");
@@ -327,13 +338,13 @@ TEST_CASE(test_measure_json_missing_field) {
     cfgpack_err_t rc;
 
     /* Missing "version" field */
-    const char *json =
-        "{\n"
-        "  \"name\": \"test\",\n"
-        "  \"entries\": [\n"
-        "    {\"index\": 1, \"name\": \"foo\", \"type\": \"u8\", \"value\": 0}\n"
-        "  ]\n"
-        "}\n";
+    const char *json = "{\n"
+                       "  \"name\": \"test\",\n"
+                       "  \"entries\": [\n"
+                       "    {\"index\": 1, \"name\": \"foo\", \"type\": "
+                       "\"u8\", \"value\": 0}\n"
+                       "  ]\n"
+                       "}\n";
     rc = cfgpack_schema_measure_json(json, strlen(json), &m, &err);
     CHECK(rc == CFGPACK_ERR_PARSE);
     LOG("Correctly rejected missing version: CFGPACK_ERR_PARSE");
@@ -349,14 +360,14 @@ TEST_CASE(test_measure_json_name_too_long) {
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
 
-    const char *json =
-        "{\n"
-        "  \"name\": \"test\",\n"
-        "  \"version\": 1,\n"
-        "  \"entries\": [\n"
-        "    {\"index\": 1, \"name\": \"toolong\", \"type\": \"u8\", \"value\": 0}\n"
-        "  ]\n"
-        "}\n";
+    const char *json = "{\n"
+                       "  \"name\": \"test\",\n"
+                       "  \"version\": 1,\n"
+                       "  \"entries\": [\n"
+                       "    {\"index\": 1, \"name\": \"toolong\", \"type\": "
+                       "\"u8\", \"value\": 0}\n"
+                       "  ]\n"
+                       "}\n";
     rc = cfgpack_schema_measure_json(json, strlen(json), &m, &err);
     CHECK(rc == CFGPACK_ERR_BOUNDS);
     LOG("Correctly rejected: CFGPACK_ERR_BOUNDS");
@@ -370,12 +381,11 @@ TEST_CASE(test_measure_json_name_too_long) {
 TEST_CASE(test_measure_then_parse_map) {
     LOG_SECTION("Measure then parse: .map format end-to-end");
 
-    const char *map =
-        "demo 1\n"
-        "1 foo u8 255\n"
-        "2 bar str \"hello\"\n"
-        "3 baz fstr \"world\"\n"
-        "4 qux i32 -42\n";
+    const char *map = "demo 1\n"
+                      "1 foo u8 255\n"
+                      "2 bar str \"hello\"\n"
+                      "3 baz fstr \"world\"\n"
+                      "4 qux i32 -42\n";
     size_t map_len = strlen(map);
 
     cfgpack_schema_measure_t m;
@@ -388,21 +398,21 @@ TEST_CASE(test_measure_then_parse_map) {
     CHECK(m.entry_count == 4);
     CHECK(m.str_count == 1);
     CHECK(m.fstr_count == 1);
-    LOG("Measure: %zu entries, %zu str, %zu fstr, pool=%zu",
-        m.entry_count, m.str_count, m.fstr_count, m.str_pool_size);
+    LOG("Measure: %zu entries, %zu str, %zu fstr, pool=%zu", m.entry_count,
+        m.str_count, m.fstr_count, m.str_pool_size);
 
     /* Parse with exact-sized buffers */
     cfgpack_entry_t entries[4];
     cfgpack_value_t values[4];
-    char str_pool[82]; /* 1*(64+1) + 1*(16+1) = 82 */
+    char str_pool[82];       /* 1*(64+1) + 1*(16+1) = 82 */
     uint16_t str_offsets[2]; /* 1 str + 1 fstr */
 
     CHECK(m.str_pool_size == sizeof(str_pool));
 
     cfgpack_schema_t schema;
     rc = cfgpack_parse_schema(map, map_len, &schema, entries, m.entry_count,
-                              values, str_pool, m.str_pool_size,
-                              str_offsets, m.str_count + m.fstr_count, &err);
+                              values, str_pool, m.str_pool_size, str_offsets,
+                              m.str_count + m.fstr_count, &err);
     CHECK(rc == CFGPACK_OK);
     CHECK(schema.entry_count == 4);
     LOG("Parse succeeded with measure-sized buffers");
@@ -421,17 +431,20 @@ TEST_CASE(test_measure_then_parse_map) {
 TEST_CASE(test_measure_then_parse_json) {
     LOG_SECTION("Measure then parse: JSON format end-to-end");
 
-    const char *json =
-        "{\n"
-        "  \"name\": \"demo\",\n"
-        "  \"version\": 1,\n"
-        "  \"entries\": [\n"
-        "    {\"index\": 1, \"name\": \"foo\", \"type\": \"u8\", \"value\": 255},\n"
-        "    {\"index\": 2, \"name\": \"bar\", \"type\": \"str\", \"value\": \"hello\"},\n"
-        "    {\"index\": 3, \"name\": \"baz\", \"type\": \"fstr\", \"value\": \"world\"},\n"
-        "    {\"index\": 4, \"name\": \"qux\", \"type\": \"i32\", \"value\": -42}\n"
-        "  ]\n"
-        "}\n";
+    const char *json = "{\n"
+                       "  \"name\": \"demo\",\n"
+                       "  \"version\": 1,\n"
+                       "  \"entries\": [\n"
+                       "    {\"index\": 1, \"name\": \"foo\", \"type\": "
+                       "\"u8\", \"value\": 255},\n"
+                       "    {\"index\": 2, \"name\": \"bar\", \"type\": "
+                       "\"str\", \"value\": \"hello\"},\n"
+                       "    {\"index\": 3, \"name\": \"baz\", \"type\": "
+                       "\"fstr\", \"value\": \"world\"},\n"
+                       "    {\"index\": 4, \"name\": \"qux\", \"type\": "
+                       "\"i32\", \"value\": -42}\n"
+                       "  ]\n"
+                       "}\n";
     size_t json_len = strlen(json);
 
     cfgpack_schema_measure_t m;
@@ -444,13 +457,13 @@ TEST_CASE(test_measure_then_parse_json) {
     CHECK(m.entry_count == 4);
     CHECK(m.str_count == 1);
     CHECK(m.fstr_count == 1);
-    LOG("Measure: %zu entries, %zu str, %zu fstr, pool=%zu",
-        m.entry_count, m.str_count, m.fstr_count, m.str_pool_size);
+    LOG("Measure: %zu entries, %zu str, %zu fstr, pool=%zu", m.entry_count,
+        m.str_count, m.fstr_count, m.str_pool_size);
 
     /* Parse with exact-sized buffers */
     cfgpack_entry_t entries[4];
     cfgpack_value_t values[4];
-    char str_pool[82]; /* 1*(64+1) + 1*(16+1) = 82 */
+    char str_pool[82];       /* 1*(64+1) + 1*(16+1) = 82 */
     uint16_t str_offsets[2]; /* 1 str + 1 fstr */
 
     CHECK(m.str_pool_size == sizeof(str_pool));
@@ -492,7 +505,8 @@ int main(void) {
     overall |= (test_case_result("measure_map_missing_header",
                                  test_measure_map_missing_header()) != TEST_OK);
     overall |= (test_case_result("measure_map_missing_default",
-                                 test_measure_map_missing_default()) != TEST_OK);
+                                 test_measure_map_missing_default()) !=
+                TEST_OK);
 
     /* JSON measure tests */
     overall |= (test_case_result("measure_json_valid",
@@ -500,7 +514,8 @@ int main(void) {
     overall |= (test_case_result("measure_json_malformed",
                                  test_measure_json_malformed()) != TEST_OK);
     overall |= (test_case_result("measure_json_reserved_index",
-                                 test_measure_json_reserved_index()) != TEST_OK);
+                                 test_measure_json_reserved_index()) !=
+                TEST_OK);
     overall |= (test_case_result("measure_json_invalid_type",
                                  test_measure_json_invalid_type()) != TEST_OK);
     overall |= (test_case_result("measure_json_missing_field",

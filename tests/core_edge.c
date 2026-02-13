@@ -407,12 +407,11 @@ int main(void) {
                                  test_get_reserved_index_zero()) != TEST_OK);
     overall |= (test_case_result("str_reserved_index_zero",
                                  test_str_reserved_index_zero()) != TEST_OK);
-    overall |= (test_case_result("string_overwrite",
-                                 test_string_overwrite()) != TEST_OK);
-    overall |=
-        (test_case_result("fstr_overwrite", test_fstr_overwrite()) != TEST_OK);
-    overall |=
-        (test_case_result("get_version", test_get_version()) != TEST_OK);
+    overall |= (test_case_result("string_overwrite", test_string_overwrite()) !=
+                TEST_OK);
+    overall |= (test_case_result("fstr_overwrite", test_fstr_overwrite()) !=
+                TEST_OK);
+    overall |= (test_case_result("get_version", test_get_version()) != TEST_OK);
     overall |= (test_case_result("get_size", test_get_size()) != TEST_OK);
 
     if (overall == TEST_OK) {

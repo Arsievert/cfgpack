@@ -1605,13 +1605,11 @@ cfgpack_err_t cfgpack_schema_measure_json(const char *data,
                             size_t str_len = 0;
                             if (!json_parse_string(p, str_buf, sizeof(str_buf),
                                                    &str_len)) {
-                                set_err(err, p->line,
-                                        "invalid string default");
+                                set_err(err, p->line, "invalid string default");
                                 return CFGPACK_ERR_PARSE;
                             }
                             /* Validate string length against type if known */
-                            if (got_type &&
-                                entry_type == CFGPACK_TYPE_FSTR &&
+                            if (got_type && entry_type == CFGPACK_TYPE_FSTR &&
                                 str_len > CFGPACK_FSTR_MAX) {
                                 set_err(err, p->line, "fstr too long");
                                 return CFGPACK_ERR_STR_TOO_LONG;
@@ -1622,8 +1620,7 @@ cfgpack_err_t cfgpack_schema_measure_json(const char *data,
                             int is_float;
                             if (!json_parse_number(p, &ival, &fval,
                                                    &is_float)) {
-                                set_err(err, p->line,
-                                        "invalid default value");
+                                set_err(err, p->line, "invalid default value");
                                 return CFGPACK_ERR_PARSE;
                             }
                         }

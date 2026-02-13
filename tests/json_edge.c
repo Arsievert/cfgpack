@@ -40,23 +40,23 @@ TEST_CASE(test_json_parse_malformed) {
     LOG("Input: '%s'", json);
 
     CHECK(parse_json(json, &schema, entries, 8, values, str_pool,
-                     sizeof(str_pool), str_offsets, 4, &err) ==
-          CFGPACK_ERR_PARSE);
+                     sizeof(str_pool), str_offsets, 4,
+                     &err) == CFGPACK_ERR_PARSE);
     LOG("Correctly returned: CFGPACK_ERR_PARSE");
 
     /* Also test empty string */
     LOG("Testing empty string");
     CHECK(parse_json("", &schema, entries, 8, values, str_pool,
-                     sizeof(str_pool), str_offsets, 4, &err) ==
-          CFGPACK_ERR_PARSE);
+                     sizeof(str_pool), str_offsets, 4,
+                     &err) == CFGPACK_ERR_PARSE);
     LOG("Empty string correctly returned: CFGPACK_ERR_PARSE");
 
     /* Truncated JSON */
     const char *truncated = "{\"name\": \"test\", \"version\":";
     LOG("Testing truncated JSON: '%s'", truncated);
     CHECK(parse_json(truncated, &schema, entries, 8, values, str_pool,
-                     sizeof(str_pool), str_offsets, 4, &err) ==
-          CFGPACK_ERR_PARSE);
+                     sizeof(str_pool), str_offsets, 4,
+                     &err) == CFGPACK_ERR_PARSE);
     LOG("Truncated JSON correctly returned: CFGPACK_ERR_PARSE");
 
     return TEST_OK;
@@ -85,8 +85,8 @@ TEST_CASE(test_json_parse_missing_name) {
     LOG("Input JSON has 'version' and 'entries' but no 'name'");
 
     CHECK(parse_json(json, &schema, entries, 8, values, str_pool,
-                     sizeof(str_pool), str_offsets, 4, &err) ==
-          CFGPACK_ERR_PARSE);
+                     sizeof(str_pool), str_offsets, 4,
+                     &err) == CFGPACK_ERR_PARSE);
     LOG("Correctly returned: CFGPACK_ERR_PARSE");
 
     return TEST_OK;
@@ -115,8 +115,8 @@ TEST_CASE(test_json_parse_missing_version) {
     LOG("Input JSON has 'name' and 'entries' but no 'version'");
 
     CHECK(parse_json(json, &schema, entries, 8, values, str_pool,
-                     sizeof(str_pool), str_offsets, 4, &err) ==
-          CFGPACK_ERR_PARSE);
+                     sizeof(str_pool), str_offsets, 4,
+                     &err) == CFGPACK_ERR_PARSE);
     LOG("Correctly returned: CFGPACK_ERR_PARSE");
 
     return TEST_OK;
@@ -142,8 +142,8 @@ TEST_CASE(test_json_parse_missing_entries) {
     LOG("Input JSON has 'name' and 'version' but no 'entries'");
 
     CHECK(parse_json(json, &schema, entries, 8, values, str_pool,
-                     sizeof(str_pool), str_offsets, 4, &err) ==
-          CFGPACK_ERR_PARSE);
+                     sizeof(str_pool), str_offsets, 4,
+                     &err) == CFGPACK_ERR_PARSE);
     LOG("Correctly returned: CFGPACK_ERR_PARSE");
 
     return TEST_OK;
@@ -173,8 +173,8 @@ TEST_CASE(test_json_parse_bad_entry_type) {
     LOG("Input JSON has entry with type 'bogus'");
 
     CHECK(parse_json(json, &schema, entries, 8, values, str_pool,
-                     sizeof(str_pool), str_offsets, 4, &err) ==
-          CFGPACK_ERR_INVALID_TYPE);
+                     sizeof(str_pool), str_offsets, 4,
+                     &err) == CFGPACK_ERR_INVALID_TYPE);
     LOG("Correctly returned: CFGPACK_ERR_INVALID_TYPE");
 
     return TEST_OK;
@@ -211,8 +211,8 @@ TEST_CASE(test_json_parse_too_many_entries) {
     LOG("Generated JSON with 129 entries (%d bytes)", pos);
 
     CHECK(parse_json(json, &schema, entries, 128, values, str_pool,
-                     sizeof(str_pool), str_offsets, 4, &err) ==
-          CFGPACK_ERR_BOUNDS);
+                     sizeof(str_pool), str_offsets, 4,
+                     &err) == CFGPACK_ERR_BOUNDS);
     LOG("Correctly returned: CFGPACK_ERR_BOUNDS");
 
     return TEST_OK;
@@ -242,8 +242,8 @@ TEST_CASE(test_json_parse_reserved_index) {
     LOG("Input JSON has entry with index 0 (reserved)");
 
     CHECK(parse_json(json, &schema, entries, 8, values, str_pool,
-                     sizeof(str_pool), str_offsets, 4, &err) ==
-          CFGPACK_ERR_RESERVED_INDEX);
+                     sizeof(str_pool), str_offsets, 4,
+                     &err) == CFGPACK_ERR_RESERVED_INDEX);
     LOG("Correctly returned: CFGPACK_ERR_RESERVED_INDEX");
 
     return TEST_OK;
@@ -309,7 +309,8 @@ int main(void) {
     overall |= (test_case_result("json_parse_bad_entry_type",
                                  test_json_parse_bad_entry_type()) != TEST_OK);
     overall |= (test_case_result("json_parse_too_many_entries",
-                                 test_json_parse_too_many_entries()) != TEST_OK);
+                                 test_json_parse_too_many_entries()) !=
+                TEST_OK);
     overall |= (test_case_result("json_parse_reserved_index",
                                  test_json_parse_reserved_index()) != TEST_OK);
     overall |= (test_case_result("json_writer_small_buffer",

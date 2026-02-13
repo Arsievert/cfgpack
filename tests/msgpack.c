@@ -508,22 +508,24 @@ TEST_CASE(test_skip_value_all_types) {
     cfgpack_buf_init(&buf, storage, sizeof(storage));
 
     /* Encode a series of different types sequentially */
-    CHECK(cfgpack_msgpack_encode_uint64(&buf, 42) == CFGPACK_OK);       /* fixint */
-    CHECK(cfgpack_msgpack_encode_uint64(&buf, 200) == CFGPACK_OK);      /* u8 */
-    CHECK(cfgpack_msgpack_encode_uint64(&buf, 1000) == CFGPACK_OK);     /* u16 */
-    CHECK(cfgpack_msgpack_encode_uint64(&buf, 100000) == CFGPACK_OK);   /* u32 */
+    CHECK(cfgpack_msgpack_encode_uint64(&buf, 42) == CFGPACK_OK);   /* fixint */
+    CHECK(cfgpack_msgpack_encode_uint64(&buf, 200) == CFGPACK_OK);  /* u8 */
+    CHECK(cfgpack_msgpack_encode_uint64(&buf, 1000) == CFGPACK_OK); /* u16 */
+    CHECK(cfgpack_msgpack_encode_uint64(&buf, 100000) == CFGPACK_OK); /* u32 */
     CHECK(cfgpack_msgpack_encode_uint64(&buf, 0x100000000ULL) ==
-          CFGPACK_OK);                                                   /* u64 */
-    CHECK(cfgpack_msgpack_encode_int64(&buf, -1) == CFGPACK_OK);        /* neg fixint */
-    CHECK(cfgpack_msgpack_encode_int64(&buf, -100) == CFGPACK_OK);      /* i8 */
-    CHECK(cfgpack_msgpack_encode_int64(&buf, -1000) == CFGPACK_OK);     /* i16 */
-    CHECK(cfgpack_msgpack_encode_int64(&buf, -100000) == CFGPACK_OK);   /* i32 */
+          CFGPACK_OK); /* u64 */
+    CHECK(cfgpack_msgpack_encode_int64(&buf, -1) ==
+          CFGPACK_OK); /* neg fixint */
+    CHECK(cfgpack_msgpack_encode_int64(&buf, -100) == CFGPACK_OK);    /* i8 */
+    CHECK(cfgpack_msgpack_encode_int64(&buf, -1000) == CFGPACK_OK);   /* i16 */
+    CHECK(cfgpack_msgpack_encode_int64(&buf, -100000) == CFGPACK_OK); /* i32 */
     CHECK(cfgpack_msgpack_encode_int64(&buf, (int64_t)INT32_MIN - 1) ==
-          CFGPACK_OK);                                                   /* i64 */
-    CHECK(cfgpack_msgpack_encode_f32(&buf, 1.0f) == CFGPACK_OK);        /* f32 */
-    CHECK(cfgpack_msgpack_encode_f64(&buf, 2.0) == CFGPACK_OK);         /* f64 */
-    CHECK(cfgpack_msgpack_encode_str(&buf, "hi", 2) == CFGPACK_OK);     /* fixstr */
-    CHECK(cfgpack_msgpack_encode_map_header(&buf, 0) == CFGPACK_OK);    /* empty fixmap */
+          CFGPACK_OK);                                              /* i64 */
+    CHECK(cfgpack_msgpack_encode_f32(&buf, 1.0f) == CFGPACK_OK);    /* f32 */
+    CHECK(cfgpack_msgpack_encode_f64(&buf, 2.0) == CFGPACK_OK);     /* f64 */
+    CHECK(cfgpack_msgpack_encode_str(&buf, "hi", 2) == CFGPACK_OK); /* fixstr */
+    CHECK(cfgpack_msgpack_encode_map_header(&buf, 0) ==
+          CFGPACK_OK); /* empty fixmap */
 
     /* Also add nil (0xc0), false (0xc2), true (0xc3) manually */
     uint8_t nil = 0xc0;
@@ -587,9 +589,8 @@ TEST_CASE(test_buf_append_overflow) {
 int main(void) {
     test_result_t overall = TEST_OK;
 
-    overall |=
-        (test_case_result("encode_decode_uint_fixint",
-                          test_encode_decode_uint_fixint()) != TEST_OK);
+    overall |= (test_case_result("encode_decode_uint_fixint",
+                                 test_encode_decode_uint_fixint()) != TEST_OK);
     overall |= (test_case_result("encode_decode_uint8",
                                  test_encode_decode_uint8()) != TEST_OK);
     overall |= (test_case_result("encode_decode_uint16",
@@ -598,9 +599,8 @@ int main(void) {
                                  test_encode_decode_uint32()) != TEST_OK);
     overall |= (test_case_result("encode_decode_uint64",
                                  test_encode_decode_uint64()) != TEST_OK);
-    overall |=
-        (test_case_result("encode_decode_int_fixint",
-                          test_encode_decode_int_fixint()) != TEST_OK);
+    overall |= (test_case_result("encode_decode_int_fixint",
+                                 test_encode_decode_int_fixint()) != TEST_OK);
     overall |= (test_case_result("encode_decode_int8",
                                  test_encode_decode_int8()) != TEST_OK);
     overall |= (test_case_result("encode_decode_int16",
@@ -609,15 +609,12 @@ int main(void) {
                                  test_encode_decode_int32()) != TEST_OK);
     overall |= (test_case_result("encode_decode_int64",
                                  test_encode_decode_int64()) != TEST_OK);
-    overall |=
-        (test_case_result("encode_decode_f32", test_encode_decode_f32()) !=
-         TEST_OK);
-    overall |=
-        (test_case_result("encode_decode_f64", test_encode_decode_f64()) !=
-         TEST_OK);
-    overall |=
-        (test_case_result("encode_decode_str", test_encode_decode_str()) !=
-         TEST_OK);
+    overall |= (test_case_result("encode_decode_f32",
+                                 test_encode_decode_f32()) != TEST_OK);
+    overall |= (test_case_result("encode_decode_f64",
+                                 test_encode_decode_f64()) != TEST_OK);
+    overall |= (test_case_result("encode_decode_str",
+                                 test_encode_decode_str()) != TEST_OK);
     overall |= (test_case_result("encode_decode_map_header",
                                  test_encode_decode_map_header()) != TEST_OK);
     overall |= (test_case_result("skip_value_all_types",

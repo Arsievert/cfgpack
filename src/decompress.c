@@ -27,8 +27,8 @@ cfgpack_err_t cfgpack_pagein_lz4(cfgpack_ctx_t *ctx,
     }
 
     /* LZ4_decompress_safe requires knowing the exact decompressed size */
-    result = LZ4_decompress_safe((const char *)data, (char *)scratch,
-                                 (int)len, (int)decompressed_size);
+    result = LZ4_decompress_safe((const char *)data, (char *)scratch, (int)len,
+                                 (int)decompressed_size);
 
     if (result < 0) {
         return CFGPACK_ERR_DECODE;
@@ -82,8 +82,7 @@ cfgpack_err_t cfgpack_pagein_heatshrink(cfgpack_ctx_t *ctx,
         do {
             poll_res = heatshrink_decoder_poll(&hs_decoder,
                                                scratch + total_output,
-                                               scratch_cap -
-                                                   total_output,
+                                               scratch_cap - total_output,
                                                &output_produced);
             if (poll_res < 0) {
                 return CFGPACK_ERR_DECODE;
@@ -104,8 +103,7 @@ cfgpack_err_t cfgpack_pagein_heatshrink(cfgpack_ctx_t *ctx,
 
     /* Continue polling until done */
     while (finish_res == HSDR_FINISH_MORE) {
-        poll_res = heatshrink_decoder_poll(&hs_decoder,
-                                           scratch + total_output,
+        poll_res = heatshrink_decoder_poll(&hs_decoder, scratch + total_output,
                                            scratch_cap - total_output,
                                            &output_produced);
         if (poll_res < 0) {

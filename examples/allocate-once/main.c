@@ -185,8 +185,8 @@ int main(int argc, char **argv) {
 
     cfgpack_schema_t schema;
     rc = cfgpack_parse_schema(file_buf, file_len, &schema, entries, entry_count,
-                              values, str_pool, m.str_pool_size,
-                              str_offsets, str_offset_count, &parse_err);
+                              values, str_pool, m.str_pool_size, str_offsets,
+                              str_offset_count, &parse_err);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Final parse error at line %zu: %s\n", parse_err.line,
                 parse_err.message);
@@ -241,8 +241,8 @@ int main(int argc, char **argv) {
     /* ── 8. Simulate reboot: re-parse schema, re-init, pagein ──────── */
 
     rc = cfgpack_parse_schema(file_buf, file_len, &schema, entries, entry_count,
-                              values, str_pool, m.str_pool_size,
-                              str_offsets, str_offset_count, &parse_err);
+                              values, str_pool, m.str_pool_size, str_offsets,
+                              str_offset_count, &parse_err);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Re-parse error: %s\n", parse_err.message);
         return (1);

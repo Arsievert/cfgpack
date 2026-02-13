@@ -456,7 +456,8 @@ TEST_CASE(test_lz4_size_too_large) {
                                sizeof(str_pool), str_offsets, 1);
 
     LOG("Testing cfgpack_pagein_lz4() with decompressed_size=5000 (exceeds "
-        "scratch_cap=%d)", BUF_SIZE);
+        "scratch_cap=%d)",
+        BUF_SIZE);
     CHECK(cfgpack_pagein_lz4(&ctx, compressed_buf, 10, 5000, scratch_buf,
                              BUF_SIZE) == CFGPACK_ERR_BOUNDS);
     LOG("Correctly returned CFGPACK_ERR_BOUNDS for size > scratch_cap");
@@ -706,7 +707,8 @@ TEST_CASE(test_roundtrip_both_algorithms) {
     setup_large_test_context(&schema, entries, &ctx, values, str_pool,
                              sizeof(str_pool), str_offsets, 5);
     CHECK(cfgpack_pagein_heatshrink(&ctx, scratch_buf, hs_len,
-                                    decompress_scratch, BUF_SIZE) == CFGPACK_OK);
+                                    decompress_scratch,
+                                    BUF_SIZE) == CFGPACK_OK);
     CHECK(cfgpack_get(&ctx, 1, &v) == CFGPACK_OK && v.v.u64 == 255);
     CHECK(cfgpack_get_str(&ctx, 11, &str_out, &str_len) == CFGPACK_OK &&
           str_len == 41);
