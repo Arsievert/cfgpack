@@ -2,7 +2,7 @@
 
 A MessagePack-based configuration library for embedded systems.
 
-**Embedded profile:** no heap allocation. All buffers are caller-owned. Hard caps: max 128 schema entries; max pagein/pageout size 4096 bytes. Schema descriptions are ignored/dropped.
+**Embedded profile:** no heap allocation. All buffers are caller-owned. Hard caps: max 128 schema entries. Schema descriptions are ignored/dropped.
 
 ## What It Does
 
@@ -32,7 +32,7 @@ A MessagePack-based configuration library for embedded systems.
   - `DEFAULT`: default value for this entry (see below)
   - `# description`: optional trailing comment for documentation (not stored in binary)
 - Comments: lines starting with `#` are ignored; inline `#` comments after the default value are also ignored.
-- Hard caps in this profile: 128 entries, 4096-byte page size.
+- Hard caps in this profile: 128 entries.
 
 ### Default Values
 

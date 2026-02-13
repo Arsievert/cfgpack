@@ -4,7 +4,7 @@ CFGPack Documentation
 A MessagePack-based configuration library for embedded systems.
 
 **Embedded profile:** no heap allocation. All buffers are caller-owned.
-Hard caps: max 128 schema entries; max pagein/pageout size 4096 bytes.
+Hard caps: max 128 schema entries.
 
 .. toctree::
    :maxdepth: 2

@@ -8,32 +8,26 @@
 
 #include "cfgpack/decompress.h"
 
-#if defined(CFGPACK_LZ4) || defined(CFGPACK_HEATSHRINK)
-
-  /* Shared static decompression buffer (matches PAGE_CAP from io.c) */
-  #define DECOMPRESS_BUF_CAP 4096
-static uint8_t decompress_buf[DECOMPRESS_BUF_CAP];
-
-#endif /* CFGPACK_LZ4 || CFGPACK_HEATSHRINK */
-
 #ifdef CFGPACK_LZ4
   #include "lz4.h"
 
 cfgpack_err_t cfgpack_pagein_lz4(cfgpack_ctx_t *ctx,
                                  const uint8_t *data,
                                  size_t len,
-                                 size_t decompressed_size) {
+                                 size_t decompressed_size,
+                                 uint8_t *scratch,
+                                 size_t scratch_cap) {
     int result;
 
-    if (!ctx || !data) {
+    if (!ctx || !data || !scratch) {
         return CFGPACK_ERR_DECODE;
     }
-    if (decompressed_size > DECOMPRESS_BUF_CAP) {
+    if (decompressed_size > scratch_cap) {
         return CFGPACK_ERR_BOUNDS;
     }
 
     /* LZ4_decompress_safe requires knowing the exact decompressed size */
-    result = LZ4_decompress_safe((const char *)data, (char *)decompress_buf,
+    result = LZ4_decompress_safe((const char *)data, (char *)scratch,
                                  (int)len, (int)decompressed_size);
 
     if (result < 0) {
@@ -43,7 +37,7 @@ cfgpack_err_t cfgpack_pagein_lz4(cfgpack_ctx_t *ctx,
         return CFGPACK_ERR_DECODE;
     }
 
-    return cfgpack_pagein_buf(ctx, decompress_buf, (size_t)result);
+    return cfgpack_pagein_buf(ctx, scratch, (size_t)result);
 }
 
 #endif /* CFGPACK_LZ4 */
@@ -56,7 +50,9 @@ static heatshrink_decoder hs_decoder;
 
 cfgpack_err_t cfgpack_pagein_heatshrink(cfgpack_ctx_t *ctx,
                                         const uint8_t *data,
-                                        size_t len) {
+                                        size_t len,
+                                        uint8_t *scratch,
+                                        size_t scratch_cap) {
     size_t input_consumed = 0;
     size_t output_produced = 0;
     size_t total_output = 0;
@@ -64,7 +60,7 @@ cfgpack_err_t cfgpack_pagein_heatshrink(cfgpack_ctx_t *ctx,
     HSD_poll_res poll_res;
     HSD_finish_res finish_res;
 
-    if (!ctx || !data) {
+    if (!ctx || !data || !scratch) {
         return CFGPACK_ERR_DECODE;
     }
 
@@ -85,8 +81,8 @@ cfgpack_err_t cfgpack_pagein_heatshrink(cfgpack_ctx_t *ctx,
         /* Poll for decompressed output */
         do {
             poll_res = heatshrink_decoder_poll(&hs_decoder,
-                                               decompress_buf + total_output,
-                                               DECOMPRESS_BUF_CAP -
+                                               scratch + total_output,
+                                               scratch_cap -
                                                    total_output,
                                                &output_produced);
             if (poll_res < 0) {
@@ -94,7 +90,7 @@ cfgpack_err_t cfgpack_pagein_heatshrink(cfgpack_ctx_t *ctx,
             }
             total_output += output_produced;
 
-            if (total_output > DECOMPRESS_BUF_CAP) {
+            if (total_output > scratch_cap) {
                 return CFGPACK_ERR_BOUNDS;
             }
         } while (poll_res == HSDR_POLL_MORE);
@@ -109,15 +105,15 @@ cfgpack_err_t cfgpack_pagein_heatshrink(cfgpack_ctx_t *ctx,
     /* Continue polling until done */
     while (finish_res == HSDR_FINISH_MORE) {
         poll_res = heatshrink_decoder_poll(&hs_decoder,
-                                           decompress_buf + total_output,
-                                           DECOMPRESS_BUF_CAP - total_output,
+                                           scratch + total_output,
+                                           scratch_cap - total_output,
                                            &output_produced);
         if (poll_res < 0) {
             return CFGPACK_ERR_DECODE;
         }
         total_output += output_produced;
 
-        if (total_output > DECOMPRESS_BUF_CAP) {
+        if (total_output > scratch_cap) {
             return CFGPACK_ERR_BOUNDS;
         }
 
@@ -127,7 +123,7 @@ cfgpack_err_t cfgpack_pagein_heatshrink(cfgpack_ctx_t *ctx,
         }
     }
 
-    return cfgpack_pagein_buf(ctx, decompress_buf, total_output);
+    return cfgpack_pagein_buf(ctx, scratch, total_output);
 }
 
 #endif /* CFGPACK_HEATSHRINK */

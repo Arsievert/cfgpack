@@ -6,8 +6,6 @@
 
 #include <string.h>
 
-#define PAGE_CAP 4096
-
 /**
  * @brief Get the string slot index for a given entry offset.
  */
@@ -420,7 +418,62 @@ static cfgpack_err_t decode_value_with_coercion(cfgpack_reader_t *r,
         return CFGPACK_ERR_TYPE_MISMATCH;
     }
 
-    /* Decode the value using the schema type */
+    /* If wire type matches schema type (or same decode family), decode directly */
+    if (wire_type == schema_type) {
+        return decode_value(r, ctx, entry_off, schema_type, out);
+    }
+
+    /*
+     * Cross-type coercion: decode using the wire type first, then convert.
+     *
+     * Unsigned widening (u8->u16, etc.) and signed widening (i8->i16, etc.)
+     * work via decode_value directly because decode_uint64 handles all
+     * unsigned formats and decode_int64 handles all signed formats.
+     *
+     * The cases that need explicit conversion:
+     *   - unsigned wire -> signed schema (decode_int64 can't parse 0xcc-0xcf)
+     *   - f32 wire -> f64 schema (decode_f64 can't parse 0xca)
+     */
+    int wire_is_unsigned = (wire_type == CFGPACK_TYPE_U8 ||
+                            wire_type == CFGPACK_TYPE_U16 ||
+                            wire_type == CFGPACK_TYPE_U32 ||
+                            wire_type == CFGPACK_TYPE_U64);
+    int schema_is_signed = (schema_type == CFGPACK_TYPE_I8 ||
+                            schema_type == CFGPACK_TYPE_I16 ||
+                            schema_type == CFGPACK_TYPE_I32 ||
+                            schema_type == CFGPACK_TYPE_I64);
+
+    if (wire_is_unsigned && schema_is_signed) {
+        /* Decode as uint64, then convert to int64 */
+        cfgpack_value_t tmp;
+        cfgpack_err_t err = decode_value(r, ctx, entry_off, wire_type, &tmp);
+        if (err != CFGPACK_OK) {
+            return err;
+        }
+        /* Check that the unsigned value fits in int64_t */
+        if (tmp.v.u64 > (uint64_t)INT64_MAX) {
+            return CFGPACK_ERR_DECODE;
+        }
+        out->type = schema_type;
+        out->v.i64 = (int64_t)tmp.v.u64;
+        return CFGPACK_OK;
+    }
+
+    if (wire_type == CFGPACK_TYPE_F32 && schema_type == CFGPACK_TYPE_F64) {
+        /* Decode as f32, then widen to f64 */
+        cfgpack_value_t tmp;
+        cfgpack_err_t err = decode_value(r, ctx, entry_off, CFGPACK_TYPE_F32,
+                                         &tmp);
+        if (err != CFGPACK_OK) {
+            return err;
+        }
+        out->type = CFGPACK_TYPE_F64;
+        out->v.f64 = (double)tmp.v.f32;
+        return CFGPACK_OK;
+    }
+
+    /* All other allowed coercions (signed widening, unsigned widening,
+     * fstr->str) work via decode_value with the schema type directly */
     return decode_value(r, ctx, entry_off, schema_type, out);
 }
 

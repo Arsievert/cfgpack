@@ -10,13 +10,17 @@ Both LZ4 and heatshrink are enabled by default. To disable for minimal embedded 
 #include "cfgpack/decompress.h"
 
 /* Decompress LZ4 data and load into context.
- * decompressed_size must be known (stored alongside compressed data). */
+ * decompressed_size must be known (stored alongside compressed data).
+ * scratch/scratch_cap: caller-provided buffer for decompressed output. */
 cfgpack_err_t cfgpack_pagein_lz4(cfgpack_ctx_t *ctx, const uint8_t *data, size_t len,
-                                  size_t decompressed_size);
+                                  size_t decompressed_size,
+                                  uint8_t *scratch, size_t scratch_cap);
 
 /* Decompress heatshrink data and load into context.
- * Encoder must use window=8, lookahead=4 to match decoder config. */
-cfgpack_err_t cfgpack_pagein_heatshrink(cfgpack_ctx_t *ctx, const uint8_t *data, size_t len);
+ * Encoder must use window=8, lookahead=4 to match decoder config.
+ * scratch/scratch_cap: caller-provided buffer for decompressed output. */
+cfgpack_err_t cfgpack_pagein_heatshrink(cfgpack_ctx_t *ctx, const uint8_t *data, size_t len,
+                                         uint8_t *scratch, size_t scratch_cap);
 ```
 
 ## Usage Example
@@ -24,22 +28,25 @@ cfgpack_err_t cfgpack_pagein_heatshrink(cfgpack_ctx_t *ctx, const uint8_t *data,
 ```c
 // LZ4 example - decompressed size must be stored with the compressed blob
 uint8_t compressed[2048];
+uint8_t scratch[4096];  // caller-provided decompression buffer
 size_t compressed_len = read_from_flash(compressed);
 size_t decompressed_size = read_size_header();  // stored alongside blob
 
-cfgpack_err_t err = cfgpack_pagein_lz4(&ctx, compressed, compressed_len, decompressed_size);
+cfgpack_err_t err = cfgpack_pagein_lz4(&ctx, compressed, compressed_len, decompressed_size,
+                                        scratch, sizeof(scratch));
 if (err != CFGPACK_OK) {
     // Handle decompression or decode error
 }
 
 // Heatshrink example - no size header needed (streaming)
-err = cfgpack_pagein_heatshrink(&ctx, compressed, compressed_len);
+err = cfgpack_pagein_heatshrink(&ctx, compressed, compressed_len, scratch, sizeof(scratch));
 ```
 
 ## Implementation Notes
 
-- **Static buffer**: Both decompression functions use a shared internal 4096-byte buffer (matching `PAGE_CAP`). Decompressed data cannot exceed this size.
-- **Not thread-safe**: The shared static buffer means these functions cannot be called concurrently from multiple threads.
+- **Caller-provided buffer**: Both decompression functions accept a `scratch` / `scratch_cap` parameter for the decompressed output. The caller controls the maximum decompressed size.
+- **LZ4 path**: Fully reentrant — no static state.
+- **Heatshrink path**: Uses a static decoder instance and is NOT thread-safe. The LZ4 path has no such limitation.
 - **Heatshrink parameters**: The decoder is configured with window=8 bits (256 bytes) and lookahead=4 bits (16 bytes). The encoder must use matching parameters.
 - **Vendored sources**: LZ4 and heatshrink source files are vendored in `third_party/` to avoid external dependencies.
 

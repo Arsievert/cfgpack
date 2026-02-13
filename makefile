@@ -48,7 +48,11 @@ ENCODER_DEPS := third_party/heatshrink/heatshrink_encoder.c
 
 # Test sources
 TESTSRC := tests/basic.c         \
+           tests/core_edge.c    \
            tests/decompress.c    \
+           tests/io_edge.c      \
+           tests/json_edge.c    \
+           tests/msgpack.c      \
            tests/parser.c        \
            tests/parser_bounds.c \
            tests/runtime.c       \

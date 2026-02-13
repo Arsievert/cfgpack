@@ -998,6 +998,135 @@ TEST_CASE(test_roundtrip_with_name) {
     return (TEST_OK);
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Additional Coverage Tests
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+TEST_CASE(test_pageout_pagein_cycle) {
+    LOG_SECTION("Multi-cycle pageout -> pagein -> modify -> pageout -> pagein");
+
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[2];
+    cfgpack_ctx_t ctx;
+    cfgpack_value_t values[2];
+    uint8_t buf1[128], buf2[128];
+    size_t len1 = 0, len2 = 0;
+    cfgpack_value_t v;
+    char str_pool[1];
+    uint16_t str_offsets[1];
+
+    LOG("Creating schema with 2 u8 entries");
+    make_schema(&schema, entries, 2);
+
+    LOG("Initializing context");
+    CHECK(cfgpack_init(&ctx, &schema, values, 2, str_pool, sizeof(str_pool),
+                       str_offsets, 0) == CFGPACK_OK);
+
+    /* Cycle 1: set values, pageout, clear, pagein, verify */
+    LOG("Setting values: index 1 = 10, index 2 = 20");
+    CHECK(cfgpack_set_u8(&ctx, 1, 10) == CFGPACK_OK);
+    CHECK(cfgpack_set_u8(&ctx, 2, 20) == CFGPACK_OK);
+
+    LOG("Pageout cycle 1");
+    CHECK(cfgpack_pageout(&ctx, buf1, sizeof(buf1), &len1) == CFGPACK_OK);
+    LOG("Pageout succeeded, len = %zu", len1);
+
+    LOG("Clearing state");
+    memset(values, 0, sizeof(values));
+    memset(ctx.present, 0, sizeof(ctx.present));
+
+    LOG("Pagein cycle 1");
+    CHECK(cfgpack_pagein_buf(&ctx, buf1, len1) == CFGPACK_OK);
+
+    LOG("Verifying values after cycle 1");
+    CHECK(cfgpack_get(&ctx, 1, &v) == CFGPACK_OK && v.v.u64 == 10);
+    LOG("  [1] u8 = %" PRIu64 " (ok)", v.v.u64);
+    CHECK(cfgpack_get(&ctx, 2, &v) == CFGPACK_OK && v.v.u64 == 20);
+    LOG("  [2] u8 = %" PRIu64 " (ok)", v.v.u64);
+
+    /* Cycle 2: modify one value, pageout, clear, pagein, verify */
+    LOG("Modifying index 1 = 99");
+    CHECK(cfgpack_set_u8(&ctx, 1, 99) == CFGPACK_OK);
+
+    LOG("Pageout cycle 2");
+    CHECK(cfgpack_pageout(&ctx, buf2, sizeof(buf2), &len2) == CFGPACK_OK);
+    LOG("Pageout succeeded, len = %zu", len2);
+
+    LOG("Clearing state");
+    memset(values, 0, sizeof(values));
+    memset(ctx.present, 0, sizeof(ctx.present));
+
+    LOG("Pagein cycle 2");
+    CHECK(cfgpack_pagein_buf(&ctx, buf2, len2) == CFGPACK_OK);
+
+    LOG("Verifying values after cycle 2");
+    CHECK(cfgpack_get(&ctx, 1, &v) == CFGPACK_OK && v.v.u64 == 99);
+    LOG("  [1] u8 = %" PRIu64 " (ok, modified)", v.v.u64);
+    CHECK(cfgpack_get(&ctx, 2, &v) == CFGPACK_OK && v.v.u64 == 20);
+    LOG("  [2] u8 = %" PRIu64 " (ok, unchanged)", v.v.u64);
+
+    LOG("Test completed successfully");
+    return (TEST_OK);
+}
+
+TEST_CASE(test_schema_get_sizing) {
+    LOG_SECTION("cfgpack_schema_get_sizing returns correct counts");
+
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[5];
+    cfgpack_schema_sizing_t sizing;
+
+    LOG("Creating schema: 2 str, 1 fstr, 2 u8 entries");
+    make_schema(&schema, entries, 5);
+    entries[0].type = CFGPACK_TYPE_STR;
+    entries[1].type = CFGPACK_TYPE_STR;
+    entries[2].type = CFGPACK_TYPE_FSTR;
+    entries[3].type = CFGPACK_TYPE_U8;
+    entries[4].type = CFGPACK_TYPE_U8;
+
+    LOG("Calling cfgpack_schema_get_sizing");
+    CHECK(cfgpack_schema_get_sizing(&schema, &sizing) == CFGPACK_OK);
+
+    LOG("Verifying sizing:");
+    LOG("  str_count = %zu (expected 2)", sizing.str_count);
+    CHECK(sizing.str_count == 2);
+    LOG("  fstr_count = %zu (expected 1)", sizing.fstr_count);
+    CHECK(sizing.fstr_count == 1);
+
+    size_t expected_pool = 2 * (CFGPACK_STR_MAX + 1) + 1 * (CFGPACK_FSTR_MAX + 1);
+    LOG("  str_pool_size = %zu (expected %zu)", sizing.str_pool_size,
+        expected_pool);
+    CHECK(sizing.str_pool_size == expected_pool);
+
+    LOG("Test completed successfully");
+    return (TEST_OK);
+}
+
+TEST_CASE(test_init_str_pool_too_small) {
+    LOG_SECTION("cfgpack_init with undersized string pool");
+
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[1];
+    cfgpack_ctx_t ctx;
+    cfgpack_value_t values[1];
+    char str_pool[1]; /* way too small for a str entry (needs 65 bytes) */
+    uint16_t str_offsets[1];
+
+    LOG("Creating schema with 1 str entry");
+    make_schema(&schema, entries, 1);
+    entries[0].type = CFGPACK_TYPE_STR;
+
+    LOG("Calling cfgpack_init with str_pool_cap=1 (needs %d)",
+        CFGPACK_STR_MAX + 1);
+    cfgpack_err_t rc = cfgpack_init(&ctx, &schema, values, 1, str_pool,
+                                    sizeof(str_pool), str_offsets, 1);
+    LOG("Result: %d (expected %d = ERR_BOUNDS)", rc, CFGPACK_ERR_BOUNDS);
+    CHECK(rc == CFGPACK_ERR_BOUNDS);
+
+    LOG("Test completed successfully");
+    return (TEST_OK);
+}
+
 int main(void) {
     test_result_t overall = TEST_OK;
 
@@ -1047,6 +1176,14 @@ int main(void) {
                 TEST_OK);
     overall |= (test_case_result("roundtrip_with_name",
                                  test_roundtrip_with_name()) != TEST_OK);
+
+    /* Additional coverage tests */
+    overall |= (test_case_result("pageout_pagein_cycle",
+                                 test_pageout_pagein_cycle()) != TEST_OK);
+    overall |= (test_case_result("schema_get_sizing",
+                                 test_schema_get_sizing()) != TEST_OK);
+    overall |= (test_case_result("init_str_pool_too_small",
+                                 test_init_str_pool_too_small()) != TEST_OK);
 
     if (overall == TEST_OK) {
         printf(COLOR_GREEN "ALL PASS" COLOR_RESET "\n");

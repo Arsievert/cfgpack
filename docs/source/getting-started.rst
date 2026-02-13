@@ -11,7 +11,6 @@ Include just ``cfgpack/cfgpack.h``; it re-exports the public API surface.
    #include "cfgpack/cfgpack.h"
 
    cfgpack_entry_t entries[128];
-   cfgpack_fat_value_t defaults[128];
    cfgpack_schema_t schema;
    cfgpack_parse_error_t err;
    cfgpack_value_t values[128];
@@ -19,11 +18,13 @@ Include just ``cfgpack/cfgpack.h``; it re-exports the public API surface.
    uint16_t str_offsets[128];
    uint8_t scratch[4096];
 
-   // Parse schema from .map file
-   cfgpack_parse_schema(map_data, map_len, &schema, entries, 128, defaults, &err);
-   
-   // Initialize runtime context (presence bitmap is embedded in ctx)
-   cfgpack_init(&ctx, &schema, values, 128, defaults,
+   // Parse schema — defaults are written directly into values[] and str_pool[]
+   cfgpack_parse_schema(map_data, map_len, &schema, entries, 128,
+                        values, str_pool, sizeof(str_pool), str_offsets, 128, &err);
+
+   // Initialize runtime context — values and str_pool already contain defaults
+   cfgpack_ctx_t ctx;
+   cfgpack_init(&ctx, &schema, values, 128,
                 str_pool, sizeof(str_pool), str_offsets, 128);
 
    // Use typed convenience functions
