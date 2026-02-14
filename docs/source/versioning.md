@@ -57,6 +57,16 @@ if (err == CFGPACK_OK) {
 }
 ```
 
+## Default Restoration During Remap
+
+After `cfgpack_pagein_remap()` decodes all entries from the old data, it automatically restores presence for any new-schema entries that have `has_default` set but were not covered by the incoming data. This means:
+
+- New entries added in a schema upgrade that have default values are immediately accessible via `cfgpack_get()` after migration, without any explicit code to set them.
+- Entries without defaults (`NIL`) that were not in the old data remain absent (`cfgpack_get()` returns `CFGPACK_ERR_MISSING`).
+- If old data contains a value for an entry, that decoded value always takes precedence over the schema default.
+
+This applies to all types including `str` and `fstr` defaults.
+
 ## Type Widening Rules
 
 During remapping, values can be automatically widened to larger types:

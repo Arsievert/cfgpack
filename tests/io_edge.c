@@ -598,6 +598,348 @@ TEST_CASE(test_coerce_fstr_to_str) {
     return TEST_OK;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 12. pagein_remap restores presence for new-schema entries with defaults
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_remap_defaults_restored) {
+    LOG_SECTION(
+        "Remap: new entries with has_default are present after migrate");
+
+    /* Old schema: u8@1, u8@2 (no defaults)
+     * New schema: u8@1, u8@2, u8@3(has_default=1, default=99)
+     * Remap: identity (no index changes)
+     *
+     * Old data contains only keys 1 and 2.
+     * After remap into new schema, entry 3 should be present because
+     * it has has_default=1.
+     */
+    cfgpack_schema_t old_schema, new_schema;
+    cfgpack_entry_t old_entries[2], new_entries[3];
+    cfgpack_ctx_t old_ctx, new_ctx;
+    cfgpack_value_t old_values[2], new_values[3];
+    uint8_t buf[128];
+    size_t len = 0;
+    char old_str_pool[1], new_str_pool[1];
+    uint16_t old_str_offsets[1], new_str_offsets[1];
+    cfgpack_value_t v;
+
+    LOG("Setting up old schema: u8@1, u8@2 (no defaults)");
+    make_schema(&old_schema, old_entries, 2);
+    snprintf(old_schema.map_name, sizeof(old_schema.map_name), "old");
+
+    LOG("Setting up new schema: u8@1, u8@2, u8@3(default=99)");
+    make_schema(&new_schema, new_entries, 3);
+    snprintf(new_schema.map_name, sizeof(new_schema.map_name), "new");
+    new_schema.version = 2;
+    /* Entry 2 (index 3) has a default value */
+    new_entries[2].has_default = 1;
+
+    CHECK(cfgpack_init(&old_ctx, &old_schema, old_values, 2, old_str_pool,
+                       sizeof(old_str_pool), old_str_offsets, 0) == CFGPACK_OK);
+    CHECK(cfgpack_init(&new_ctx, &new_schema, new_values, 3, new_str_pool,
+                       sizeof(new_str_pool), new_str_offsets, 0) == CFGPACK_OK);
+
+    /* Pre-populate the default value in new_values[2] (simulating parser) */
+    new_values[2].type = CFGPACK_TYPE_U8;
+    new_values[2].v.u64 = 99;
+    LOG("Pre-set default value: new_values[2] = u8(99)");
+
+    /* Set old schema values */
+    CHECK(cfgpack_set_u8(&old_ctx, 1, 10) == CFGPACK_OK);
+    CHECK(cfgpack_set_u8(&old_ctx, 2, 20) == CFGPACK_OK);
+    LOG("Set old values: 1=10, 2=20");
+
+    /* Pageout old data */
+    CHECK(cfgpack_pageout(&old_ctx, buf, sizeof(buf), &len) == CFGPACK_OK);
+    LOG("Pageout succeeded, len=%zu", len);
+
+    /* Pagein with remap into new context */
+    CHECK(cfgpack_pagein_remap(&new_ctx, buf, len, NULL, 0) == CFGPACK_OK);
+    LOG("Pagein remap succeeded");
+
+    /* Verify migrated entries */
+    CHECK(cfgpack_get(&new_ctx, 1, &v) == CFGPACK_OK && v.v.u64 == 10);
+    LOG("Key 1 = %" PRIu64 " (migrated, correct)", v.v.u64);
+    CHECK(cfgpack_get(&new_ctx, 2, &v) == CFGPACK_OK && v.v.u64 == 20);
+    LOG("Key 2 = %" PRIu64 " (migrated, correct)", v.v.u64);
+
+    /* Key 3 was NOT in old data, but has_default=1 -> must be present */
+    CHECK(cfgpack_get(&new_ctx, 3, &v) == CFGPACK_OK);
+    CHECK(v.v.u64 == 99);
+    LOG("Key 3 = %" PRIu64 " (default restored, correct)", v.v.u64);
+
+    return TEST_OK;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 13. pagein_buf restores presence for entries with defaults not in payload
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_pagein_buf_defaults_restored) {
+    LOG_SECTION("pagein_buf: entries with defaults present after partial load");
+
+    /* Schema: u8@1(no default), u8@2(has_default=1, default=42)
+     * Payload contains only key 1.
+     * After pagein_buf, key 2 should still be present with its default.
+     */
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[2];
+    cfgpack_ctx_t ctx;
+    cfgpack_value_t values[2];
+    char str_pool[1];
+    uint16_t str_offsets[1];
+    cfgpack_value_t v;
+
+    LOG("Setting up schema: u8@1(no default), u8@2(default=42)");
+    make_schema(&schema, entries, 2);
+    entries[1].has_default = 1;
+
+    CHECK(cfgpack_init(&ctx, &schema, values, 2, str_pool, sizeof(str_pool),
+                       str_offsets, 0) == CFGPACK_OK);
+
+    /* Pre-populate the default value (simulating parser) */
+    values[1].type = CFGPACK_TYPE_U8;
+    values[1].v.u64 = 42;
+    LOG("Pre-set default: values[1] = u8(42)");
+
+    /* Craft minimal msgpack: map(1) {key=1: val=77} */
+    uint8_t buf[] = {0x81, 0x01, 0x4d}; /* map(1), key=1, val=77 */
+    LOG("Crafted payload: map(1) {1: 77}");
+
+    CHECK(cfgpack_pagein_buf(&ctx, buf, sizeof(buf)) == CFGPACK_OK);
+    LOG("Pagein succeeded");
+
+    /* Key 1 was in payload -> present */
+    CHECK(cfgpack_get(&ctx, 1, &v) == CFGPACK_OK && v.v.u64 == 77);
+    LOG("Key 1 = %" PRIu64 " (from payload, correct)", v.v.u64);
+
+    /* Key 2 was NOT in payload but has_default=1 -> present */
+    CHECK(cfgpack_get(&ctx, 2, &v) == CFGPACK_OK);
+    CHECK(v.v.u64 == 42);
+    LOG("Key 2 = %" PRIu64 " (default restored, correct)", v.v.u64);
+
+    return TEST_OK;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 14. Entries without defaults remain absent after remap
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_remap_no_default_stays_absent) {
+    LOG_SECTION("Remap: entries without default remain absent");
+
+    /* Old schema: u8@1
+     * New schema: u8@1, u8@2(no default), u8@3(has_default=1, default=55)
+     * Old data contains only key 1.
+     * After remap: key 1 present, key 2 absent, key 3 present (default).
+     */
+    cfgpack_schema_t old_schema, new_schema;
+    cfgpack_entry_t old_entries[1], new_entries[3];
+    cfgpack_ctx_t old_ctx, new_ctx;
+    cfgpack_value_t old_values[1], new_values[3];
+    uint8_t buf[128];
+    size_t len = 0;
+    char old_str_pool[1], new_str_pool[1];
+    uint16_t old_str_offsets[1], new_str_offsets[1];
+    cfgpack_value_t v;
+
+    LOG("Setting up old schema: u8@1");
+    make_schema(&old_schema, old_entries, 1);
+    snprintf(old_schema.map_name, sizeof(old_schema.map_name), "old");
+
+    LOG("Setting up new schema: u8@1, u8@2(no default), u8@3(default=55)");
+    make_schema(&new_schema, new_entries, 3);
+    snprintf(new_schema.map_name, sizeof(new_schema.map_name), "new");
+    new_schema.version = 2;
+    new_entries[1].has_default = 0; /* explicitly no default */
+    new_entries[2].has_default = 1; /* has default */
+
+    CHECK(cfgpack_init(&old_ctx, &old_schema, old_values, 1, old_str_pool,
+                       sizeof(old_str_pool), old_str_offsets, 0) == CFGPACK_OK);
+    CHECK(cfgpack_init(&new_ctx, &new_schema, new_values, 3, new_str_pool,
+                       sizeof(new_str_pool), new_str_offsets, 0) == CFGPACK_OK);
+
+    /* Pre-populate the default for entry 2 (index 3) */
+    new_values[2].type = CFGPACK_TYPE_U8;
+    new_values[2].v.u64 = 55;
+    LOG("Pre-set default: new_values[2] = u8(55)");
+
+    CHECK(cfgpack_set_u8(&old_ctx, 1, 77) == CFGPACK_OK);
+    LOG("Set old value: 1=77");
+
+    CHECK(cfgpack_pageout(&old_ctx, buf, sizeof(buf), &len) == CFGPACK_OK);
+    LOG("Pageout succeeded, len=%zu", len);
+
+    CHECK(cfgpack_pagein_remap(&new_ctx, buf, len, NULL, 0) == CFGPACK_OK);
+    LOG("Pagein remap succeeded");
+
+    /* Key 1: migrated from old data */
+    CHECK(cfgpack_get(&new_ctx, 1, &v) == CFGPACK_OK && v.v.u64 == 77);
+    LOG("Key 1 = %" PRIu64 " (migrated, correct)", v.v.u64);
+
+    /* Key 2: NOT in old data, has_default=0 -> MISSING */
+    CHECK(cfgpack_get(&new_ctx, 2, &v) == CFGPACK_ERR_MISSING);
+    LOG("Key 2 correctly absent: CFGPACK_ERR_MISSING");
+
+    /* Key 3: NOT in old data, has_default=1 -> present with default */
+    CHECK(cfgpack_get(&new_ctx, 3, &v) == CFGPACK_OK);
+    CHECK(v.v.u64 == 55);
+    LOG("Key 3 = %" PRIu64 " (default restored, correct)", v.v.u64);
+
+    return TEST_OK;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 15. Remap + defaults + type widening combined
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_remap_defaults_with_widening) {
+    LOG_SECTION("Remap with defaults restoration AND type widening");
+
+    /* Old schema: u8@10, u8@11
+     * New schema: u16@20 (widened), u16@21, u16@22(has_default=1, default=500)
+     * Remap: 10->20, 11->21
+     * Old data: key 10=200, key 11=150
+     *
+     * After remap:
+     *   - Key 20: u8(200) widened to u16(200)
+     *   - Key 21: u8(150) widened to u16(150)
+     *   - Key 22: not in old data, default u16(500)
+     */
+    cfgpack_schema_t old_schema, new_schema;
+    cfgpack_entry_t old_entries[2], new_entries[3];
+    cfgpack_ctx_t old_ctx, new_ctx;
+    cfgpack_value_t old_values[2], new_values[3];
+    uint8_t buf[128];
+    size_t len = 0;
+    char old_str_pool[1], new_str_pool[1];
+    uint16_t old_str_offsets[1], new_str_offsets[1];
+    cfgpack_value_t v;
+
+    LOG("Setting up old schema: u8@10, u8@11");
+    snprintf(old_schema.map_name, sizeof(old_schema.map_name), "old");
+    old_schema.version = 1;
+    old_schema.entry_count = 2;
+    old_schema.entries = old_entries;
+    old_entries[0] = (cfgpack_entry_t){.index = 10,
+                                       .type = CFGPACK_TYPE_U8,
+                                       .has_default = 0};
+    snprintf(old_entries[0].name, sizeof(old_entries[0].name), "a");
+    old_entries[1] = (cfgpack_entry_t){.index = 11,
+                                       .type = CFGPACK_TYPE_U8,
+                                       .has_default = 0};
+    snprintf(old_entries[1].name, sizeof(old_entries[1].name), "b");
+
+    LOG("Setting up new schema: u16@20, u16@21, u16@22(default=500)");
+    snprintf(new_schema.map_name, sizeof(new_schema.map_name), "new");
+    new_schema.version = 2;
+    new_schema.entry_count = 3;
+    new_schema.entries = new_entries;
+    new_entries[0] = (cfgpack_entry_t){.index = 20,
+                                       .type = CFGPACK_TYPE_U16,
+                                       .has_default = 0};
+    snprintf(new_entries[0].name, sizeof(new_entries[0].name), "a");
+    new_entries[1] = (cfgpack_entry_t){.index = 21,
+                                       .type = CFGPACK_TYPE_U16,
+                                       .has_default = 0};
+    snprintf(new_entries[1].name, sizeof(new_entries[1].name), "b");
+    new_entries[2] = (cfgpack_entry_t){.index = 22,
+                                       .type = CFGPACK_TYPE_U16,
+                                       .has_default = 1};
+    snprintf(new_entries[2].name, sizeof(new_entries[2].name), "c");
+
+    CHECK(cfgpack_init(&old_ctx, &old_schema, old_values, 2, old_str_pool,
+                       sizeof(old_str_pool), old_str_offsets, 0) == CFGPACK_OK);
+    CHECK(cfgpack_init(&new_ctx, &new_schema, new_values, 3, new_str_pool,
+                       sizeof(new_str_pool), new_str_offsets, 0) == CFGPACK_OK);
+
+    /* Pre-populate the default for entry 2 (index 22) */
+    new_values[2].type = CFGPACK_TYPE_U16;
+    new_values[2].v.u64 = 500;
+    LOG("Pre-set default: new_values[2] = u16(500)");
+
+    CHECK(cfgpack_set_u8(&old_ctx, 10, 200) == CFGPACK_OK);
+    CHECK(cfgpack_set_u8(&old_ctx, 11, 150) == CFGPACK_OK);
+    LOG("Set old values: 10=200, 11=150");
+
+    CHECK(cfgpack_pageout(&old_ctx, buf, sizeof(buf), &len) == CFGPACK_OK);
+    LOG("Pageout succeeded, len=%zu", len);
+
+    cfgpack_remap_entry_t remap[] = {{10, 20}, {11, 21}};
+    CHECK(cfgpack_pagein_remap(&new_ctx, buf, len, remap, 2) == CFGPACK_OK);
+    LOG("Pagein with remap succeeded");
+
+    /* Key 20: u8(200) widened to u16 */
+    CHECK(cfgpack_get(&new_ctx, 20, &v) == CFGPACK_OK && v.v.u64 == 200);
+    LOG("Key 20 = %" PRIu64 " (widened u8->u16, correct)", v.v.u64);
+
+    /* Key 21: u8(150) widened to u16 */
+    CHECK(cfgpack_get(&new_ctx, 21, &v) == CFGPACK_OK && v.v.u64 == 150);
+    LOG("Key 21 = %" PRIu64 " (widened u8->u16, correct)", v.v.u64);
+
+    /* Key 22: not in old data, has_default=1 -> present */
+    CHECK(cfgpack_get(&new_ctx, 22, &v) == CFGPACK_OK);
+    CHECK(v.v.u64 == 500);
+    LOG("Key 22 = %" PRIu64 " (default restored, correct)", v.v.u64);
+
+    return TEST_OK;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 16. Decoded entry overrides default (default not double-applied)
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_remap_decoded_overrides_default) {
+    LOG_SECTION("Decoded value from old data overrides default");
+
+    /* New schema: u8@1(has_default=1, default=99)
+     * Old data contains key 1 = 42
+     * After remap: key 1 should be 42, NOT 99
+     */
+    cfgpack_schema_t old_schema, new_schema;
+    cfgpack_entry_t old_entries[1], new_entries[1];
+    cfgpack_ctx_t old_ctx, new_ctx;
+    cfgpack_value_t old_values[1], new_values[1];
+    uint8_t buf[64];
+    size_t len = 0;
+    char old_str_pool[1], new_str_pool[1];
+    uint16_t old_str_offsets[1], new_str_offsets[1];
+    cfgpack_value_t v;
+
+    LOG("Setting up old schema: u8@1 (no default)");
+    make_schema(&old_schema, old_entries, 1);
+    snprintf(old_schema.map_name, sizeof(old_schema.map_name), "old");
+
+    LOG("Setting up new schema: u8@1 (has_default=1, default=99)");
+    make_schema(&new_schema, new_entries, 1);
+    snprintf(new_schema.map_name, sizeof(new_schema.map_name), "new");
+    new_schema.version = 2;
+    new_entries[0].has_default = 1;
+
+    CHECK(cfgpack_init(&old_ctx, &old_schema, old_values, 1, old_str_pool,
+                       sizeof(old_str_pool), old_str_offsets, 0) == CFGPACK_OK);
+    CHECK(cfgpack_init(&new_ctx, &new_schema, new_values, 1, new_str_pool,
+                       sizeof(new_str_pool), new_str_offsets, 0) == CFGPACK_OK);
+
+    /* Pre-populate the default */
+    new_values[0].type = CFGPACK_TYPE_U8;
+    new_values[0].v.u64 = 99;
+    LOG("Pre-set default: new_values[0] = u8(99)");
+
+    CHECK(cfgpack_set_u8(&old_ctx, 1, 42) == CFGPACK_OK);
+    LOG("Set old value: 1=42");
+
+    CHECK(cfgpack_pageout(&old_ctx, buf, sizeof(buf), &len) == CFGPACK_OK);
+    LOG("Pageout succeeded, len=%zu", len);
+
+    CHECK(cfgpack_pagein_remap(&new_ctx, buf, len, NULL, 0) == CFGPACK_OK);
+    LOG("Pagein remap succeeded");
+
+    /* Key 1 was in old data with value 42 -> decoded value takes precedence */
+    CHECK(cfgpack_get(&new_ctx, 1, &v) == CFGPACK_OK);
+    CHECK(v.v.u64 == 42);
+    LOG("Key 1 = %" PRIu64 " (decoded value, not default 99, correct)",
+        v.v.u64);
+
+    return TEST_OK;
+}
+
 int main(void) {
     test_result_t overall = TEST_OK;
 
@@ -625,6 +967,20 @@ int main(void) {
                                  test_coerce_f32_to_f64()) != TEST_OK);
     overall |= (test_case_result("coerce_fstr_to_str",
                                  test_coerce_fstr_to_str()) != TEST_OK);
+    overall |= (test_case_result("remap_defaults_restored",
+                                 test_remap_defaults_restored()) != TEST_OK);
+    overall |= (test_case_result("pagein_buf_defaults_restored",
+                                 test_pagein_buf_defaults_restored()) !=
+                TEST_OK);
+    overall |= (test_case_result("remap_no_default_stays_absent",
+                                 test_remap_no_default_stays_absent()) !=
+                TEST_OK);
+    overall |= (test_case_result("remap_defaults_with_widening",
+                                 test_remap_defaults_with_widening()) !=
+                TEST_OK);
+    overall |= (test_case_result("remap_decoded_overrides_default",
+                                 test_remap_decoded_overrides_default()) !=
+                TEST_OK);
 
     if (overall == TEST_OK) {
         printf(COLOR_GREEN "ALL PASS" COLOR_RESET "\n");

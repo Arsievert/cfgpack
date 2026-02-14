@@ -548,6 +548,18 @@ cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx,
         }
         cfgpack_presence_set(ctx, idx);
     }
+
+    /* Restore defaults for entries not covered by old data.
+     * After decoding, any entry with has_default that wasn't set by the
+     * incoming data should still be marked present so its schema default
+     * is accessible via cfgpack_get(). */
+    for (size_t i = 0; i < ctx->schema->entry_count; ++i) {
+        if (!cfgpack_presence_get(ctx, i) &&
+            ctx->schema->entries[i].has_default) {
+            cfgpack_presence_set(ctx, i);
+        }
+    }
+
     return CFGPACK_OK;
 }
 

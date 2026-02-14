@@ -211,13 +211,9 @@ cfgpack_err_t cfgpack_pagein_buf(cfgpack_ctx_t *ctx, const uint8_t *data, size_t
 cfgpack_err_t cfgpack_peek_name(const uint8_t *data, size_t len, char *out_name, size_t out_cap);
 cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx, const uint8_t *data, size_t len,
                                     const cfgpack_remap_entry_t *remap, size_t remap_count);
-
-cfgpack_err_t cfgpack_print(const cfgpack_ctx_t *ctx, uint16_t index);
-cfgpack_err_t cfgpack_print_all(const cfgpack_ctx_t *ctx);
-
-uint32_t cfgpack_get_version(const cfgpack_ctx_t *ctx);
-size_t   cfgpack_get_size(const cfgpack_ctx_t *ctx);
 ```
+
+After decoding all entries from the old data, `cfgpack_pagein_remap()` restores presence for any new-schema entries that have `has_default` set but were not in the incoming payload. This ensures new entries with defaults are immediately accessible after migration without explicit code to set them. Entries without defaults that were not in the old data remain absent.
 
 ## Typed Convenience Functions
 

@@ -52,6 +52,7 @@ TESTSRC := tests/basic.c         \
            tests/decompress.c    \
            tests/io_edge.c      \
            tests/json_edge.c    \
+           tests/json_remap.c   \
            tests/measure.c      \
            tests/msgpack.c      \
            tests/parser.c        \

@@ -13,7 +13,7 @@ A MessagePack-based configuration library for embedded systems.
 - Supports set/get by index and by schema name with type/length validation.
 - Encodes/decodes MessagePack maps; pageout to buffer or file, pagein from buffer or file, with size caps.
 - **Schema versioning**: Embeds schema name in serialized blobs for version detection.
-- **Remapping**: Migrates config between schema versions with index remapping and type widening.
+- **Remapping**: Migrates config between schema versions with index remapping, type widening, and automatic default restoration for new entries.
 - Returns explicit errors for parse/encode/decode/type/bounds/IO issues.
 
 ## Documentation
@@ -83,7 +83,7 @@ vehicle 1
 - `src/` — library implementation (`core.c`, `io.c`, `msgpack.c`, `schema_parser.c`, `decompress.c`).
 - `tests/` — C test programs plus sample data under `tests/data/`.
 - `tools/` — CLI tools source (`cfgpack-compress.c` for LZ4/heatshrink compression).
-- `examples/` — complete usage examples (`allocate-once/`, `datalogger/`, `sensor_hub/`).
+- `examples/` — complete usage examples (`allocate-once/`, `datalogger/`, `low_memory/`, `sensor_hub/`).
 - `third_party/` — vendored dependencies (`lz4/`, `heatshrink/`).
 - `Makefile` — builds `build/out/libcfgpack.a`, test binaries, and tools.
 
@@ -121,20 +121,21 @@ Running tests...
   basic:         4/4 passed
   core_edge:     11/11 passed
   decompress:    8/8 passed
-  io_edge:       11/11 passed
+  io_edge:       16/16 passed
   json_edge:     8/8 passed
+  json_remap:    10/10 passed
   measure:       15/15 passed
   msgpack:       16/16 passed
   parser_bounds: 23/23 passed
   parser:        3/3 passed
   runtime:       24/24 passed
 
-TOTAL: 123/123 passed
+TOTAL: 138/138 passed
 ```
 
 ## Examples
 
-Three complete examples are provided in the `examples/` directory:
+Four complete examples are provided in the `examples/` directory:
 
 ### allocate-once
 
@@ -150,6 +151,14 @@ Basic data logger demonstrating schema parsing, typed convenience functions, and
 
 ```bash
 cd examples/datalogger && make run
+```
+
+### low_memory
+
+HVAC zone controller demonstrating the measure API for right-sized allocation and a full v1 -> v2 schema migration covering all five migration scenarios (keep, widen, move, remove, add). Shows how `cfgpack_schema_measure()` eliminates compile-time guessing of buffer sizes.
+
+```bash
+cd examples/low_memory && make run
 ```
 
 ### sensor_hub
