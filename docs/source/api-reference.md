@@ -115,9 +115,14 @@ cfgpack_err_t cfgpack_schema_measure(const char *data, size_t data_len,
 cfgpack_err_t cfgpack_schema_measure_json(const char *data, size_t data_len,
                                           cfgpack_schema_measure_t *out,
                                           cfgpack_parse_error_t *err);
+
+/* Measure a MessagePack binary schema buffer */
+cfgpack_err_t cfgpack_schema_measure_msgpack(const uint8_t *data, size_t data_len,
+                                             cfgpack_schema_measure_t *out,
+                                             cfgpack_parse_error_t *err);
 ```
 
-Both functions validate structure, types, reserved index 0, name length, and default values. Duplicate checking (which requires O(n) storage) is deferred to the subsequent `cfgpack_parse_schema()` / `cfgpack_schema_parse_json()` call.
+Both functions validate structure, types, reserved index 0, name length, and default values. Duplicate checking (which requires O(n) storage) is deferred to the subsequent `cfgpack_parse_schema()` / `cfgpack_schema_parse_json()` / `cfgpack_schema_parse_msgpack()` call.
 
 After measuring, allocate exact-sized buffers and parse:
 
@@ -156,10 +161,23 @@ cfgpack_err_t cfgpack_schema_parse_json(const char *data, size_t data_len,
                                         uint16_t *str_offsets, size_t str_offsets_count,
                                         cfgpack_parse_error_t *err);
 
+/* Parse schema from MessagePack binary buffer */
+cfgpack_err_t cfgpack_schema_parse_msgpack(const uint8_t *data, size_t data_len,
+                                           cfgpack_schema_t *out, cfgpack_entry_t *entries,
+                                           size_t max_entries, cfgpack_value_t *values,
+                                           char *str_pool, size_t str_pool_cap,
+                                           uint16_t *str_offsets, size_t str_offsets_count,
+                                           cfgpack_parse_error_t *err);
+
 /* Write schema and current values to JSON buffer */
 cfgpack_err_t cfgpack_schema_write_json(const cfgpack_ctx_t *ctx,
                                         char *out, size_t out_cap, size_t *out_len,
                                         cfgpack_parse_error_t *err);
+
+/* Write schema and current values to MessagePack binary buffer */
+cfgpack_err_t cfgpack_schema_write_msgpack(const cfgpack_ctx_t *ctx,
+                                           uint8_t *out, size_t out_cap, size_t *out_len,
+                                           cfgpack_parse_error_t *err);
 
 void cfgpack_schema_free(cfgpack_schema_t *schema); /* no-op for caller-owned arrays */
 ```
@@ -184,6 +202,49 @@ Schemas can be read from and written to JSON for interoperability with other too
 - Strings are JSON-escaped
 - Numbers are output as JSON numbers (integers or floats)
 - Note: Index 0 is reserved for schema name; user entries should start at 1
+
+### MessagePack Binary Schema Format
+
+Schemas can also be stored and transmitted as compact MessagePack binary, which is typically 40-50% smaller than equivalent JSON and requires no tokenizer or string-to-number conversion on the device. The wire format mirrors the JSON structure:
+
+```
+map(3) {
+  "name"    : str  "demo"
+  "version" : uint 1
+  "entries" : array(N) [
+    map(4) {
+      "index" : uint 1
+      "name"  : str  "speed"
+      "type"  : str  "u16"
+      "value" : uint 100
+    }
+    map(4) {
+      "index" : uint 2
+      "name"  : str  "label"
+      "type"  : str  "fstr"
+      "value" : str  "hello"
+    }
+    map(4) {
+      "index" : uint 3
+      "name"  : str  "desc"
+      "type"  : str  "str"
+      "value" : nil
+    }
+  ]
+}
+```
+
+- `value` is `nil` (0xC0) for entries with no default
+- Integer defaults use msgpack uint/int encoding
+- Float defaults use msgpack float32 (0xCA) or float64 (0xCB) encoding
+- String defaults use msgpack str encoding
+
+Use the `cfgpack-schema-pack` CLI tool to convert `.map` or JSON schemas to msgpack binary:
+
+```bash
+./build/out/cfgpack-schema-pack input.json output.msgpack
+./build/out/cfgpack-schema-pack input.map output.msgpack
+```
 
 ## Runtime API
 
@@ -338,7 +399,7 @@ cfgpack_init(&ctx, &schema, values, m.entry_count,
              str_pool, m.str_pool_size, str_off, m.str_count + m.fstr_count);
 ```
 
-The same pattern works with `cfgpack_schema_measure_json()` for JSON schemas.
+The same pattern works with `cfgpack_schema_measure_json()` for JSON schemas and `cfgpack_schema_measure_msgpack()` for MessagePack binary schemas.
 
 ## File I/O Wrappers (Optional)
 

@@ -3,6 +3,7 @@
 #include "cfgpack/error.h"
 #include "cfgpack/value.h"
 #include "cfgpack/config.h"
+#include "cfgpack/msgpack.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -2114,4 +2115,769 @@ cfgpack_err_t cfgpack_schema_parse_json(const char *data,
     }
 
     return CFGPACK_OK;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * MessagePack Schema - Helpers
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * @brief Match a msgpack string against a C string literal.
+ */
+static int mp_key_eq(const uint8_t *ptr, uint32_t len, const char *key) {
+    size_t klen = strlen(key);
+    if (len != klen) {
+        return 0;
+    }
+    return memcmp(ptr, key, klen) == 0;
+}
+
+/**
+ * @brief Encode a msgpack array header into a buffer.
+ *
+ * fixarray (0x90 | count) for count 0-15, array16 (0xdc + 2 bytes) for
+ * count 16-65535.
+ */
+static cfgpack_err_t mp_encode_array_header(cfgpack_buf_t *buf,
+                                            uint32_t count) {
+    if (count <= 15) {
+        uint8_t b = (uint8_t)(0x90 | count);
+        return cfgpack_buf_append(buf, &b, 1);
+    }
+    if (count <= 0xFFFF) {
+        uint8_t hdr[3];
+        hdr[0] = 0xdc;
+        hdr[1] = (uint8_t)(count >> 8);
+        hdr[2] = (uint8_t)(count & 0xFF);
+        return cfgpack_buf_append(buf, hdr, 3);
+    }
+    return CFGPACK_ERR_ENCODE;
+}
+
+/**
+ * @brief Decode a msgpack array header from the reader.
+ */
+static cfgpack_err_t mp_decode_array_header(cfgpack_reader_t *r,
+                                            uint32_t *count) {
+    if (r->pos >= r->len) {
+        return CFGPACK_ERR_DECODE;
+    }
+    uint8_t b = r->data[r->pos];
+    if ((b & 0xF0) == 0x90) {
+        *count = b & 0x0F;
+        r->pos++;
+        return CFGPACK_OK;
+    }
+    if (b == 0xdc) {
+        if (r->pos + 3 > r->len) {
+            return CFGPACK_ERR_DECODE;
+        }
+        r->pos++;
+        *count = ((uint32_t)r->data[r->pos] << 8) |
+                 (uint32_t)r->data[r->pos + 1];
+        r->pos += 2;
+        return CFGPACK_OK;
+    }
+    if (b == 0xdd) {
+        if (r->pos + 5 > r->len) {
+            return CFGPACK_ERR_DECODE;
+        }
+        r->pos++;
+        *count = ((uint32_t)r->data[r->pos] << 24) |
+                 ((uint32_t)r->data[r->pos + 1] << 16) |
+                 ((uint32_t)r->data[r->pos + 2] << 8) |
+                 (uint32_t)r->data[r->pos + 3];
+        r->pos += 4;
+        return CFGPACK_OK;
+    }
+    return CFGPACK_ERR_DECODE;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * MessagePack Schema Measure (single-pass scan)
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+cfgpack_err_t cfgpack_schema_measure_msgpack(const uint8_t *data,
+                                             size_t data_len,
+                                             cfgpack_schema_measure_t *out,
+                                             cfgpack_parse_error_t *err) {
+    cfgpack_reader_t reader;
+    cfgpack_reader_init(&reader, data, data_len);
+    cfgpack_reader_t *r = &reader;
+    cfgpack_err_t rc;
+
+    /* Top-level map */
+    uint32_t top_count;
+    rc = cfgpack_msgpack_decode_map_header(r, &top_count);
+    if (rc != CFGPACK_OK) {
+        set_err(err, 0, "invalid msgpack: expected top-level map");
+        return CFGPACK_ERR_DECODE;
+    }
+
+    size_t entry_count = 0;
+    size_t str_count = 0;
+    size_t fstr_count = 0;
+    int got_entries = 0;
+
+    for (uint32_t ti = 0; ti < top_count; ++ti) {
+        const uint8_t *kptr;
+        uint32_t klen;
+        rc = cfgpack_msgpack_decode_str(r, &kptr, &klen);
+        if (rc != CFGPACK_OK) {
+            set_err(err, 0, "invalid msgpack: expected string key");
+            return CFGPACK_ERR_DECODE;
+        }
+
+        if (mp_key_eq(kptr, klen, "entries")) {
+            uint32_t arr_count;
+            rc = mp_decode_array_header(r, &arr_count);
+            if (rc != CFGPACK_OK) {
+                set_err(err, 0, "expected array for entries");
+                return CFGPACK_ERR_DECODE;
+            }
+
+            for (uint32_t ei = 0; ei < arr_count; ++ei) {
+                uint32_t ecount;
+                rc = cfgpack_msgpack_decode_map_header(r, &ecount);
+                if (rc != CFGPACK_OK) {
+                    set_err(err, 0, "expected entry map");
+                    return CFGPACK_ERR_DECODE;
+                }
+
+                cfgpack_type_t entry_type = CFGPACK_TYPE_U8;
+                int got_type = 0;
+
+                for (uint32_t ek = 0; ek < ecount; ++ek) {
+                    const uint8_t *ekptr;
+                    uint32_t eklen;
+                    rc = cfgpack_msgpack_decode_str(r, &ekptr, &eklen);
+                    if (rc != CFGPACK_OK) {
+                        set_err(err, 0, "expected entry key");
+                        return CFGPACK_ERR_DECODE;
+                    }
+
+                    if (mp_key_eq(ekptr, eklen, "index")) {
+                        uint64_t idx;
+                        rc = cfgpack_msgpack_decode_uint64(r, &idx);
+                        if (rc != CFGPACK_OK) {
+                            set_err(err, 0, "invalid index");
+                            return CFGPACK_ERR_DECODE;
+                        }
+                        if (idx == 0) {
+                            set_err(err, 0,
+                                    "index 0 is reserved for schema name");
+                            return CFGPACK_ERR_RESERVED_INDEX;
+                        }
+                        if (idx > 65535) {
+                            set_err(err, 0, "index out of range");
+                            return CFGPACK_ERR_BOUNDS;
+                        }
+                    } else if (mp_key_eq(ekptr, eklen, "name")) {
+                        const uint8_t *nptr;
+                        uint32_t nlen;
+                        rc = cfgpack_msgpack_decode_str(r, &nptr, &nlen);
+                        if (rc != CFGPACK_OK) {
+                            set_err(err, 0, "invalid entry name");
+                            return CFGPACK_ERR_DECODE;
+                        }
+                        if (nlen > 5 || nlen == 0) {
+                            set_err(err, 0, "name too long");
+                            return CFGPACK_ERR_BOUNDS;
+                        }
+                    } else if (mp_key_eq(ekptr, eklen, "type")) {
+                        const uint8_t *tptr;
+                        uint32_t tlen;
+                        rc = cfgpack_msgpack_decode_str(r, &tptr, &tlen);
+                        if (rc != CFGPACK_OK) {
+                            set_err(err, 0, "invalid type");
+                            return CFGPACK_ERR_DECODE;
+                        }
+                        char type_buf[16];
+                        if (tlen >= sizeof(type_buf)) {
+                            set_err(err, 0, "type string too long");
+                            return CFGPACK_ERR_INVALID_TYPE;
+                        }
+                        memcpy(type_buf, tptr, tlen);
+                        type_buf[tlen] = '\0';
+                        cfgpack_err_t trc = parse_type(type_buf, &entry_type);
+                        if (trc != CFGPACK_OK) {
+                            set_err(err, 0, "invalid type");
+                            return trc;
+                        }
+                        got_type = 1;
+                    } else if (mp_key_eq(ekptr, eklen, "value")) {
+                        rc = cfgpack_msgpack_skip_value(r);
+                        if (rc != CFGPACK_OK) {
+                            set_err(err, 0, "invalid default value");
+                            return CFGPACK_ERR_DECODE;
+                        }
+                    } else {
+                        rc = cfgpack_msgpack_skip_value(r);
+                        if (rc != CFGPACK_OK) {
+                            set_err(err, 0, "invalid value");
+                            return CFGPACK_ERR_DECODE;
+                        }
+                    }
+                }
+
+                if (got_type) {
+                    if (entry_type == CFGPACK_TYPE_STR) {
+                        str_count++;
+                    } else if (entry_type == CFGPACK_TYPE_FSTR) {
+                        fstr_count++;
+                    }
+                }
+                entry_count++;
+            }
+            got_entries = 1;
+        } else {
+            rc = cfgpack_msgpack_skip_value(r);
+            if (rc != CFGPACK_OK) {
+                set_err(err, 0, "invalid top-level value");
+                return CFGPACK_ERR_DECODE;
+            }
+        }
+    }
+
+    if (!got_entries) {
+        set_err(err, 0, "missing entries");
+        return CFGPACK_ERR_DECODE;
+    }
+
+    out->entry_count = entry_count;
+    out->str_count = str_count;
+    out->fstr_count = fstr_count;
+    out->str_pool_size = str_count * (CFGPACK_STR_MAX + 1) +
+                         fstr_count * (CFGPACK_FSTR_MAX + 1);
+
+    return CFGPACK_OK;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * MessagePack Schema Parser (two-phase, no malloc)
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+cfgpack_err_t cfgpack_schema_parse_msgpack(const uint8_t *data,
+                                           size_t data_len,
+                                           cfgpack_schema_t *out_schema,
+                                           cfgpack_entry_t *entries,
+                                           size_t max_entries,
+                                           cfgpack_value_t *values,
+                                           char *str_pool,
+                                           size_t str_pool_cap,
+                                           uint16_t *str_offsets,
+                                           size_t str_offsets_count,
+                                           cfgpack_parse_error_t *err) {
+    cfgpack_reader_t reader;
+    cfgpack_reader_init(&reader, data, data_len);
+    cfgpack_reader_t *r = &reader;
+    cfgpack_err_t rc;
+    size_t count = 0;
+
+    /* Zero values array up front */
+    memset(values, 0, max_entries * sizeof(cfgpack_value_t));
+
+    /* Top-level map */
+    uint32_t top_count;
+    rc = cfgpack_msgpack_decode_map_header(r, &top_count);
+    if (rc != CFGPACK_OK) {
+        set_err(err, 0, "invalid msgpack: expected top-level map");
+        return CFGPACK_ERR_DECODE;
+    }
+
+    int got_name = 0, got_version = 0, got_entries = 0;
+
+    /* ── Phase 1: Decode entries and scalar defaults ───────────────────── */
+    for (uint32_t ti = 0; ti < top_count; ++ti) {
+        const uint8_t *kptr;
+        uint32_t klen;
+        rc = cfgpack_msgpack_decode_str(r, &kptr, &klen);
+        if (rc != CFGPACK_OK) {
+            set_err(err, 0, "expected string key");
+            return CFGPACK_ERR_DECODE;
+        }
+
+        if (mp_key_eq(kptr, klen, "name")) {
+            const uint8_t *nptr;
+            uint32_t nlen;
+            rc = cfgpack_msgpack_decode_str(r, &nptr, &nlen);
+            if (rc != CFGPACK_OK) {
+                set_err(err, 0, "invalid name");
+                return CFGPACK_ERR_DECODE;
+            }
+            if (nlen >= sizeof(out_schema->map_name)) {
+                set_err(err, 0, "name too long");
+                return CFGPACK_ERR_BOUNDS;
+            }
+            memcpy(out_schema->map_name, nptr, nlen);
+            out_schema->map_name[nlen] = '\0';
+            got_name = 1;
+        } else if (mp_key_eq(kptr, klen, "version")) {
+            uint64_t ver;
+            rc = cfgpack_msgpack_decode_uint64(r, &ver);
+            if (rc != CFGPACK_OK) {
+                set_err(err, 0, "invalid version");
+                return CFGPACK_ERR_DECODE;
+            }
+            out_schema->version = (uint32_t)ver;
+            got_version = 1;
+        } else if (mp_key_eq(kptr, klen, "entries")) {
+            uint32_t arr_count;
+            rc = mp_decode_array_header(r, &arr_count);
+            if (rc != CFGPACK_OK) {
+                set_err(err, 0, "expected array for entries");
+                return CFGPACK_ERR_DECODE;
+            }
+
+            for (uint32_t ei = 0; ei < arr_count; ++ei) {
+                if (count >= max_entries) {
+                    set_err(err, 0, "too many entries");
+                    return CFGPACK_ERR_BOUNDS;
+                }
+
+                uint32_t ecount;
+                rc = cfgpack_msgpack_decode_map_header(r, &ecount);
+                if (rc != CFGPACK_OK) {
+                    set_err(err, 0, "expected entry map");
+                    return CFGPACK_ERR_DECODE;
+                }
+
+                cfgpack_entry_t *e = &entries[count];
+                memset(e, 0, sizeof(*e));
+
+                int got_idx = 0, got_ename = 0, got_type = 0, got_default = 0;
+                int default_is_nil = 0;
+
+                for (uint32_t ek = 0; ek < ecount; ++ek) {
+                    const uint8_t *ekptr;
+                    uint32_t eklen;
+                    rc = cfgpack_msgpack_decode_str(r, &ekptr, &eklen);
+                    if (rc != CFGPACK_OK) {
+                        set_err(err, 0, "expected entry key");
+                        return CFGPACK_ERR_DECODE;
+                    }
+
+                    if (mp_key_eq(ekptr, eklen, "index")) {
+                        uint64_t idx;
+                        rc = cfgpack_msgpack_decode_uint64(r, &idx);
+                        if (rc != CFGPACK_OK) {
+                            set_err(err, 0, "invalid index");
+                            return CFGPACK_ERR_DECODE;
+                        }
+                        if (idx == 0) {
+                            set_err(err, 0,
+                                    "index 0 is reserved for schema name");
+                            return CFGPACK_ERR_RESERVED_INDEX;
+                        }
+                        if (idx > 65535) {
+                            set_err(err, 0, "index out of range");
+                            return CFGPACK_ERR_BOUNDS;
+                        }
+                        e->index = (uint16_t)idx;
+                        got_idx = 1;
+                    } else if (mp_key_eq(ekptr, eklen, "name")) {
+                        const uint8_t *nptr;
+                        uint32_t nlen;
+                        rc = cfgpack_msgpack_decode_str(r, &nptr, &nlen);
+                        if (rc != CFGPACK_OK) {
+                            set_err(err, 0, "invalid entry name");
+                            return CFGPACK_ERR_DECODE;
+                        }
+                        if (nlen > 5 || nlen == 0) {
+                            set_err(err, 0, "name too long");
+                            return CFGPACK_ERR_BOUNDS;
+                        }
+                        memcpy(e->name, nptr, nlen);
+                        e->name[nlen] = '\0';
+                        got_ename = 1;
+                    } else if (mp_key_eq(ekptr, eklen, "type")) {
+                        const uint8_t *tptr;
+                        uint32_t tlen;
+                        rc = cfgpack_msgpack_decode_str(r, &tptr, &tlen);
+                        if (rc != CFGPACK_OK) {
+                            set_err(err, 0, "invalid type");
+                            return CFGPACK_ERR_DECODE;
+                        }
+                        char type_buf[16];
+                        if (tlen >= sizeof(type_buf)) {
+                            set_err(err, 0, "type string too long");
+                            return CFGPACK_ERR_INVALID_TYPE;
+                        }
+                        memcpy(type_buf, tptr, tlen);
+                        type_buf[tlen] = '\0';
+                        cfgpack_err_t trc = parse_type(type_buf, &e->type);
+                        if (trc != CFGPACK_OK) {
+                            set_err(err, 0, "invalid type");
+                            return trc;
+                        }
+                        got_type = 1;
+                    } else if (mp_key_eq(ekptr, eklen, "value")) {
+                        if (r->pos < r->len && r->data[r->pos] == 0xC0) {
+                            r->pos++;
+                            default_is_nil = 1;
+                        } else {
+                            /* Skip value for now; phase 2 will decode it */
+                            rc = cfgpack_msgpack_skip_value(r);
+                            if (rc != CFGPACK_OK) {
+                                set_err(err, 0, "invalid default value");
+                                return CFGPACK_ERR_DECODE;
+                            }
+                        }
+                        got_default = 1;
+                    } else {
+                        rc = cfgpack_msgpack_skip_value(r);
+                        if (rc != CFGPACK_OK) {
+                            set_err(err, 0, "invalid value");
+                            return CFGPACK_ERR_DECODE;
+                        }
+                    }
+                }
+
+                if (!got_idx || !got_ename || !got_type || !got_default) {
+                    set_err(err, 0, "missing entry field");
+                    return CFGPACK_ERR_DECODE;
+                }
+
+                if (default_is_nil) {
+                    e->has_default = 0;
+                } else {
+                    e->has_default = 1;
+                }
+                values[count].type = e->type;
+
+                /* Check for duplicates */
+                if (has_duplicate(entries, count, e->index, e->name)) {
+                    set_err(err, 0, "duplicate");
+                    return CFGPACK_ERR_DUPLICATE;
+                }
+
+                count++;
+            }
+            got_entries = 1;
+        } else {
+            rc = cfgpack_msgpack_skip_value(r);
+            if (rc != CFGPACK_OK) {
+                set_err(err, 0, "invalid top-level value");
+                return CFGPACK_ERR_DECODE;
+            }
+        }
+    }
+
+    if (!got_name || !got_version || !got_entries) {
+        set_err(err, 0, "missing required field");
+        return CFGPACK_ERR_DECODE;
+    }
+
+    /* Sort entries and values by index */
+    sort_entries(entries, values, count);
+    out_schema->entries = entries;
+    out_schema->entry_count = count;
+
+    /* Compute string pool offsets in sorted order */
+    size_t pool_needed = compute_str_offsets(entries, count, str_offsets,
+                                             str_offsets_count);
+    if (pool_needed > str_pool_cap) {
+        set_err(err, 0, "string pool too small");
+        return CFGPACK_ERR_BOUNDS;
+    }
+    if (str_pool_cap > 0) {
+        memset(str_pool, 0, str_pool_cap);
+    }
+
+    /* ── Phase 2: Re-decode msgpack to extract default values ──────────── */
+    {
+        cfgpack_reader_t r2;
+        cfgpack_reader_init(&r2, data, data_len);
+        cfgpack_reader_t *rp = &r2;
+
+        uint32_t top2;
+        cfgpack_msgpack_decode_map_header(rp, &top2);
+
+        for (uint32_t ti = 0; ti < top2; ++ti) {
+            const uint8_t *kptr;
+            uint32_t klen;
+            cfgpack_msgpack_decode_str(rp, &kptr, &klen);
+
+            if (mp_key_eq(kptr, klen, "entries")) {
+                uint32_t arr_count;
+                mp_decode_array_header(rp, &arr_count);
+
+                for (uint32_t ei = 0; ei < arr_count; ++ei) {
+                    uint32_t ecount;
+                    cfgpack_msgpack_decode_map_header(rp, &ecount);
+
+                    uint16_t entry_index = 0;
+                    cfgpack_type_t entry_type = CFGPACK_TYPE_U8;
+                    int entry_has_default = 0;
+                    int has_string_default = 0;
+                    cfgpack_fat_value_t fat;
+                    memset(&fat, 0, sizeof(fat));
+
+                    /* Numeric default temporaries */
+                    uint64_t def_u64 = 0;
+                    int64_t def_i64 = 0;
+                    float def_f32 = 0;
+                    double def_f64 = 0;
+                    int def_is_uint = 0, def_is_int = 0;
+                    int def_is_f32 = 0, def_is_f64 = 0;
+
+                    for (uint32_t ek = 0; ek < ecount; ++ek) {
+                        const uint8_t *ekptr;
+                        uint32_t eklen;
+                        cfgpack_msgpack_decode_str(rp, &ekptr, &eklen);
+
+                        if (mp_key_eq(ekptr, eklen, "index")) {
+                            uint64_t idx;
+                            cfgpack_msgpack_decode_uint64(rp, &idx);
+                            entry_index = (uint16_t)idx;
+                        } else if (mp_key_eq(ekptr, eklen, "name")) {
+                            const uint8_t *np;
+                            uint32_t nl;
+                            cfgpack_msgpack_decode_str(rp, &np, &nl);
+                        } else if (mp_key_eq(ekptr, eklen, "type")) {
+                            const uint8_t *tp;
+                            uint32_t tl;
+                            cfgpack_msgpack_decode_str(rp, &tp, &tl);
+                            char tbuf[16];
+                            if (tl < sizeof(tbuf)) {
+                                memcpy(tbuf, tp, tl);
+                                tbuf[tl] = '\0';
+                                parse_type(tbuf, &entry_type);
+                            }
+                        } else if (mp_key_eq(ekptr, eklen, "value")) {
+                            if (rp->pos < rp->len &&
+                                rp->data[rp->pos] == 0xC0) {
+                                rp->pos++;
+                                /* no default */
+                            } else {
+                                entry_has_default = 1;
+                                uint8_t vb = rp->data[rp->pos];
+                                if (vb == 0xCA) {
+                                    cfgpack_msgpack_decode_f32(rp, &def_f32);
+                                    def_is_f32 = 1;
+                                } else if (vb == 0xCB) {
+                                    cfgpack_msgpack_decode_f64(rp, &def_f64);
+                                    def_is_f64 = 1;
+                                } else if ((vb & 0xE0) == 0xE0 || vb == 0xD0 ||
+                                           vb == 0xD1 || vb == 0xD2 ||
+                                           vb == 0xD3) {
+                                    cfgpack_msgpack_decode_int64(rp, &def_i64);
+                                    def_is_int = 1;
+                                } else if ((vb & 0xE0) == 0xA0 || vb == 0xD9 ||
+                                           vb == 0xDA || vb == 0xDB) {
+                                    const uint8_t *sptr;
+                                    uint32_t slen;
+                                    cfgpack_msgpack_decode_str(rp, &sptr,
+                                                               &slen);
+                                    has_string_default = 1;
+                                    fat.type = entry_type;
+                                    if (entry_type == CFGPACK_TYPE_FSTR) {
+                                        if (slen > CFGPACK_FSTR_MAX) {
+                                            set_err(err, 0, "fstr too long");
+                                            return CFGPACK_ERR_STR_TOO_LONG;
+                                        }
+                                        fat.v.fstr.len = (uint8_t)slen;
+                                        memcpy(fat.v.fstr.data, sptr, slen);
+                                        fat.v.fstr.data[slen] = '\0';
+                                    } else {
+                                        if (slen > CFGPACK_STR_MAX) {
+                                            set_err(err, 0, "str too long");
+                                            return CFGPACK_ERR_STR_TOO_LONG;
+                                        }
+                                        fat.v.str.len = (uint16_t)slen;
+                                        memcpy(fat.v.str.data, sptr, slen);
+                                        fat.v.str.data[slen] = '\0';
+                                    }
+                                } else {
+                                    cfgpack_msgpack_decode_uint64(rp, &def_u64);
+                                    def_is_uint = 1;
+                                }
+                            }
+                        } else {
+                            cfgpack_msgpack_skip_value(rp);
+                        }
+                    }
+
+                    int pos = find_entry_pos(entries, count, entry_index);
+                    if (pos < 0 || !entry_has_default) {
+                        continue;
+                    }
+
+                    entries[pos].has_default = 1;
+
+                    if (has_string_default &&
+                        (entry_type == CFGPACK_TYPE_STR ||
+                         entry_type == CFGPACK_TYPE_FSTR)) {
+                        fat_str_to_pool(&fat, (size_t)pos, values, entries,
+                                        str_pool, str_offsets);
+                    } else if (def_is_uint) {
+                        values[pos].type = entry_type;
+                        values[pos].v.u64 = def_u64;
+                    } else if (def_is_int) {
+                        values[pos].type = entry_type;
+                        values[pos].v.i64 = def_i64;
+                    } else if (def_is_f32) {
+                        values[pos].type = entry_type;
+                        values[pos].v.f32 = def_f32;
+                    } else if (def_is_f64) {
+                        values[pos].type = entry_type;
+                        values[pos].v.f64 = def_f64;
+                    }
+                }
+            } else {
+                cfgpack_msgpack_skip_value(rp);
+            }
+        }
+    }
+
+    return CFGPACK_OK;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * MessagePack Schema Writer (binary output from cfgpack_ctx_t)
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+cfgpack_err_t cfgpack_schema_write_msgpack(const cfgpack_ctx_t *ctx,
+                                           uint8_t *out,
+                                           size_t out_cap,
+                                           size_t *out_len,
+                                           cfgpack_parse_error_t *err) {
+    const cfgpack_schema_t *schema = ctx->schema;
+    cfgpack_buf_t buf;
+    cfgpack_buf_init(&buf, out, out_cap);
+    cfgpack_err_t rc;
+
+    /* map(3): name, version, entries */
+    rc = cfgpack_msgpack_encode_map_header(&buf, 3);
+    if (rc != CFGPACK_OK) {
+        goto fail;
+    }
+
+    /* "name" -> str */
+    rc = cfgpack_msgpack_encode_str(&buf, "name", 4);
+    if (rc != CFGPACK_OK) {
+        goto fail;
+    }
+    size_t name_len = strlen(schema->map_name);
+    rc = cfgpack_msgpack_encode_str(&buf, schema->map_name, name_len);
+    if (rc != CFGPACK_OK) {
+        goto fail;
+    }
+
+    /* "version" -> uint */
+    rc = cfgpack_msgpack_encode_str(&buf, "version", 7);
+    if (rc != CFGPACK_OK) {
+        goto fail;
+    }
+    rc = cfgpack_msgpack_encode_uint64(&buf, schema->version);
+    if (rc != CFGPACK_OK) {
+        goto fail;
+    }
+
+    /* "entries" -> array */
+    rc = cfgpack_msgpack_encode_str(&buf, "entries", 7);
+    if (rc != CFGPACK_OK) {
+        goto fail;
+    }
+    rc = mp_encode_array_header(&buf, (uint32_t)schema->entry_count);
+    if (rc != CFGPACK_OK) {
+        goto fail;
+    }
+
+    for (size_t i = 0; i < schema->entry_count; ++i) {
+        const cfgpack_entry_t *e = &schema->entries[i];
+        const cfgpack_value_t *val = &ctx->values[i];
+
+        /* map(4): index, name, type, value */
+        rc = cfgpack_msgpack_encode_map_header(&buf, 4);
+        if (rc != CFGPACK_OK) {
+            goto fail;
+        }
+
+        /* "index" -> uint */
+        rc = cfgpack_msgpack_encode_str(&buf, "index", 5);
+        if (rc != CFGPACK_OK) {
+            goto fail;
+        }
+        rc = cfgpack_msgpack_encode_uint64(&buf, e->index);
+        if (rc != CFGPACK_OK) {
+            goto fail;
+        }
+
+        /* "name" -> str */
+        rc = cfgpack_msgpack_encode_str(&buf, "name", 4);
+        if (rc != CFGPACK_OK) {
+            goto fail;
+        }
+        rc = cfgpack_msgpack_encode_str(&buf, e->name, strlen(e->name));
+        if (rc != CFGPACK_OK) {
+            goto fail;
+        }
+
+        /* "type" -> str */
+        rc = cfgpack_msgpack_encode_str(&buf, "type", 4);
+        if (rc != CFGPACK_OK) {
+            goto fail;
+        }
+        const char *tstr = type_to_str(e->type);
+        rc = cfgpack_msgpack_encode_str(&buf, tstr, strlen(tstr));
+        if (rc != CFGPACK_OK) {
+            goto fail;
+        }
+
+        /* "value" -> typed or nil */
+        rc = cfgpack_msgpack_encode_str(&buf, "value", 5);
+        if (rc != CFGPACK_OK) {
+            goto fail;
+        }
+
+        if (!e->has_default) {
+            uint8_t nil_byte = 0xC0;
+            rc = cfgpack_buf_append(&buf, &nil_byte, 1);
+            if (rc != CFGPACK_OK) {
+                goto fail;
+            }
+        } else {
+            switch (e->type) {
+            case CFGPACK_TYPE_U8:
+            case CFGPACK_TYPE_U16:
+            case CFGPACK_TYPE_U32:
+            case CFGPACK_TYPE_U64:
+                rc = cfgpack_msgpack_encode_uint64(&buf, val->v.u64);
+                break;
+            case CFGPACK_TYPE_I8:
+            case CFGPACK_TYPE_I16:
+            case CFGPACK_TYPE_I32:
+            case CFGPACK_TYPE_I64:
+                rc = cfgpack_msgpack_encode_int64(&buf, val->v.i64);
+                break;
+            case CFGPACK_TYPE_F32:
+                rc = cfgpack_msgpack_encode_f32(&buf, val->v.f32);
+                break;
+            case CFGPACK_TYPE_F64:
+                rc = cfgpack_msgpack_encode_f64(&buf, val->v.f64);
+                break;
+            case CFGPACK_TYPE_STR:
+                rc = cfgpack_msgpack_encode_str(
+                    &buf, ctx->str_pool + val->v.str.offset, val->v.str.len);
+                break;
+            case CFGPACK_TYPE_FSTR:
+                rc = cfgpack_msgpack_encode_str(
+                    &buf, ctx->str_pool + val->v.fstr.offset, val->v.fstr.len);
+                break;
+            }
+            if (rc != CFGPACK_OK) {
+                goto fail;
+            }
+        }
+    }
+
+    if (out_len) {
+        *out_len = buf.len;
+    }
+    return CFGPACK_OK;
+
+fail:
+    set_err(err, 0, "buffer too small");
+    return CFGPACK_ERR_ENCODE;
 }

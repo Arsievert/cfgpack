@@ -75,6 +75,25 @@ Example:
 ./build/out/cfgpack-compress heatshrink config.bin config.hs
 ```
 
+## Schema Pack Tool
+
+The `cfgpack-schema-pack` CLI tool converts `.map` or JSON schema files to compact MessagePack binary for over-the-wire delivery to devices:
+
+```bash
+make tools
+./build/out/cfgpack-schema-pack <input> <output>
+```
+
+The input format is auto-detected: files ending in `.json` are parsed as JSON, all others as `.map` format.
+
+Example:
+```bash
+./build/out/cfgpack-schema-pack schema.map schema.msgpack
+./build/out/cfgpack-schema-pack schema.json schema.msgpack
+```
+
+The output binary can be parsed on-device with `cfgpack_schema_measure_msgpack()` and `cfgpack_schema_parse_msgpack()`. It can also be further compressed with `cfgpack-compress` for additional size savings on constrained links.
+
 ## Third-Party Libraries
 
 LZ4 and heatshrink sources are vendored in `third_party/` for self-contained builds:

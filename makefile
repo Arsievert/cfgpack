@@ -43,6 +43,10 @@ COMPRESS_TOOL := $(OUT)/cfgpack-compress
 COMPRESS_SRC  := tools/cfgpack-compress.c
 COMPRESS_DEPS := third_party/lz4/lz4.c third_party/heatshrink/heatshrink_encoder.c
 
+# Schema-pack tool (JSON/.map -> msgpack binary)
+SCHEMA_PACK_TOOL := $(OUT)/cfgpack-schema-pack
+SCHEMA_PACK_SRC  := tools/cfgpack-schema-pack.c
+
 # Encoder libraries needed for tests (to generate compressed test data)
 ENCODER_DEPS := third_party/heatshrink/heatshrink_encoder.c
 
@@ -55,6 +59,7 @@ TESTSRC := tests/basic.c         \
            tests/json_remap.c   \
            tests/measure.c      \
            tests/msgpack.c      \
+           tests/msgpack_schema.c \
            tests/parser.c        \
            tests/parser_bounds.c \
            tests/runtime.c       \
@@ -113,12 +118,17 @@ $(OUT)/%: $(OBJ)/tests/%.o $(TESTCOMMON) $(LIB) $(IOFILEOBJ) $(ENCODEROBJ)
 	@$(CC) $(LDFLAGS) -o $@ $< $(TESTCOMMON) $(IOFILEOBJ) $(ENCODEROBJ) $(LIB) $(LDLIBS)
 
 # --- Tool targets -------------------------------------------------------------
-tools: $(COMPRESS_TOOL) ## Build compression tool
+tools: $(COMPRESS_TOOL) $(SCHEMA_PACK_TOOL) ## Build all tools
 
 $(COMPRESS_TOOL): $(COMPRESS_SRC) $(COMPRESS_DEPS)
 	@mkdir -p $(OUT)
 	@echo "CC $(COMPRESS_TOOL)"
 	@$(CC) $(CFLAGS_HOSTED) -Ithird_party/lz4 -Ithird_party/heatshrink -o $@ $(COMPRESS_SRC) $(COMPRESS_DEPS)
+
+$(SCHEMA_PACK_TOOL): $(SCHEMA_PACK_SRC) $(LIB) $(IOFILEOBJ)
+	@mkdir -p $(OUT)
+	@echo "CC $(SCHEMA_PACK_TOOL)"
+	@$(CC) $(CPPFLAGS) $(CFLAGS_HOSTED) -o $@ $(SCHEMA_PACK_SRC) $(IOFILEOBJ) $(LIB)
 
 # --- Documentation target -----------------------------------------------------
 docs: ## Generate Sphinx documentation

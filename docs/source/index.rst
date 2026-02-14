@@ -21,7 +21,7 @@ Features
 --------
 
 - Fixed-cap schema (up to 128 entries) with typed values (u/i 8-64, f32/f64, str/fstr)
-- Parses ``.map`` specs into caller-owned schema; no heap allocations
+- Parses ``.map``, JSON, and MessagePack binary schemas into caller-owned storage; no heap allocations
 - Default values for schema entries, automatically applied at initialization
 - Set/get by index and by schema name with type/length validation
 - MessagePack encoding/decoding with size caps

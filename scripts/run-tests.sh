@@ -12,7 +12,7 @@ BUILD_OUT="$ROOT_DIR/build/out"
 LOG_FILE="$ROOT_DIR/build/test.log"
 
 # Test binaries to run (order matters for readability)
-TESTS=(basic core_edge decompress io_edge json_edge json_remap measure msgpack parser_bounds parser runtime)
+TESTS=(basic core_edge decompress io_edge json_edge json_remap measure msgpack msgpack_schema parser_bounds parser runtime)
 
 # Colors
 RED='\033[31m'
@@ -59,10 +59,10 @@ for test in "${TESTS[@]}"; do
     total_failed=$((total_failed + failed))
     
     if [[ $failed -gt 0 || $exit_code -ne 0 ]]; then
-        printf "  %-14s ${RED}%d/%d passed (%d FAILED)${RESET}\n" "$test:" "$passed" "$total" "$failed"
+        printf "  %-15s ${RED}%d/%d passed (%d FAILED)${RESET}\n" "$test:" "$passed" "$total" "$failed"
         any_failed=1
     else
-        printf "  %-14s ${GREEN}%d/%d passed${RESET}\n" "$test:" "$passed" "$total"
+        printf "  %-15s ${GREEN}%d/%d passed${RESET}\n" "$test:" "$passed" "$total"
     fi
 done
 

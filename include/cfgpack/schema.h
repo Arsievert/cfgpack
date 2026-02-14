@@ -253,4 +253,77 @@ cfgpack_err_t cfgpack_schema_parse_json(const char *data,
                                         size_t str_offsets_count,
                                         cfgpack_parse_error_t *err);
 
+/**
+ * @brief Measure buffer requirements for a MessagePack binary schema.
+ *
+ * Single-pass scan of the msgpack binary. Counts entries and string types
+ * without allocating output buffers.
+ *
+ * Validates structure, types, reserved index 0, and name length.
+ * Duplicate checking is deferred to the subsequent parse.
+ *
+ * @param data     Input buffer containing msgpack schema data.
+ * @param data_len Length of data in bytes.
+ * @param out      Filled with measurement results.
+ * @param err      Optional parse error info on failure.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_* on failure.
+ */
+cfgpack_err_t cfgpack_schema_measure_msgpack(const uint8_t *data,
+                                             size_t data_len,
+                                             cfgpack_schema_measure_t *out,
+                                             cfgpack_parse_error_t *err);
+
+/**
+ * @brief Parse a schema from a MessagePack binary buffer.
+ *
+ * Same signature pattern as cfgpack_schema_parse_json() but accepts
+ * msgpack binary input instead of JSON text. Entries are sorted by
+ * index after parsing.
+ *
+ * Default values are written directly into @p values and @p str_pool.
+ *
+ * @param data             Input buffer containing msgpack data.
+ * @param data_len         Length of data in bytes.
+ * @param out_schema       Filled on success; points at caller-owned entries array.
+ * @param entries          Caller-owned array to store parsed entries.
+ * @param max_entries      Capacity of @p entries.
+ * @param values           Caller-owned value slots to receive defaults (>= max_entries).
+ * @param str_pool         Caller-owned string pool buffer.
+ * @param str_pool_cap     Capacity of @p str_pool in bytes.
+ * @param str_offsets      Caller-owned array for string offsets.
+ * @param str_offsets_count Number of elements in @p str_offsets.
+ * @param err              Optional parse error info (line/message) on failure.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_* on failure.
+ */
+cfgpack_err_t cfgpack_schema_parse_msgpack(const uint8_t *data,
+                                           size_t data_len,
+                                           cfgpack_schema_t *out_schema,
+                                           cfgpack_entry_t *entries,
+                                           size_t max_entries,
+                                           cfgpack_value_t *values,
+                                           char *str_pool,
+                                           size_t str_pool_cap,
+                                           uint16_t *str_offsets,
+                                           size_t str_offsets_count,
+                                           cfgpack_parse_error_t *err);
+
+/**
+ * @brief Encode a schema and its current values to MessagePack binary.
+ *
+ * Counterpart to cfgpack_schema_write_json(). Produces a binary format
+ * with map(3) containing "name", "version", and "entries" keys.
+ *
+ * @param ctx      Initialized context containing schema and values.
+ * @param out      Output buffer for msgpack binary.
+ * @param out_cap  Capacity of @p out in bytes.
+ * @param out_len  Output: bytes written.
+ * @param err      Optional error info on failure.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_ENCODE if buffer too small.
+ */
+cfgpack_err_t cfgpack_schema_write_msgpack(const cfgpack_ctx_t *ctx,
+                                           uint8_t *out,
+                                           size_t out_cap,
+                                           size_t *out_len,
+                                           cfgpack_parse_error_t *err);
+
 #endif /* CFGPACK_SCHEMA_H */

@@ -7,7 +7,7 @@ A MessagePack-based configuration library for embedded systems.
 ## What It Does
 
 - Defines a fixed-cap schema (up to 128 entries) with typed values (u/i 8–64, f32/f64, str/fstr) and 5-char names.
-- Parses `.map` specs into caller-owned schema + entries; no heap allocations.
+- Parses `.map`, JSON, and MessagePack binary schemas into caller-owned buffers; no heap allocations.
 - Supports **default values** for schema entries, automatically applied at initialization.
 - Initializes runtime with caller-provided value and presence buffers; tracks presence bits and supports set/get/print/size/version.
 - Supports set/get by index and by schema name with type/length validation.
@@ -21,6 +21,7 @@ A MessagePack-based configuration library for embedded systems.
 - [API Reference](docs/source/api-reference.md) — Complete API documentation (errors, values, schema, runtime, typed functions)
 - [Schema Versioning](docs/source/versioning.md) — Version detection, migration, and type widening
 - [Compression](docs/source/compression.md) — LZ4/heatshrink decompression support
+- [Stack Analysis](docs/source/stack-analysis.md) — Per-function stack frame sizes for embedded budgeting
 
 ## Map Format
 
@@ -82,7 +83,7 @@ vehicle 1
   - `io_file.h` — optional FILE*-based convenience wrappers for desktop/POSIX systems.
 - `src/` — library implementation (`core.c`, `io.c`, `msgpack.c`, `schema_parser.c`, `decompress.c`).
 - `tests/` — C test programs plus sample data under `tests/data/`.
-- `tools/` — CLI tools source (`cfgpack-compress.c` for LZ4/heatshrink compression).
+- `tools/` — CLI tools source (`cfgpack-compress.c` for LZ4/heatshrink compression, `cfgpack-schema-pack.c` for converting schemas to msgpack binary).
 - `examples/` — complete usage examples (`allocate-once/`, `datalogger/`, `low_memory/`, `sensor_hub/`).
 - `third_party/` — vendored dependencies (`lz4/`, `heatshrink/`).
 - `Makefile` — builds `build/out/libcfgpack.a`, test binaries, and tools.
@@ -92,7 +93,7 @@ vehicle 1
 ```bash
 make              # builds build/out/libcfgpack.a
 make tests        # builds all test binaries
-make tools        # builds compression tool (build/out/cfgpack-compress)
+make tools        # builds CLI tools (cfgpack-compress, cfgpack-schema-pack)
 ```
 
 ### Build Modes
@@ -126,11 +127,12 @@ Running tests...
   json_remap:    10/10 passed
   measure:       15/15 passed
   msgpack:       16/16 passed
+  msgpack_schema: 14/14 passed
   parser_bounds: 23/23 passed
   parser:        3/3 passed
   runtime:       24/24 passed
 
-TOTAL: 138/138 passed
+TOTAL: 152/152 passed
 ```
 
 ## Examples

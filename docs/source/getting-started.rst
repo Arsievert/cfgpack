@@ -77,6 +77,18 @@ Each schema entry requires a default value:
 - Float literals: ``3.14``, ``-1.5e-3``, ``0.0``
 - Quoted strings: ``"hello"``, ``""``, ``"default value"``
 
+Alternative Schema Formats
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In addition to ``.map`` text files, CFGPack supports two other schema formats:
+
+- **JSON** — parsed by ``cfgpack_schema_parse_json()``, useful for tooling
+  integration and human-readable interchange.
+- **MessagePack binary** — a compact binary encoding parsed by
+  ``cfgpack_schema_parse_msgpack()``. Use the ``cfgpack-schema-pack`` tool
+  (``make tools``) to convert ``.map`` or ``.json`` schemas to binary. See the
+  `API Reference <api-reference.html>`_ for wire-format details.
+
 Building
 --------
 
@@ -84,7 +96,7 @@ Building
 
    make              # builds build/out/libcfgpack.a
    make tests        # builds all test binaries
-   make tools        # builds compression tool
+   make tools        # builds CLI tools (compression, schema packing)
 
 Build Modes
 ~~~~~~~~~~~
