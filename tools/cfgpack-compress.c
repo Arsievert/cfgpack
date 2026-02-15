@@ -9,9 +9,9 @@
  *   lz4        - LZ4 block compression
  *   heatshrink - Heatshrink compression (window=8, lookahead=4)
  *
- * The output file contains raw compressed data. For LZ4, the original
- * (decompressed) size must be stored separately as it's required for
- * decompression.
+ * Output format:
+ *   LZ4:        4-byte little-endian original size + raw compressed data
+ *   Heatshrink: raw compressed data only
  *
  * Exit codes:
  *   0 - Success
@@ -46,9 +46,9 @@ static void print_usage(const char *prog) {
             "  heatshrink - Heatshrink compression (window=8, lookahead=4)\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "Output format:\n");
-    fprintf(
-        stderr,
-        "  Raw compressed data. For LZ4, store original size separately.\n");
+    fprintf(stderr,
+            "  LZ4:        4-byte LE original size + compressed data\n");
+    fprintf(stderr, "  Heatshrink: raw compressed data only\n");
 }
 
 static int compress_lz4(const uint8_t *input,
@@ -214,6 +214,20 @@ int main(int argc, char *argv[]) {
         return 2;
     }
 
+    /* LZ4: prepend 4-byte little-endian original size header */
+    if (is_lz4) {
+        uint8_t hdr[4];
+        hdr[0] = (uint8_t)(input_len & 0xFF);
+        hdr[1] = (uint8_t)((input_len >> 8) & 0xFF);
+        hdr[2] = (uint8_t)((input_len >> 16) & 0xFF);
+        hdr[3] = (uint8_t)((input_len >> 24) & 0xFF);
+        if (fwrite(hdr, 1, 4, fout) != 4) {
+            fprintf(stderr, "Error writing LZ4 header\n");
+            fclose(fout);
+            return 2;
+        }
+    }
+
     if (fwrite(output_buf, 1, output_len, fout) != output_len) {
         fprintf(stderr, "Error writing output file\n");
         fclose(fout);
@@ -222,9 +236,9 @@ int main(int argc, char *argv[]) {
     fclose(fout);
 
     /* Print stats */
-    printf("%s: %zu -> %zu bytes (%.1f%%)\n", algorithm, input_len, output_len,
-           input_len > 0 ? (100.0 * output_len / input_len) : 0.0);
-    printf("Original size: %zu (needed for LZ4 decompression)\n", input_len);
+    size_t file_size = is_lz4 ? output_len + 4 : output_len;
+    printf("%s: %zu -> %zu bytes (%.1f%%)\n", algorithm, input_len, file_size,
+           input_len > 0 ? (100.0 * file_size / input_len) : 0.0);
 
     return 0;
 }

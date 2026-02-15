@@ -1,9 +1,11 @@
 /**
  * @file main.c
- * @brief CFGPack Fleet Gateway Example — msgpack binary schemas + migration
+ * @brief CFGPack Fleet Gateway Example — LZ4-compressed msgpack schemas + migration
  *
  * Demonstrates:
- * - Loading schemas from MessagePack binary format (built by cfgpack-schema-pack)
+ * - Loading LZ4-compressed msgpack binary schemas (built by cfgpack-schema-pack
+ *   and cfgpack-compress)
+ * - Runtime LZ4 decompression of schema data before parsing
  * - Using cfgpack_schema_measure_msgpack() for minimal-stack buffer sizing
  * - Heap allocation of right-sized buffers (no static arrays)
  * - Three-version migration chain: v1 -> v2 -> v3
@@ -17,7 +19,11 @@
  * enables in favor of a bitmask (38 entries, 20 strings).
  *
  * Build pipeline (handled by Makefile):
- *   .map  --(cfgpack-schema-pack)-->  .msgpack  --(this program)-->  runtime
+ *   .map --(cfgpack-schema-pack)--> .msgpack --(cfgpack-compress lz4)--> .msgpack.lz4
+ *
+ * LZ4 file format:
+ *   [0..3]  4-byte little-endian original (uncompressed) size
+ *   [4..N]  LZ4-compressed data
  */
 
 #include <stdio.h>
@@ -25,6 +31,7 @@
 #include <string.h>
 
 #include "cfgpack/cfgpack.h"
+#include "lz4.h"
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * Remap tables
@@ -311,6 +318,62 @@ static uint8_t *read_file(const char *path, size_t *out_len) {
 }
 
 /**
+ * Read an LZ4-compressed file and decompress it.
+ *
+ * File format: 4-byte little-endian original size, then LZ4-compressed data.
+ * Returns a malloc'd buffer containing the decompressed data.
+ * Also reports compressed and decompressed sizes for the caller to print.
+ */
+static uint8_t *read_lz4_file(const char *path,
+                              size_t *out_len,
+                              size_t *out_compressed_len) {
+    size_t file_len;
+    uint8_t *file_data = read_file(path, &file_len);
+    if (!file_data) {
+        return NULL;
+    }
+
+    if (file_len < 4) {
+        fprintf(stderr, "LZ4 file too small (no header): %s\n", path);
+        free(file_data);
+        return NULL;
+    }
+
+    /* Read 4-byte little-endian original size */
+    uint32_t orig_size = (uint32_t)file_data[0] |
+                         ((uint32_t)file_data[1] << 8) |
+                         ((uint32_t)file_data[2] << 16) |
+                         ((uint32_t)file_data[3] << 24);
+
+    const uint8_t *compressed = file_data + 4;
+    size_t compressed_len = file_len - 4;
+
+    uint8_t *decompressed = malloc(orig_size);
+    if (!decompressed) {
+        fprintf(stderr, "malloc failed for decompression buffer (%u bytes)\n",
+                orig_size);
+        free(file_data);
+        return NULL;
+    }
+
+    int result = LZ4_decompress_safe((const char *)compressed,
+                                     (char *)decompressed, (int)compressed_len,
+                                     (int)orig_size);
+    free(file_data);
+
+    if (result < 0) {
+        fprintf(stderr, "LZ4 decompression failed for %s (error %d)\n", path,
+                result);
+        free(decompressed);
+        return NULL;
+    }
+
+    *out_len = (size_t)orig_size;
+    *out_compressed_len = file_len;
+    return decompressed;
+}
+
+/**
  * Check a string value matches expected. Returns 0 on match, 1 on mismatch.
  */
 static int check_str(const cfgpack_ctx_t *ctx,
@@ -449,19 +512,21 @@ int main(void) {
 
     printf(
         "╔══════════════════════════════════════════════════════════════════╗\n"
-        "║  CFGPack Fleet Gateway: msgpack binary schemas + v1->v2->v3      ║\n"
+        "║  CFGPack Fleet Gateway: LZ4-compressed schemas + v1->v2->v3     ║\n"
         "╚══════════════════════════════════════════════════════════════════╝\n"
         "\n");
 
-    /* ── Load schema files from disk ──────────────────────────────────────
-     * These are pre-built by `make` using cfgpack-schema-pack.
-     * On a real device, the binary schema would be embedded in firmware
-     * or received via OTA — no text parsing needed at runtime. */
+    /* ── Load compressed schema files from disk ───────────────────────────
+     * These are pre-built by `make`:
+     *   .map -> cfgpack-schema-pack -> .msgpack -> cfgpack-compress lz4 -> .msgpack.lz4
+     * On a real device, the LZ4-compressed binary schema would be stored
+     * in flash or received via OTA — smaller than raw msgpack. */
 
     size_t v1_len, v2_len, v3_len;
-    uint8_t *v1_mp = read_file("fleet_v1.msgpack", &v1_len);
-    uint8_t *v2_mp = read_file("fleet_v2.msgpack", &v2_len);
-    uint8_t *v3_mp = read_file("fleet_v3.msgpack", &v3_len);
+    size_t v1_clen, v2_clen, v3_clen;
+    uint8_t *v1_mp = read_lz4_file("fleet_v1.msgpack.lz4", &v1_len, &v1_clen);
+    uint8_t *v2_mp = read_lz4_file("fleet_v2.msgpack.lz4", &v2_len, &v2_clen);
+    uint8_t *v3_mp = read_lz4_file("fleet_v3.msgpack.lz4", &v3_len, &v3_clen);
     if (!v1_mp || !v2_mp || !v3_mp) {
         free(v1_mp);
         free(v2_mp);
@@ -469,10 +534,13 @@ int main(void) {
         return 1;
     }
 
-    printf("Schema binary sizes:\n");
-    printf("  fleet_v1.msgpack: %4zu bytes\n", v1_len);
-    printf("  fleet_v2.msgpack: %4zu bytes\n", v2_len);
-    printf("  fleet_v3.msgpack: %4zu bytes\n", v3_len);
+    printf("Schema files (LZ4-compressed -> decompressed):\n");
+    printf("  fleet_v1.msgpack.lz4: %4zu -> %4zu bytes (%.1f%%)\n", v1_clen,
+           v1_len, (100.0 * v1_clen / v1_len));
+    printf("  fleet_v2.msgpack.lz4: %4zu -> %4zu bytes (%.1f%%)\n", v2_clen,
+           v2_len, (100.0 * v2_clen / v2_len));
+    printf("  fleet_v3.msgpack.lz4: %4zu -> %4zu bytes (%.1f%%)\n", v3_clen,
+           v3_len, (100.0 * v3_clen / v3_len));
     printf("\n");
 
     /* ═════════════════════════════════════════════════════════════════════
@@ -746,9 +814,11 @@ int main(void) {
                          m.str_pool_size +
                          (m.str_count + m.fstr_count) * sizeof(uint16_t);
 
-    printf(
-        "  Schema format:          msgpack binary (pre-compiled from .map)\n");
+    printf("  Schema format:          LZ4-compressed msgpack binary\n");
+    printf("  Build pipeline:         .map -> .msgpack -> .msgpack.lz4\n");
     printf("  Migration chain:        fleet_v1 -> fleet_v2 -> fleet_v3\n");
+    printf("  v3 schema on disk:      %zu bytes (LZ4) vs %zu bytes (raw)\n",
+           v3_clen, v3_len);
     printf("  v3 entries (measured):  %zu\n", m.entry_count);
     printf("  v3 strings (measured):  %zu str + %zu fstr = %zu total\n",
            m.str_count, m.fstr_count, m.str_count + m.fstr_count);
