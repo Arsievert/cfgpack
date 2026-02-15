@@ -84,7 +84,7 @@ vehicle 1
 - `src/` — library implementation (`core.c`, `io.c`, `msgpack.c`, `schema_parser.c`, `decompress.c`).
 - `tests/` — C test programs plus sample data under `tests/data/`.
 - `tools/` — CLI tools source (`cfgpack-compress.c` for LZ4/heatshrink compression, `cfgpack-schema-pack.c` for converting schemas to msgpack binary).
-- `examples/` — complete usage examples (`allocate-once/`, `datalogger/`, `low_memory/`, `sensor_hub/`).
+- `examples/` — complete usage examples (`allocate-once/`, `datalogger/`, `fleet_gateway/`, `low_memory/`, `sensor_hub/`).
 - `third_party/` — vendored dependencies (`lz4/`, `heatshrink/`).
 - `Makefile` — builds `build/out/libcfgpack.a`, test binaries, and tools.
 
@@ -137,7 +137,7 @@ TOTAL: 152/152 passed
 
 ## Examples
 
-Four complete examples are provided in the `examples/` directory:
+Five complete examples are provided in the `examples/` directory:
 
 ### allocate-once
 
@@ -153,6 +153,14 @@ Basic data logger demonstrating schema parsing, typed convenience functions, and
 
 ```bash
 cd examples/datalogger && make run
+```
+
+### fleet_gateway
+
+Fleet management gateway demonstrating msgpack binary schemas (pre-compiled from `.map` files via `cfgpack-schema-pack`) and a three-version migration chain (v1 -> v2 -> v3). Uses `cfgpack_schema_measure_msgpack()` for right-sized heap allocation with no static buffer guessing. Covers all five migration scenarios: keep, widen, move, remove, and add.
+
+```bash
+cd examples/fleet_gateway && make run
 ```
 
 ### low_memory

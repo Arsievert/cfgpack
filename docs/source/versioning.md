@@ -105,3 +105,7 @@ if (strcmp(stored_name, current_schema.map_name) == 0) {
     printf("Unknown config version, using defaults\n");
 }
 ```
+
+## Working Examples
+
+See `examples/low_memory/` for a complete v1 -> v2 migration using JSON schemas with `cfgpack_schema_measure()`, or `examples/fleet_gateway/` for a three-version migration chain (v1 -> v2 -> v3) using msgpack binary schemas with `cfgpack_schema_measure_msgpack()`.

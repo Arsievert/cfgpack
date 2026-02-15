@@ -205,34 +205,38 @@ Schemas can be read from and written to JSON for interoperability with other too
 
 ### MessagePack Binary Schema Format
 
-Schemas can also be stored and transmitted as compact MessagePack binary, which is typically 40-50% smaller than equivalent JSON and requires no tokenizer or string-to-number conversion on the device. The wire format mirrors the JSON structure:
+Schemas can also be stored and transmitted as compact MessagePack binary, which is typically 50-60% smaller than equivalent JSON and requires no tokenizer or string-to-number conversion on the device. The wire format uses integer keys and integer type codes for maximum compactness:
 
 ```
 map(3) {
-  "name"    : str  "demo"
-  "version" : uint 1
-  "entries" : array(N) [
+  0 : str  "demo"          // name
+  1 : uint 1               // version
+  2 : array(N) [           // entries
     map(4) {
-      "index" : uint 1
-      "name"  : str  "speed"
-      "type"  : str  "u16"
-      "value" : uint 100
+      0 : uint 1           // index
+      1 : str  "speed"     // name
+      2 : uint 1           // type (cfgpack_type_t enum: U16=1)
+      3 : uint 100         // value
     }
     map(4) {
-      "index" : uint 2
-      "name"  : str  "label"
-      "type"  : str  "fstr"
-      "value" : str  "hello"
+      0 : uint 2           // index
+      1 : str  "label"     // name
+      2 : uint 11          // type (FSTR=11)
+      3 : str  "hello"     // value
     }
     map(4) {
-      "index" : uint 3
-      "name"  : str  "desc"
-      "type"  : str  "str"
-      "value" : nil
+      0 : uint 3           // index
+      1 : str  "desc"      // name
+      2 : uint 10          // type (STR=10)
+      3 : nil              // value (no default)
     }
   ]
 }
 ```
+
+**Top-level keys:** 0=name, 1=version, 2=entries
+**Per-entry keys:** 0=index, 1=name, 2=type, 3=value
+**Type encoding:** `cfgpack_type_t` enum integer (U8=0, U16=1, U32=2, U64=3, I8=4, I16=5, I32=6, I64=7, F32=8, F64=9, STR=10, FSTR=11)
 
 - `value` is `nil` (0xC0) for entries with no default
 - Integer defaults use msgpack uint/int encoding

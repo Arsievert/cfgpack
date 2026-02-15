@@ -1,0 +1,70 @@
+# Fleet Management Gateway — Schema v2
+# Firmware upgrade from v1:
+#   - Alert thresholds MOVED: old indices 20-23 -> 60-63
+#   - GPS interval WIDENED: u16 -> u32 (microsecond resolution)
+#   - OBD interval WIDENED: u16 -> u32
+#   - REMOVED: gpsmd (idx 11), dtcen (idx 24) — rolled into new diag flags
+#   - NEW: Geofence zones, OTA config, MQTT topics, driver phone/license
+#   - Total: 36 entries (10 fstr + 8 str = 18 string entries, 18 numeric)
+fleet_v2 2
+
+# ── Vehicle identity (KEPT) ──────────────────────────────────────────────────
+1   vid    u32   0            # Vehicle ID
+2   vname  str   "truck-01"   # Vehicle display name
+3   vtype  fstr  "cargo"      # Vehicle type code
+4   plate  fstr  "ABC123"     # License plate
+5   drv    str   "unassigned"  # Current driver name
+6   drvid  str   NIL           # Driver ID badge number
+7   fleet  fstr  "default"     # Fleet group name
+8   depot  str   "main-yard"   # Home depot/base name
+
+# ── GPS configuration (WIDENED: gpsrt u16->u32) ─────────────────────────────
+9   gpsrt  u32   5000          # GPS report interval (ms) — widened for precision
+10  gpsen  u8    1             # GPS enable
+# INDEX 11 (gpsmd) REMOVED — absorbed into diag flags
+12  hdop   f32   2.5           # Max HDOP threshold
+
+# ── Network / server (KEPT) ──────────────────────────────────────────────────
+13  srvh   str   "fleet.example.com"  # Server hostname
+14  srvp   u16   8443                  # Server port
+15  apik   str   NIL                   # API key
+16  tls    u8    1                     # TLS enable
+17  tout   u16   30000                 # Connection timeout (ms)
+18  retry  u8    3                     # Max retries
+19  proto  fstr  "mqtt"                # Protocol
+
+# ── Diagnostics (WIDENED: obdrt u16->u32, dtcen REMOVED) ─────────────────────
+# INDEX 24 (dtcen) REMOVED
+25  obdrt  u32   10000         # OBD poll interval (ms) — widened
+26  logfn  str   "diag.log"    # Diagnostic log filename
+27  loglv  u8    2             # Log level
+
+# ── Device identity (KEPT) ───────────────────────────────────────────────────
+28  dname  fstr  "gw-001"      # Gateway device name
+29  dser   str   NIL           # Device serial number
+30  fwver  fstr  "2.0.0"       # Firmware version
+31  hwver  fstr  "rev-a"       # Hardware revision
+32  mfg    str   "acme-iot"    # Manufacturer name
+
+# ── NEW: Driver extended info ────────────────────────────────────────────────
+40  dph    str   NIL           # Driver phone number
+41  dlic   fstr  NIL           # Driver license class
+
+# ── NEW: Geofence zones (2 zones) ───────────────────────────────────────────
+42  gf0nm  str   "warehouse"   # Geofence 0 name
+43  gf0en  u8    1             # Geofence 0 enable
+44  gf0rd  u16   500           # Geofence 0 radius (meters)
+45  gf1nm  str   "hq-campus"   # Geofence 1 name
+46  gf1en  u8    0             # Geofence 1 enable
+47  gf1rd  u16   1000          # Geofence 1 radius (meters)
+
+# ── NEW: MQTT topics ─────────────────────────────────────────────────────────
+50  mtpos  fstr  "pos"         # MQTT topic suffix: position
+51  mtalr  fstr  "alert"       # MQTT topic suffix: alerts
+52  mtdg   fstr  "diag"        # MQTT topic suffix: diagnostics
+
+# ── Alert thresholds — MOVED from old indices 20-23 ─────────────────────────
+60  aspd   u16   120           # Speed alert threshold (km/h)
+61  aidle  u16   300           # Idle time alert (seconds)
+62  atmp   i8    -20           # Low temp alert (degrees C)
+63  afuel  u8    15            # Low fuel alert (percent)

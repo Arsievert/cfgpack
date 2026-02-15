@@ -535,41 +535,41 @@ TEST_CASE(test_remap_defaults_restored) {
 TEST_CASE(test_err_duplicate_index) {
     LOG_SECTION("Duplicate index returns ERR_DUPLICATE");
 
-    /* Hand-craft msgpack: map(3) { name:"d", version:1,
-     * entries: [map(4){index:1,name:"a",type:"u8",value:0},
-     *           map(4){index:1,name:"b",type:"u8",value:0}] } */
+    /* Hand-craft msgpack: map(3) { 0:"d", 1:1,
+     * 2: [map(4){0:1,1:"a",2:0,3:0},
+     *      map(4){0:1,1:"b",2:0,3:0}] } */
     uint8_t mp[256];
     cfgpack_buf_t buf;
     cfgpack_buf_init(&buf, mp, sizeof(mp));
 
     cfgpack_msgpack_encode_map_header(&buf, 3);
-    cfgpack_msgpack_encode_str(&buf, "name", 4);
+    cfgpack_msgpack_encode_uint64(&buf, 0); /* key: name */
     cfgpack_msgpack_encode_str(&buf, "d", 1);
-    cfgpack_msgpack_encode_str(&buf, "version", 7);
+    cfgpack_msgpack_encode_uint64(&buf, 1); /* key: version */
     cfgpack_msgpack_encode_uint64(&buf, 1);
-    cfgpack_msgpack_encode_str(&buf, "entries", 7);
+    cfgpack_msgpack_encode_uint64(&buf, 2); /* key: entries */
     /* array(2) */
     uint8_t arr = 0x92;
     cfgpack_buf_append(&buf, &arr, 1);
     /* entry 0 */
     cfgpack_msgpack_encode_map_header(&buf, 4);
-    cfgpack_msgpack_encode_str(&buf, "index", 5);
+    cfgpack_msgpack_encode_uint64(&buf, 0); /* key: index */
     cfgpack_msgpack_encode_uint64(&buf, 1);
-    cfgpack_msgpack_encode_str(&buf, "name", 4);
+    cfgpack_msgpack_encode_uint64(&buf, 1); /* key: name */
     cfgpack_msgpack_encode_str(&buf, "a", 1);
-    cfgpack_msgpack_encode_str(&buf, "type", 4);
-    cfgpack_msgpack_encode_str(&buf, "u8", 2);
-    cfgpack_msgpack_encode_str(&buf, "value", 5);
+    cfgpack_msgpack_encode_uint64(&buf, 2); /* key: type */
+    cfgpack_msgpack_encode_uint64(&buf, CFGPACK_TYPE_U8);
+    cfgpack_msgpack_encode_uint64(&buf, 3); /* key: value */
     cfgpack_msgpack_encode_uint64(&buf, 0);
     /* entry 1: same index */
     cfgpack_msgpack_encode_map_header(&buf, 4);
-    cfgpack_msgpack_encode_str(&buf, "index", 5);
+    cfgpack_msgpack_encode_uint64(&buf, 0); /* key: index */
     cfgpack_msgpack_encode_uint64(&buf, 1);
-    cfgpack_msgpack_encode_str(&buf, "name", 4);
+    cfgpack_msgpack_encode_uint64(&buf, 1); /* key: name */
     cfgpack_msgpack_encode_str(&buf, "b", 1);
-    cfgpack_msgpack_encode_str(&buf, "type", 4);
-    cfgpack_msgpack_encode_str(&buf, "u8", 2);
-    cfgpack_msgpack_encode_str(&buf, "value", 5);
+    cfgpack_msgpack_encode_uint64(&buf, 2); /* key: type */
+    cfgpack_msgpack_encode_uint64(&buf, CFGPACK_TYPE_U8);
+    cfgpack_msgpack_encode_uint64(&buf, 3); /* key: value */
     cfgpack_msgpack_encode_uint64(&buf, 0);
 
     cfgpack_schema_t schema;
@@ -600,21 +600,21 @@ TEST_CASE(test_err_reserved_index) {
     cfgpack_buf_init(&buf, mp, sizeof(mp));
 
     cfgpack_msgpack_encode_map_header(&buf, 3);
-    cfgpack_msgpack_encode_str(&buf, "name", 4);
+    cfgpack_msgpack_encode_uint64(&buf, 0); /* key: name */
     cfgpack_msgpack_encode_str(&buf, "r", 1);
-    cfgpack_msgpack_encode_str(&buf, "version", 7);
+    cfgpack_msgpack_encode_uint64(&buf, 1); /* key: version */
     cfgpack_msgpack_encode_uint64(&buf, 1);
-    cfgpack_msgpack_encode_str(&buf, "entries", 7);
-    uint8_t arr = 0x91; /* array(1) */
+    cfgpack_msgpack_encode_uint64(&buf, 2); /* key: entries */
+    uint8_t arr = 0x91;                     /* array(1) */
     cfgpack_buf_append(&buf, &arr, 1);
     cfgpack_msgpack_encode_map_header(&buf, 4);
-    cfgpack_msgpack_encode_str(&buf, "index", 5);
+    cfgpack_msgpack_encode_uint64(&buf, 0); /* key: index */
     cfgpack_msgpack_encode_uint64(&buf, 0); /* reserved */
-    cfgpack_msgpack_encode_str(&buf, "name", 4);
+    cfgpack_msgpack_encode_uint64(&buf, 1); /* key: name */
     cfgpack_msgpack_encode_str(&buf, "a", 1);
-    cfgpack_msgpack_encode_str(&buf, "type", 4);
-    cfgpack_msgpack_encode_str(&buf, "u8", 2);
-    cfgpack_msgpack_encode_str(&buf, "value", 5);
+    cfgpack_msgpack_encode_uint64(&buf, 2); /* key: type */
+    cfgpack_msgpack_encode_uint64(&buf, CFGPACK_TYPE_U8);
+    cfgpack_msgpack_encode_uint64(&buf, 3); /* key: value */
     cfgpack_msgpack_encode_uint64(&buf, 0);
 
     cfgpack_schema_t schema;
@@ -645,21 +645,21 @@ TEST_CASE(test_err_name_too_long) {
     cfgpack_buf_init(&buf, mp, sizeof(mp));
 
     cfgpack_msgpack_encode_map_header(&buf, 3);
-    cfgpack_msgpack_encode_str(&buf, "name", 4);
+    cfgpack_msgpack_encode_uint64(&buf, 0); /* key: name */
     cfgpack_msgpack_encode_str(&buf, "n", 1);
-    cfgpack_msgpack_encode_str(&buf, "version", 7);
+    cfgpack_msgpack_encode_uint64(&buf, 1); /* key: version */
     cfgpack_msgpack_encode_uint64(&buf, 1);
-    cfgpack_msgpack_encode_str(&buf, "entries", 7);
+    cfgpack_msgpack_encode_uint64(&buf, 2); /* key: entries */
     uint8_t arr = 0x91;
     cfgpack_buf_append(&buf, &arr, 1);
     cfgpack_msgpack_encode_map_header(&buf, 4);
-    cfgpack_msgpack_encode_str(&buf, "index", 5);
+    cfgpack_msgpack_encode_uint64(&buf, 0); /* key: index */
     cfgpack_msgpack_encode_uint64(&buf, 1);
-    cfgpack_msgpack_encode_str(&buf, "name", 4);
+    cfgpack_msgpack_encode_uint64(&buf, 1);        /* key: name */
     cfgpack_msgpack_encode_str(&buf, "toolng", 6); /* 6 chars > 5 */
-    cfgpack_msgpack_encode_str(&buf, "type", 4);
-    cfgpack_msgpack_encode_str(&buf, "u8", 2);
-    cfgpack_msgpack_encode_str(&buf, "value", 5);
+    cfgpack_msgpack_encode_uint64(&buf, 2);        /* key: type */
+    cfgpack_msgpack_encode_uint64(&buf, CFGPACK_TYPE_U8);
+    cfgpack_msgpack_encode_uint64(&buf, 3); /* key: value */
     cfgpack_msgpack_encode_uint64(&buf, 0);
 
     cfgpack_schema_t schema;
@@ -690,21 +690,21 @@ TEST_CASE(test_err_bad_type) {
     cfgpack_buf_init(&buf, mp, sizeof(mp));
 
     cfgpack_msgpack_encode_map_header(&buf, 3);
-    cfgpack_msgpack_encode_str(&buf, "name", 4);
+    cfgpack_msgpack_encode_uint64(&buf, 0); /* key: name */
     cfgpack_msgpack_encode_str(&buf, "t", 1);
-    cfgpack_msgpack_encode_str(&buf, "version", 7);
+    cfgpack_msgpack_encode_uint64(&buf, 1); /* key: version */
     cfgpack_msgpack_encode_uint64(&buf, 1);
-    cfgpack_msgpack_encode_str(&buf, "entries", 7);
+    cfgpack_msgpack_encode_uint64(&buf, 2); /* key: entries */
     uint8_t arr = 0x91;
     cfgpack_buf_append(&buf, &arr, 1);
     cfgpack_msgpack_encode_map_header(&buf, 4);
-    cfgpack_msgpack_encode_str(&buf, "index", 5);
+    cfgpack_msgpack_encode_uint64(&buf, 0); /* key: index */
     cfgpack_msgpack_encode_uint64(&buf, 1);
-    cfgpack_msgpack_encode_str(&buf, "name", 4);
+    cfgpack_msgpack_encode_uint64(&buf, 1); /* key: name */
     cfgpack_msgpack_encode_str(&buf, "a", 1);
-    cfgpack_msgpack_encode_str(&buf, "type", 4);
-    cfgpack_msgpack_encode_str(&buf, "bad", 3); /* invalid type */
-    cfgpack_msgpack_encode_str(&buf, "value", 5);
+    cfgpack_msgpack_encode_uint64(&buf, 2);  /* key: type */
+    cfgpack_msgpack_encode_uint64(&buf, 99); /* invalid type (out of range) */
+    cfgpack_msgpack_encode_uint64(&buf, 3);  /* key: value */
     cfgpack_msgpack_encode_uint64(&buf, 0);
 
     cfgpack_schema_t schema;
@@ -788,21 +788,21 @@ TEST_CASE(test_err_str_too_long) {
     cfgpack_buf_init(&buf, mp, sizeof(mp));
 
     cfgpack_msgpack_encode_map_header(&buf, 3);
-    cfgpack_msgpack_encode_str(&buf, "name", 4);
+    cfgpack_msgpack_encode_uint64(&buf, 0); /* key: name */
     cfgpack_msgpack_encode_str(&buf, "sl", 2);
-    cfgpack_msgpack_encode_str(&buf, "version", 7);
+    cfgpack_msgpack_encode_uint64(&buf, 1); /* key: version */
     cfgpack_msgpack_encode_uint64(&buf, 1);
-    cfgpack_msgpack_encode_str(&buf, "entries", 7);
+    cfgpack_msgpack_encode_uint64(&buf, 2); /* key: entries */
     uint8_t arr = 0x91;
     cfgpack_buf_append(&buf, &arr, 1);
     cfgpack_msgpack_encode_map_header(&buf, 4);
-    cfgpack_msgpack_encode_str(&buf, "index", 5);
+    cfgpack_msgpack_encode_uint64(&buf, 0); /* key: index */
     cfgpack_msgpack_encode_uint64(&buf, 1);
-    cfgpack_msgpack_encode_str(&buf, "name", 4);
+    cfgpack_msgpack_encode_uint64(&buf, 1); /* key: name */
     cfgpack_msgpack_encode_str(&buf, "a", 1);
-    cfgpack_msgpack_encode_str(&buf, "type", 4);
-    cfgpack_msgpack_encode_str(&buf, "fstr", 4);
-    cfgpack_msgpack_encode_str(&buf, "value", 5);
+    cfgpack_msgpack_encode_uint64(&buf, 2); /* key: type */
+    cfgpack_msgpack_encode_uint64(&buf, CFGPACK_TYPE_FSTR);
+    cfgpack_msgpack_encode_uint64(&buf, 3); /* key: value */
     /* fstr default with 17 chars (> CFGPACK_FSTR_MAX=16) */
     cfgpack_msgpack_encode_str(&buf, "12345678901234567", 17);
 

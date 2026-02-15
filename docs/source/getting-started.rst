@@ -43,8 +43,10 @@ Include just ``cfgpack/cfgpack.h``; it re-exports the public API surface.
    exact buffer sizes before allocating. This requires only 32 bytes of stack
    instead of ~8KB for oversized discovery buffers. See the
    `API Reference <api-reference.html>`_ and ``examples/allocate-once/`` for
-   the full measure-then-allocate pattern, or ``examples/low_memory/`` for a
-   complete example combining measure-then-allocate with schema migration.
+   the full measure-then-allocate pattern, ``examples/low_memory/`` for a
+   complete example combining measure-then-allocate with schema migration, or
+   ``examples/fleet_gateway/`` for msgpack binary schemas with a three-version
+   migration chain using ``cfgpack_schema_measure_msgpack()``.
 
 Map Format
 ----------
