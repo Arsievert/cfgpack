@@ -184,9 +184,19 @@ int main(int argc, char **argv) {
      * default values directly into the values array and string pool. */
 
     cfgpack_schema_t schema;
-    rc = cfgpack_parse_schema(file_buf, file_len, &schema, entries, entry_count,
-                              values, str_pool, m.str_pool_size, str_offsets,
-                              str_offset_count, &parse_err);
+    cfgpack_parse_opts_t opts = {
+        .out_schema = &schema,
+        .entries = entries,
+        .max_entries = entry_count,
+        .values = values,
+        .str_pool = str_pool,
+        .str_pool_cap = m.str_pool_size,
+        .str_offsets = str_offsets,
+        .str_offsets_count = str_offset_count,
+        .err = &parse_err,
+    };
+
+    rc = cfgpack_parse_schema(file_buf, file_len, &opts);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Final parse error at line %zu: %s\n", parse_err.line,
                 parse_err.message);
@@ -240,9 +250,7 @@ int main(int argc, char **argv) {
 
     /* ── 8. Simulate reboot: re-parse schema, re-init, pagein ──────── */
 
-    rc = cfgpack_parse_schema(file_buf, file_len, &schema, entries, entry_count,
-                              values, str_pool, m.str_pool_size, str_offsets,
-                              str_offset_count, &parse_err);
+    rc = cfgpack_parse_schema(file_buf, file_len, &opts);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Re-parse error: %s\n", parse_err.message);
         return (1);

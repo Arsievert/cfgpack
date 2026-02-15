@@ -30,10 +30,12 @@ static cfgpack_err_t json_to_msgpack(const char *json,
         return rc;
     }
 
-    rc = cfgpack_schema_parse_json(json, strlen(json), &schema, entries,
-                                   m.entry_count, values, str_pool,
-                                   sizeof(str_pool), str_offsets,
-                                   m.str_count + m.fstr_count, &perr);
+    cfgpack_parse_opts_t opts = {&schema,       entries,
+                                 m.entry_count, values,
+                                 str_pool,      sizeof(str_pool),
+                                 str_offsets,   m.str_count + m.fstr_count,
+                                 &perr};
+    rc = cfgpack_schema_parse_json(json, strlen(json), &opts);
     if (rc != CFGPACK_OK) {
         return rc;
     }
@@ -52,27 +54,19 @@ static cfgpack_err_t json_to_msgpack(const char *json,
 /* Helper: parse msgpack and init a context from it. */
 static cfgpack_err_t msgpack_init(const uint8_t *data,
                                   size_t data_len,
-                                  cfgpack_schema_t *schema,
-                                  cfgpack_entry_t *entries,
-                                  size_t max_entries,
-                                  cfgpack_value_t *values,
-                                  char *str_pool,
-                                  size_t str_pool_cap,
-                                  uint16_t *str_offsets,
-                                  size_t str_offsets_count,
+                                  const cfgpack_parse_opts_t *opts,
                                   cfgpack_ctx_t *ctx) {
-    cfgpack_parse_error_t err;
-    cfgpack_err_t rc = cfgpack_schema_parse_msgpack(data, data_len, schema,
-                                                    entries, max_entries,
-                                                    values, str_pool,
-                                                    str_pool_cap, str_offsets,
-                                                    str_offsets_count, &err);
+    cfgpack_err_t rc = cfgpack_schema_parse_msgpack(data, data_len, opts);
     if (rc != CFGPACK_OK) {
-        LOG("msgpack parse error: %s", err.message);
+        if (opts->err) {
+            LOG("msgpack parse error: %s", opts->err->message);
+        }
         return rc;
     }
-    return cfgpack_init(ctx, schema, values, schema->entry_count, str_pool,
-                        str_pool_cap, str_offsets, str_offsets_count);
+    return cfgpack_init(ctx, opts->out_schema, opts->values,
+                        opts->out_schema->entry_count, opts->str_pool,
+                        opts->str_pool_cap, opts->str_offsets,
+                        opts->str_offsets_count);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -104,10 +98,13 @@ TEST_CASE(test_roundtrip) {
     cfgpack_value_t values[8];
     char str_pool[1];
     uint16_t str_offsets[1];
+    cfgpack_parse_error_t perr;
+    cfgpack_parse_opts_t opts = {&schema,     entries,  8,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 0,        &perr};
     cfgpack_ctx_t ctx;
 
-    CHECK(msgpack_init(mp, mp_len, &schema, entries, 8, values, str_pool,
-                       sizeof(str_pool), str_offsets, 0, &ctx) == CFGPACK_OK);
+    CHECK(msgpack_init(mp, mp_len, &opts, &ctx) == CFGPACK_OK);
 
     CHECK(strcmp(schema.map_name, "demo") == 0);
     LOG("name: %s", schema.map_name);
@@ -228,10 +225,12 @@ TEST_CASE(test_all_types) {
     size_t pool_size = (CFGPACK_STR_MAX + 1) + (CFGPACK_FSTR_MAX + 1);
     char str_pool[CFGPACK_STR_MAX + 1 + CFGPACK_FSTR_MAX + 1];
     uint16_t str_offsets[2];
+    cfgpack_parse_error_t perr;
+    cfgpack_parse_opts_t opts = {&schema,   entries,     16, values, str_pool,
+                                 pool_size, str_offsets, 2,  &perr};
     cfgpack_ctx_t ctx;
 
-    CHECK(msgpack_init(mp, mp_len, &schema, entries, 16, values, str_pool,
-                       pool_size, str_offsets, 2, &ctx) == CFGPACK_OK);
+    CHECK(msgpack_init(mp, mp_len, &opts, &ctx) == CFGPACK_OK);
     CHECK(schema.entry_count == 12);
 
     /* Verify types are correct */
@@ -287,10 +286,12 @@ TEST_CASE(test_string_defaults) {
     size_t pool_size = (CFGPACK_STR_MAX + 1) + (CFGPACK_FSTR_MAX + 1);
     char str_pool[CFGPACK_STR_MAX + 1 + CFGPACK_FSTR_MAX + 1];
     uint16_t str_offsets[2];
+    cfgpack_parse_error_t perr;
+    cfgpack_parse_opts_t opts = {&schema,   entries,     4, values, str_pool,
+                                 pool_size, str_offsets, 2, &perr};
     cfgpack_ctx_t ctx;
 
-    CHECK(msgpack_init(mp, mp_len, &schema, entries, 4, values, str_pool,
-                       pool_size, str_offsets, 2, &ctx) == CFGPACK_OK);
+    CHECK(msgpack_init(mp, mp_len, &opts, &ctx) == CFGPACK_OK);
 
     /* Read str default */
     const char *str_out;
@@ -336,9 +337,9 @@ TEST_CASE(test_nil_defaults) {
     uint16_t str_offsets[1];
     cfgpack_parse_error_t perr;
 
-    CHECK(cfgpack_schema_parse_msgpack(mp, mp_len, &schema, entries, 4, values,
-                                       str_pool, 0, str_offsets, 0,
-                                       &perr) == CFGPACK_OK);
+    cfgpack_parse_opts_t opts = {&schema, entries,     4, values, str_pool,
+                                 0,       str_offsets, 0, &perr};
+    CHECK(cfgpack_schema_parse_msgpack(mp, mp_len, &opts) == CFGPACK_OK);
 
     CHECK(entries[0].index == 1);
     CHECK(entries[0].has_default == 1);
@@ -386,12 +387,13 @@ TEST_CASE(test_remap_basic) {
     cfgpack_value_t val1[4], val2[4];
     char sp1[1], sp2[1];
     uint16_t so1[1], so2[1];
+    cfgpack_parse_error_t perr1, perr2;
+    cfgpack_parse_opts_t opts1 = {&s1, e1, 4, val1, sp1, 0, so1, 0, &perr1};
+    cfgpack_parse_opts_t opts2 = {&s2, e2, 4, val2, sp2, 0, so2, 0, &perr2};
     cfgpack_ctx_t c1, c2;
 
-    CHECK(msgpack_init(mp1, mp1_len, &s1, e1, 4, val1, sp1, 0, so1, 0, &c1) ==
-          CFGPACK_OK);
-    CHECK(msgpack_init(mp2, mp2_len, &s2, e2, 4, val2, sp2, 0, so2, 0, &c2) ==
-          CFGPACK_OK);
+    CHECK(msgpack_init(mp1, mp1_len, &opts1, &c1) == CFGPACK_OK);
+    CHECK(msgpack_init(mp2, mp2_len, &opts2, &c2) == CFGPACK_OK);
 
     CHECK(cfgpack_set_u8(&c1, 10, 42) == CFGPACK_OK);
     CHECK(cfgpack_set_u8(&c1, 11, 99) == CFGPACK_OK);
@@ -445,12 +447,13 @@ TEST_CASE(test_remap_widening) {
     cfgpack_value_t val1[2], val2[2];
     char sp1[1], sp2[1];
     uint16_t so1[1], so2[1];
+    cfgpack_parse_error_t perr1, perr2;
+    cfgpack_parse_opts_t opts1 = {&s1, e1, 2, val1, sp1, 0, so1, 0, &perr1};
+    cfgpack_parse_opts_t opts2 = {&s2, e2, 2, val2, sp2, 0, so2, 0, &perr2};
     cfgpack_ctx_t c1, c2;
 
-    CHECK(msgpack_init(mp1, mp1_len, &s1, e1, 2, val1, sp1, 0, so1, 0, &c1) ==
-          CFGPACK_OK);
-    CHECK(msgpack_init(mp2, mp2_len, &s2, e2, 2, val2, sp2, 0, so2, 0, &c2) ==
-          CFGPACK_OK);
+    CHECK(msgpack_init(mp1, mp1_len, &opts1, &c1) == CFGPACK_OK);
+    CHECK(msgpack_init(mp2, mp2_len, &opts2, &c2) == CFGPACK_OK);
 
     CHECK(cfgpack_set_u8(&c1, 1, 200) == CFGPACK_OK);
 
@@ -503,12 +506,13 @@ TEST_CASE(test_remap_defaults_restored) {
     cfgpack_value_t val1[2], val2[4];
     char sp1[1], sp2[1];
     uint16_t so1[1], so2[1];
+    cfgpack_parse_error_t perr1, perr2;
+    cfgpack_parse_opts_t opts1 = {&s1, e1, 2, val1, sp1, 0, so1, 0, &perr1};
+    cfgpack_parse_opts_t opts2 = {&s2, e2, 4, val2, sp2, 0, so2, 0, &perr2};
     cfgpack_ctx_t c1, c2;
 
-    CHECK(msgpack_init(mp1, mp1_len, &s1, e1, 2, val1, sp1, 0, so1, 0, &c1) ==
-          CFGPACK_OK);
-    CHECK(msgpack_init(mp2, mp2_len, &s2, e2, 4, val2, sp2, 0, so2, 0, &c2) ==
-          CFGPACK_OK);
+    CHECK(msgpack_init(mp1, mp1_len, &opts1, &c1) == CFGPACK_OK);
+    CHECK(msgpack_init(mp2, mp2_len, &opts2, &c2) == CFGPACK_OK);
 
     CHECK(cfgpack_set_u8(&c1, 1, 77) == CFGPACK_OK);
 
@@ -579,10 +583,9 @@ TEST_CASE(test_err_duplicate_index) {
     uint16_t str_offsets[1];
     cfgpack_parse_error_t perr;
 
-    cfgpack_err_t rc = cfgpack_schema_parse_msgpack(mp, buf.len, &schema,
-                                                    entries, 4, values,
-                                                    str_pool, 0, str_offsets, 0,
-                                                    &perr);
+    cfgpack_parse_opts_t opts = {&schema, entries,     4, values, str_pool,
+                                 0,       str_offsets, 0, &perr};
+    cfgpack_err_t rc = cfgpack_schema_parse_msgpack(mp, buf.len, &opts);
     CHECK(rc == CFGPACK_ERR_DUPLICATE);
     LOG("Correctly returned ERR_DUPLICATE: %s", perr.message);
 
@@ -624,10 +627,9 @@ TEST_CASE(test_err_reserved_index) {
     uint16_t str_offsets[1];
     cfgpack_parse_error_t perr;
 
-    cfgpack_err_t rc = cfgpack_schema_parse_msgpack(mp, buf.len, &schema,
-                                                    entries, 4, values,
-                                                    str_pool, 0, str_offsets, 0,
-                                                    &perr);
+    cfgpack_parse_opts_t opts = {&schema, entries,     4, values, str_pool,
+                                 0,       str_offsets, 0, &perr};
+    cfgpack_err_t rc = cfgpack_schema_parse_msgpack(mp, buf.len, &opts);
     CHECK(rc == CFGPACK_ERR_RESERVED_INDEX);
     LOG("Correctly returned ERR_RESERVED_INDEX: %s", perr.message);
 
@@ -669,10 +671,9 @@ TEST_CASE(test_err_name_too_long) {
     uint16_t str_offsets[1];
     cfgpack_parse_error_t perr;
 
-    cfgpack_err_t rc = cfgpack_schema_parse_msgpack(mp, buf.len, &schema,
-                                                    entries, 4, values,
-                                                    str_pool, 0, str_offsets, 0,
-                                                    &perr);
+    cfgpack_parse_opts_t opts = {&schema, entries,     4, values, str_pool,
+                                 0,       str_offsets, 0, &perr};
+    cfgpack_err_t rc = cfgpack_schema_parse_msgpack(mp, buf.len, &opts);
     CHECK(rc == CFGPACK_ERR_BOUNDS);
     LOG("Correctly returned ERR_BOUNDS: %s", perr.message);
 
@@ -714,10 +715,9 @@ TEST_CASE(test_err_bad_type) {
     uint16_t str_offsets[1];
     cfgpack_parse_error_t perr;
 
-    cfgpack_err_t rc = cfgpack_schema_parse_msgpack(mp, buf.len, &schema,
-                                                    entries, 4, values,
-                                                    str_pool, 0, str_offsets, 0,
-                                                    &perr);
+    cfgpack_parse_opts_t opts = {&schema, entries,     4, values, str_pool,
+                                 0,       str_offsets, 0, &perr};
+    cfgpack_err_t rc = cfgpack_schema_parse_msgpack(mp, buf.len, &opts);
     CHECK(rc == CFGPACK_ERR_INVALID_TYPE);
     LOG("Correctly returned ERR_INVALID_TYPE: %s", perr.message);
 
@@ -753,10 +753,9 @@ TEST_CASE(test_err_truncated) {
     uint16_t str_offsets[1];
     cfgpack_parse_error_t perr;
 
-    cfgpack_err_t rc = cfgpack_schema_parse_msgpack(mp, trunc_len, &schema,
-                                                    entries, 4, values,
-                                                    str_pool, 0, str_offsets, 0,
-                                                    &perr);
+    cfgpack_parse_opts_t opts = {&schema, entries,     4, values, str_pool,
+                                 0,       str_offsets, 0, &perr};
+    cfgpack_err_t rc = cfgpack_schema_parse_msgpack(mp, trunc_len, &opts);
     CHECK(rc != CFGPACK_OK);
     LOG("Truncated (%zu of %zu bytes) returned error: %s", trunc_len, mp_len,
         perr.message);
@@ -768,8 +767,7 @@ TEST_CASE(test_err_truncated) {
     LOG("measure_msgpack on truncated data also returned error");
 
     /* Empty input */
-    rc = cfgpack_schema_parse_msgpack(mp, 0, &schema, entries, 4, values,
-                                      str_pool, 0, str_offsets, 0, &perr);
+    rc = cfgpack_schema_parse_msgpack(mp, 0, &opts);
     CHECK(rc != CFGPACK_OK);
     LOG("Empty input returned error");
 
@@ -814,10 +812,9 @@ TEST_CASE(test_err_str_too_long) {
     uint16_t str_offsets[1];
     cfgpack_parse_error_t perr;
 
-    cfgpack_err_t rc = cfgpack_schema_parse_msgpack(mp, buf.len, &schema,
-                                                    entries, 4, values,
-                                                    str_pool, pool_size,
-                                                    str_offsets, 1, &perr);
+    cfgpack_parse_opts_t opts = {&schema,   entries,     4, values, str_pool,
+                                 pool_size, str_offsets, 1, &perr};
+    cfgpack_err_t rc = cfgpack_schema_parse_msgpack(mp, buf.len, &opts);
     CHECK(rc == CFGPACK_ERR_STR_TOO_LONG);
     LOG("Correctly returned ERR_STR_TOO_LONG: %s", perr.message);
 

@@ -19,67 +19,35 @@
  * @brief Parse a .map schema from a file.
  *
  * Reads the file into a scratch buffer and calls cfgpack_parse_schema().
- * Default values are written directly into @p values and @p str_pool.
+ * Default values are written directly into opts->values and opts->str_pool.
  *
- * @param path             File path to read.
- * @param out_schema       Filled on success; points at caller-owned entries array.
- * @param entries          Caller-owned array to store parsed entries.
- * @param max_entries      Capacity of @p entries.
- * @param values           Caller-owned value slots to receive defaults.
- * @param str_pool         Caller-owned string pool buffer.
- * @param str_pool_cap     Capacity of @p str_pool in bytes.
- * @param str_offsets      Caller-owned array for string offsets.
- * @param str_offsets_count Number of elements in @p str_offsets.
- * @param scratch          Scratch buffer to hold file contents.
- * @param scratch_cap      Capacity of scratch buffer.
- * @param err              Optional parse error info (line/message) on failure.
+ * @param path        File path to read.
+ * @param opts        Parse options containing output buffers and error pointer.
+ * @param scratch     Scratch buffer to hold file contents.
+ * @param scratch_cap Capacity of scratch buffer.
  * @return CFGPACK_OK on success; CFGPACK_ERR_IO on read error; CFGPACK_ERR_* on parse error.
  */
 cfgpack_err_t cfgpack_parse_schema_file(const char *path,
-                                        cfgpack_schema_t *out_schema,
-                                        cfgpack_entry_t *entries,
-                                        size_t max_entries,
-                                        cfgpack_value_t *values,
-                                        char *str_pool,
-                                        size_t str_pool_cap,
-                                        uint16_t *str_offsets,
-                                        size_t str_offsets_count,
+                                        const cfgpack_parse_opts_t *opts,
                                         char *scratch,
-                                        size_t scratch_cap,
-                                        cfgpack_parse_error_t *err);
+                                        size_t scratch_cap);
 
 /**
  * @brief Parse a JSON schema from a file.
  *
  * Reads the file into a scratch buffer and calls cfgpack_schema_parse_json().
- * Default values are written directly into @p values and @p str_pool.
+ * Default values are written directly into opts->values and opts->str_pool.
  *
- * @param path             File path to read.
- * @param out_schema       Filled on success; points at caller-owned entries array.
- * @param entries          Caller-owned array to store parsed entries.
- * @param max_entries      Capacity of @p entries.
- * @param values           Caller-owned value slots to receive defaults.
- * @param str_pool         Caller-owned string pool buffer.
- * @param str_pool_cap     Capacity of @p str_pool in bytes.
- * @param str_offsets      Caller-owned array for string offsets.
- * @param str_offsets_count Number of elements in @p str_offsets.
- * @param scratch          Scratch buffer to hold file contents.
- * @param scratch_cap      Capacity of scratch buffer.
- * @param err              Optional parse error info (line/message) on failure.
+ * @param path        File path to read.
+ * @param opts        Parse options containing output buffers and error pointer.
+ * @param scratch     Scratch buffer to hold file contents.
+ * @param scratch_cap Capacity of scratch buffer.
  * @return CFGPACK_OK on success; CFGPACK_ERR_IO on read error; CFGPACK_ERR_* on parse error.
  */
 cfgpack_err_t cfgpack_schema_parse_json_file(const char *path,
-                                             cfgpack_schema_t *out_schema,
-                                             cfgpack_entry_t *entries,
-                                             size_t max_entries,
-                                             cfgpack_value_t *values,
-                                             char *str_pool,
-                                             size_t str_pool_cap,
-                                             uint16_t *str_offsets,
-                                             size_t str_offsets_count,
+                                             const cfgpack_parse_opts_t *opts,
                                              char *scratch,
-                                             size_t scratch_cap,
-                                             cfgpack_parse_error_t *err);
+                                             size_t scratch_cap);
 
 /**
  * @brief Measure buffer requirements for a .map schema file.

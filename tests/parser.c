@@ -20,10 +20,11 @@ TEST_CASE(test_parse_ok) {
     cfgpack_err_t rc;
 
     LOG("Parsing tests/data/sample.map");
-    rc = cfgpack_parse_schema_file("tests/data/sample.map", &schema, entries,
-                                   128, values, str_pool, sizeof(str_pool),
-                                   str_offsets, 128, scratch, sizeof(scratch),
-                                   &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  128,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 128,      &err};
+    rc = cfgpack_parse_schema_file("tests/data/sample.map", &opts, scratch,
+                                   sizeof(scratch));
     CHECK(rc == CFGPACK_OK);
     LOG("Parse succeeded");
 
@@ -78,9 +79,10 @@ TEST_CASE(test_parse_bad_type) {
     LOG("  'nope' is not a valid type name");
 
     LOG("Parsing file (expecting CFGPACK_ERR_INVALID_TYPE)");
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 128, values,
-                                   str_pool, sizeof(str_pool), str_offsets, 128,
-                                   scratch, sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  128,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 128,      &err};
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_ERR_INVALID_TYPE);
     LOG("Correctly rejected: CFGPACK_ERR_INVALID_TYPE");
 
@@ -114,9 +116,10 @@ TEST_CASE(test_parse_duplicate_index) {
     LOG("  1 bar u8 0  # duplicate index (same index 1)");
 
     LOG("Parsing file (expecting CFGPACK_ERR_DUPLICATE)");
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 128, values,
-                                   str_pool, sizeof(str_pool), str_offsets, 128,
-                                   scratch, sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  128,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 128,      &err};
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_ERR_DUPLICATE);
     LOG("Correctly rejected: CFGPACK_ERR_DUPLICATE");
 

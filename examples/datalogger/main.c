@@ -212,9 +212,19 @@ int main(int argc, char **argv) {
     fclose(f);
     map_buf[map_len] = '\0';
 
-    rc = cfgpack_parse_schema(map_buf, map_len, &schema, entries, MAX_ENTRIES,
-                              values, str_pool, sizeof(str_pool), str_offsets,
-                              MAX_ENTRIES, &parse_err);
+    cfgpack_parse_opts_t opts = {
+        .out_schema = &schema,
+        .entries = entries,
+        .max_entries = MAX_ENTRIES,
+        .values = values,
+        .str_pool = str_pool,
+        .str_pool_cap = sizeof(str_pool),
+        .str_offsets = str_offsets,
+        .str_offsets_count = MAX_ENTRIES,
+        .err = &parse_err,
+    };
+
+    rc = cfgpack_parse_schema(map_buf, map_len, &opts);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Schema parse error at line %zu: %s\n", parse_err.line,
                 parse_err.message);
@@ -303,9 +313,7 @@ int main(int argc, char **argv) {
     /* 7. Re-initialize context (simulates device reboot) */
 
     /* Re-parse schema to restore defaults into values/str_pool */
-    rc = cfgpack_parse_schema(map_buf, map_len, &schema, entries, MAX_ENTRIES,
-                              values, str_pool, sizeof(str_pool), str_offsets,
-                              MAX_ENTRIES, &parse_err);
+    rc = cfgpack_parse_schema(map_buf, map_len, &opts);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Schema re-parse error: %s\n", parse_err.message);
         return 1;

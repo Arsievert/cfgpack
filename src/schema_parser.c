@@ -10,6 +10,7 @@
 #include <errno.h>
 
 #include "tokens.h"
+#include "wbuf.h"
 
 #define MAX_LINE_LEN 256
 
@@ -40,118 +41,6 @@ typedef struct {
         } fstr;
     } v;
 } cfgpack_fat_value_t;
-
-/* ─────────────────────────────────────────────────────────────────────────────
- * Write Buffer Helper - writes to caller-provided buffer, tracks total needed
- * ───────────────────────────────────────────────────────────────────────────── */
-
-typedef struct {
-    char *buf;
-    size_t cap;
-    size_t len; /* Always tracks total needed, even if > cap */
-} wbuf_t;
-
-static void wbuf_init(wbuf_t *w, char *buf, size_t cap) {
-    w->buf = buf;
-    w->cap = cap;
-    w->len = 0;
-}
-
-static void wbuf_append(wbuf_t *w, const char *s, size_t n) {
-    if (w->len + n <= w->cap) {
-        memcpy(w->buf + w->len, s, n);
-    } else if (w->len < w->cap) {
-        /* Partial write */
-        size_t avail = w->cap - w->len;
-        memcpy(w->buf + w->len, s, avail);
-    }
-    w->len += n; /* Always increment to track needed size */
-}
-
-static void wbuf_puts(wbuf_t *w, const char *s) {
-    wbuf_append(w, s, strlen(s));
-}
-
-static void wbuf_putc(wbuf_t *w, char c) {
-    wbuf_append(w, &c, 1);
-}
-
-/* Simple integer to string (no snprintf needed for small ints) */
-static void wbuf_put_uint(wbuf_t *w, unsigned long long val) {
-    char tmp[24];
-    int i = 0;
-    if (val == 0) {
-        wbuf_putc(w, '0');
-        return;
-    }
-    while (val > 0) {
-        tmp[i++] = '0' + (val % 10);
-        val /= 10;
-    }
-    while (i > 0) {
-        wbuf_putc(w, tmp[--i]);
-    }
-}
-
-static void wbuf_put_int(wbuf_t *w, long long val) {
-    if (val < 0) {
-        wbuf_putc(w, '-');
-        val = -val;
-    }
-    wbuf_put_uint(w, (unsigned long long)val);
-}
-
-/* Format a double - minimal implementation for embedded, snprintf for hosted */
-static void wbuf_put_double(wbuf_t *w, double val) {
-#ifdef CFGPACK_HOSTED
-    char tmp[32];
-    int len = snprintf(tmp, sizeof(tmp), "%.17g", val);
-    if (len > 0 && (size_t)len < sizeof(tmp)) {
-        wbuf_append(w, tmp, (size_t)len);
-    }
-#else
-    /* Minimal formatter: sign, integer part, decimal point, up to 9 fractional digits */
-    if (val < 0) {
-        wbuf_putc(w, '-');
-        val = -val;
-    }
-    uint64_t ipart = (uint64_t)val;
-    wbuf_put_uint(w, ipart);
-
-    double frac = val - (double)ipart;
-    if (frac > 1e-10) { /* Skip if essentially zero */
-        wbuf_putc(w, '.');
-        /* Multiply by 10^9 and round to get all digits at once - avoids accumulated error */
-        uint64_t frac_int = (uint64_t)(frac * 1000000000.0 + 0.5);
-        /* Extract up to 9 digits */
-        char digits[9];
-        int ndigits = 9;
-        for (int i = 8; i >= 0; i--) {
-            digits[i] = '0' + (frac_int % 10);
-            frac_int /= 10;
-        }
-        /* Trim trailing zeros */
-        while (ndigits > 0 && digits[ndigits - 1] == '0') {
-            ndigits--;
-        }
-        for (int i = 0; i < ndigits; i++) {
-            wbuf_putc(w, digits[i]);
-        }
-    }
-#endif
-}
-
-static void wbuf_put_float(wbuf_t *w, float val) {
-#ifdef CFGPACK_HOSTED
-    char tmp[32];
-    int len = snprintf(tmp, sizeof(tmp), "%.9g", (double)val);
-    if (len > 0 && (size_t)len < sizeof(tmp)) {
-        wbuf_append(w, tmp, (size_t)len);
-    }
-#else
-    wbuf_put_double(w, (double)val);
-#endif
-}
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * Line Iterator - reads lines from buffer without modifying it
@@ -702,35 +591,94 @@ static void fat_str_to_pool(const cfgpack_fat_value_t *fat,
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
- * .map Schema Parser (buffer-based, two-phase for string defaults)
+ * Schema Finalize — shared post-parse setup used by all three parsers
  * ───────────────────────────────────────────────────────────────────────────── */
 
-cfgpack_err_t cfgpack_parse_schema(const char *data,
-                                   size_t data_len,
-                                   cfgpack_schema_t *out_schema,
-                                   cfgpack_entry_t *entries,
-                                   size_t max_entries,
-                                   cfgpack_value_t *values,
-                                   char *str_pool,
-                                   size_t str_pool_cap,
-                                   uint16_t *str_offsets,
-                                   size_t str_offsets_count,
-                                   cfgpack_parse_error_t *err) {
+/**
+ * @brief Finalize a parsed schema: sort entries, assign schema fields, set up
+ *        string pool offsets, and zero the string pool.
+ *
+ * Called by all three format-specific parsers between Phase 1 (entry parsing)
+ * and Phase 2 (string default extraction).
+ *
+ * @param opts      Parse options (provides schema, entries, values, pool, etc.)
+ * @param count     Number of entries parsed in Phase 1.
+ * @return CFGPACK_OK on success, or CFGPACK_ERR_BOUNDS if the string pool is
+ *         too small for the parsed entries.
+ */
+static cfgpack_err_t schema_finalize(const cfgpack_parse_opts_t *opts,
+                                     size_t count) {
+    sort_entries(opts->entries, opts->values, count);
+    opts->out_schema->entries = opts->entries;
+    opts->out_schema->entry_count = count;
+
+    size_t pool_needed = compute_str_offsets(opts->entries, count,
+                                             opts->str_offsets,
+                                             opts->str_offsets_count);
+    if (pool_needed > opts->str_pool_cap) {
+        set_err(opts->err, 0, "string pool too small");
+        return CFGPACK_ERR_BOUNDS;
+    }
+    if (opts->str_pool_cap > 0) {
+        memset(opts->str_pool, 0, opts->str_pool_cap);
+    }
+
+    return CFGPACK_OK;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * .map Schema — shared implementation for measure and parse
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * @brief Internal implementation shared by cfgpack_schema_measure and
+ *        cfgpack_parse_schema (.map format).
+ *
+ * When opts is non-NULL (parse mode): full two-phase parse with output.
+ * When measure is non-NULL (measure mode): single-pass tally, no output.
+ * Exactly one of opts/measure must be non-NULL.
+ */
+static cfgpack_err_t parse_schema_map_impl(const char *data,
+                                           size_t data_len,
+                                           const cfgpack_parse_opts_t *opts,
+                                           cfgpack_schema_measure_t *measure,
+                                           cfgpack_parse_error_t *err) {
+    const int measuring = (measure != NULL);
+
+    /* Parse-mode locals (only used when !measuring) */
+    cfgpack_schema_t *out_schema = NULL;
+    cfgpack_entry_t *entries = NULL;
+    size_t max_entries = 0;
+    cfgpack_value_t *values = NULL;
+    char *str_pool = NULL;
+    uint16_t *str_offsets = NULL;
+
+    if (!measuring) {
+        out_schema = opts->out_schema;
+        entries = opts->entries;
+        max_entries = opts->max_entries;
+        values = opts->values;
+        str_pool = opts->str_pool;
+        str_offsets = opts->str_offsets;
+        memset(values, 0, max_entries * sizeof(cfgpack_value_t));
+    }
+
+    /* Measure-mode locals */
+    size_t str_count = 0;
+    size_t fstr_count = 0;
+
     line_iter_t iter;
     char line_buf[MAX_LINE_LEN];
     size_t line_no = 0;
     int header_read = 0;
     size_t count = 0;
 
-    /* Zero values array up front */
-    memset(values, 0, max_entries * sizeof(cfgpack_value_t));
-
     line_iter_init(&iter, data, data_len);
 
     const char *line;
     size_t line_len;
 
-    /* ── Phase 1: Parse entries and scalar defaults ────────────────────── */
+    /* ── Phase 1: Parse/measure entries ────────────────────────────────── */
     while ((line = line_iter_next(&iter, &line_len)) != NULL) {
         char *slots[4];
         tokens_t tok;
@@ -738,12 +686,10 @@ cfgpack_err_t cfgpack_parse_schema(const char *data,
 
         line_no++;
 
-        /* Skip blank lines and comments */
         if (is_blank_or_comment_n(line, line_len)) {
             continue;
         }
 
-        /* Copy line to mutable buffer (tokens_find modifies it) */
         if (line_len >= sizeof(line_buf)) {
             set_err(err, line_no, "line too long");
             return CFGPACK_ERR_PARSE;
@@ -762,10 +708,18 @@ cfgpack_err_t cfgpack_parse_schema(const char *data,
                 tokens_destroy(&tok);
                 return CFGPACK_ERR_PARSE;
             }
-            if (strlen(tok.index[0]) >= sizeof(out_schema->map_name)) {
-                set_err(err, line_no, "map name too long");
-                tokens_destroy(&tok);
-                return CFGPACK_ERR_BOUNDS;
+            if (measuring) {
+                if (strlen(tok.index[0]) >= 64) {
+                    set_err(err, line_no, "map name too long");
+                    tokens_destroy(&tok);
+                    return CFGPACK_ERR_BOUNDS;
+                }
+            } else {
+                if (strlen(tok.index[0]) >= sizeof(out_schema->map_name)) {
+                    set_err(err, line_no, "map name too long");
+                    tokens_destroy(&tok);
+                    return CFGPACK_ERR_BOUNDS;
+                }
             }
             char *endp = NULL;
             unsigned long ver = strtoul(tok.index[1], &endp, 10);
@@ -779,9 +733,11 @@ cfgpack_err_t cfgpack_parse_schema(const char *data,
                 tokens_destroy(&tok);
                 return CFGPACK_ERR_BOUNDS;
             }
-            size_t name_len = strlen(tok.index[0]);
-            memcpy(out_schema->map_name, tok.index[0], name_len + 1);
-            out_schema->version = (uint32_t)ver;
+            if (!measuring) {
+                size_t name_len = strlen(tok.index[0]);
+                memcpy(out_schema->map_name, tok.index[0], name_len + 1);
+                out_schema->version = (uint32_t)ver;
+            }
             tokens_destroy(&tok);
             header_read = 1;
             continue;
@@ -796,7 +752,7 @@ cfgpack_err_t cfgpack_parse_schema(const char *data,
             return CFGPACK_ERR_PARSE;
         }
 
-        if (count >= max_entries) {
+        if (!measuring && count >= max_entries) {
             set_err(err, line_no, "too many entries");
             tokens_destroy(&tok);
             return CFGPACK_ERR_BOUNDS;
@@ -825,7 +781,8 @@ cfgpack_err_t cfgpack_parse_schema(const char *data,
             tokens_destroy(&tok);
             return CFGPACK_ERR_BOUNDS;
         }
-        if (has_duplicate(entries, count, (uint16_t)idx_ul, tok.index[1])) {
+        if (!measuring &&
+            has_duplicate(entries, count, (uint16_t)idx_ul, tok.index[1])) {
             set_err(err, line_no, "duplicate");
             tokens_destroy(&tok);
             return CFGPACK_ERR_DUPLICATE;
@@ -853,17 +810,26 @@ cfgpack_err_t cfgpack_parse_schema(const char *data,
             return drc;
         }
 
-        entries[count].index = (uint16_t)idx_ul;
-        size_t name_len = strlen(tok.index[1]);
-        memcpy(entries[count].name, tok.index[1], name_len + 1);
-        entries[count].type = type;
-        entries[count].has_default = has_def;
-
-        /* Store scalar defaults directly into compact values */
-        if (has_def && type != CFGPACK_TYPE_STR && type != CFGPACK_TYPE_FSTR) {
-            fat_to_compact_scalar(&fat_default, &values[count]);
+        if (measuring) {
+            if (type == CFGPACK_TYPE_STR) {
+                str_count++;
+            } else if (type == CFGPACK_TYPE_FSTR) {
+                fstr_count++;
+            }
         } else {
-            values[count].type = type;
+            entries[count].index = (uint16_t)idx_ul;
+            size_t name_len = strlen(tok.index[1]);
+            memcpy(entries[count].name, tok.index[1], name_len + 1);
+            entries[count].type = type;
+            entries[count].has_default = has_def;
+
+            /* Store scalar defaults directly into compact values */
+            if (has_def && type != CFGPACK_TYPE_STR &&
+                type != CFGPACK_TYPE_FSTR) {
+                fat_to_compact_scalar(&fat_default, &values[count]);
+            } else {
+                values[count].type = type;
+            }
         }
 
         count++;
@@ -875,20 +841,22 @@ cfgpack_err_t cfgpack_parse_schema(const char *data,
         return CFGPACK_ERR_PARSE;
     }
 
-    /* Sort entries and values by index */
-    sort_entries(entries, values, count);
-    out_schema->entries = entries;
-    out_schema->entry_count = count;
-
-    /* Compute string pool offsets in sorted order */
-    size_t pool_needed = compute_str_offsets(entries, count, str_offsets,
-                                             str_offsets_count);
-    if (pool_needed > str_pool_cap) {
-        set_err(err, 0, "string pool too small");
-        return CFGPACK_ERR_BOUNDS;
+    /* ── Measure mode: fill output and return ──────────────────────────── */
+    if (measuring) {
+        measure->entry_count = count;
+        measure->str_count = str_count;
+        measure->fstr_count = fstr_count;
+        measure->str_pool_size = str_count * (CFGPACK_STR_MAX + 1) +
+                                 fstr_count * (CFGPACK_FSTR_MAX + 1);
+        return CFGPACK_OK;
     }
-    if (str_pool_cap > 0) {
-        memset(str_pool, 0, str_pool_cap);
+
+    /* ── Parse mode: finalize and extract string defaults ──────────────── */
+
+    /* Sort entries, assign schema, set up string pool */
+    cfgpack_err_t frc = schema_finalize(opts, count);
+    if (frc != CFGPACK_OK) {
+        return frc;
     }
 
     /* ── Phase 2: Re-parse input to extract string defaults ───────────── */
@@ -965,6 +933,16 @@ cfgpack_err_t cfgpack_parse_schema(const char *data,
     }
 
     return CFGPACK_OK;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * .map Schema Parser — public wrapper
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+cfgpack_err_t cfgpack_parse_schema(const char *data,
+                                   size_t data_len,
+                                   const cfgpack_parse_opts_t *opts) {
+    return parse_schema_map_impl(data, data_len, opts, NULL, opts->err);
 }
 
 void cfgpack_schema_free(cfgpack_schema_t *schema) {
@@ -1328,386 +1306,60 @@ cfgpack_err_t cfgpack_schema_get_sizing(const cfgpack_schema_t *schema,
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
- * Schema Measure (.map format) — count entries and types, no output buffers
+ * Schema Measure (.map format) — public wrapper
  * ───────────────────────────────────────────────────────────────────────────── */
 
 cfgpack_err_t cfgpack_schema_measure(const char *data,
                                      size_t data_len,
                                      cfgpack_schema_measure_t *out,
                                      cfgpack_parse_error_t *err) {
-    line_iter_t iter;
-    char line_buf[MAX_LINE_LEN];
-    size_t line_no = 0;
-    int header_read = 0;
-    size_t count = 0;
-    size_t str_count = 0;
-    size_t fstr_count = 0;
-
-    line_iter_init(&iter, data, data_len);
-
-    const char *line;
-    size_t line_len;
-
-    while ((line = line_iter_next(&iter, &line_len)) != NULL) {
-        char *slots[4];
-        tokens_t tok;
-        size_t stop_offset = 0;
-
-        line_no++;
-
-        if (is_blank_or_comment_n(line, line_len)) {
-            continue;
-        }
-
-        if (line_len >= sizeof(line_buf)) {
-            set_err(err, line_no, "line too long");
-            return CFGPACK_ERR_PARSE;
-        }
-        memcpy(line_buf, line, line_len);
-        line_buf[line_len] = '\0';
-
-        if (tokens_create(&tok, 4, slots) != 0) {
-            return CFGPACK_ERR_PARSE;
-        }
-
-        if (!header_read) {
-            tokens_find(&tok, line_buf, " \t\r\n", 2, NULL);
-            if (tok.used != 2) {
-                set_err(err, line_no, "invalid header");
-                tokens_destroy(&tok);
-                return CFGPACK_ERR_PARSE;
-            }
-            if (strlen(tok.index[0]) >= 64) {
-                set_err(err, line_no, "map name too long");
-                tokens_destroy(&tok);
-                return CFGPACK_ERR_BOUNDS;
-            }
-            char *endp = NULL;
-            unsigned long ver = strtoul(tok.index[1], &endp, 10);
-            if (tok.index[1][0] == '\0' || (endp && *endp != '\0')) {
-                set_err(err, line_no, "invalid header");
-                tokens_destroy(&tok);
-                return CFGPACK_ERR_PARSE;
-            }
-            if (ver > 0xfffffffful) {
-                set_err(err, line_no, "version out of range");
-                tokens_destroy(&tok);
-                return CFGPACK_ERR_BOUNDS;
-            }
-            tokens_destroy(&tok);
-            header_read = 1;
-            continue;
-        }
-
-        /* Parse first 3 tokens: index, name, type */
-        tokens_find(&tok, line_buf, " \t\r\n", 3, &stop_offset);
-
-        if (tok.used < 3) {
-            set_err(err, line_no, "invalid entry");
-            tokens_destroy(&tok);
-            return CFGPACK_ERR_PARSE;
-        }
-
-        unsigned long idx_ul = strtoul(tok.index[0], NULL, 10);
-        if (idx_ul > 65535ul) {
-            set_err(err, line_no, "index out of range");
-            tokens_destroy(&tok);
-            return CFGPACK_ERR_BOUNDS;
-        }
-        if (idx_ul == 0) {
-            set_err(err, line_no, "index 0 is reserved for schema name");
-            tokens_destroy(&tok);
-            return CFGPACK_ERR_RESERVED_INDEX;
-        }
-
-        cfgpack_type_t type;
-        cfgpack_err_t trc = parse_type(tok.index[2], &type);
-        if (trc != CFGPACK_OK) {
-            set_err(err, line_no, "invalid type");
-            tokens_destroy(&tok);
-            return trc;
-        }
-        if (name_too_long(tok.index[1])) {
-            set_err(err, line_no, "name too long");
-            tokens_destroy(&tok);
-            return CFGPACK_ERR_BOUNDS;
-        }
-
-        /* Validate that a default token exists */
-        char default_tok[MAX_LINE_LEN];
-        const char *remainder = line_buf + stop_offset;
-        const char *def_str = extract_default_token(remainder, default_tok,
-                                                    sizeof(default_tok));
-        if (!def_str || def_str[0] == '\0') {
-            set_err(err, line_no, "missing default value");
-            tokens_destroy(&tok);
-            return CFGPACK_ERR_PARSE;
-        }
-
-        /* Validate the default value parses correctly */
-        cfgpack_fat_value_t fat_default;
-        uint8_t has_def = 0;
-        cfgpack_err_t drc = parse_default(def_str, type, &fat_default,
-                                          &has_def);
-        if (drc != CFGPACK_OK) {
-            set_err(err, line_no, "invalid default value");
-            tokens_destroy(&tok);
-            return drc;
-        }
-
-        /* Tally types */
-        if (type == CFGPACK_TYPE_STR) {
-            str_count++;
-        } else if (type == CFGPACK_TYPE_FSTR) {
-            fstr_count++;
-        }
-
-        count++;
-        tokens_destroy(&tok);
-    }
-
-    if (!header_read) {
-        set_err(err, 0, "missing header");
-        return CFGPACK_ERR_PARSE;
-    }
-
-    out->entry_count = count;
-    out->str_count = str_count;
-    out->fstr_count = fstr_count;
-    out->str_pool_size = str_count * (CFGPACK_STR_MAX + 1) +
-                         fstr_count * (CFGPACK_FSTR_MAX + 1);
-
-    return CFGPACK_OK;
+    return parse_schema_map_impl(data, data_len, NULL, out, err);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
- * Schema Measure (JSON) — count entries and types, no output buffers
+ * JSON Schema — shared implementation for measure and parse
  * ───────────────────────────────────────────────────────────────────────────── */
 
-cfgpack_err_t cfgpack_schema_measure_json(const char *data,
-                                          size_t data_len,
-                                          cfgpack_schema_measure_t *out,
-                                          cfgpack_parse_error_t *err) {
-    json_parser_t parser = {data, data_len, 0, 1};
-    json_parser_t *p = &parser;
-    size_t count = 0;
+/**
+ * @brief Internal implementation shared by cfgpack_schema_measure_json and
+ *        cfgpack_schema_parse_json.
+ *
+ * When opts is non-NULL (parse mode): full two-phase parse with output.
+ * When measure is non-NULL (measure mode): single-pass tally, no output.
+ * Exactly one of opts/measure must be non-NULL.
+ */
+static cfgpack_err_t parse_schema_json_impl(const char *data,
+                                            size_t data_len,
+                                            const cfgpack_parse_opts_t *opts,
+                                            cfgpack_schema_measure_t *measure,
+                                            cfgpack_parse_error_t *err) {
+    const int measuring = (measure != NULL);
+
+    /* Parse-mode locals (only used when !measuring) */
+    cfgpack_schema_t *out_schema = NULL;
+    cfgpack_entry_t *entries = NULL;
+    size_t max_entries = 0;
+    cfgpack_value_t *values = NULL;
+    char *str_pool = NULL;
+    uint16_t *str_offsets = NULL;
+
+    if (!measuring) {
+        out_schema = opts->out_schema;
+        entries = opts->entries;
+        max_entries = opts->max_entries;
+        values = opts->values;
+        str_pool = opts->str_pool;
+        str_offsets = opts->str_offsets;
+        memset(values, 0, max_entries * sizeof(cfgpack_value_t));
+    }
+
+    /* Measure-mode locals */
     size_t str_count = 0;
     size_t fstr_count = 0;
 
-    if (!json_expect(p, '{')) {
-        set_err(err, p->line, "expected '{'");
-        return CFGPACK_ERR_PARSE;
-    }
-
-    int got_name = 0, got_version = 0, got_entries = 0;
-
-    while (json_peek(p) != '}' && json_peek(p) != '\0') {
-        char key[32];
-        size_t key_len;
-        if (!json_parse_string(p, key, sizeof(key), &key_len)) {
-            set_err(err, p->line, "expected key");
-            return CFGPACK_ERR_PARSE;
-        }
-        if (!json_expect(p, ':')) {
-            set_err(err, p->line, "expected ':'");
-            return CFGPACK_ERR_PARSE;
-        }
-
-        if (strcmp(key, "name") == 0) {
-            char name_buf[64];
-            if (!json_parse_string(p, name_buf, sizeof(name_buf), NULL)) {
-                set_err(err, p->line, "invalid name");
-                return CFGPACK_ERR_PARSE;
-            }
-            got_name = 1;
-        } else if (strcmp(key, "version") == 0) {
-            int64_t ver;
-            double ver_f;
-            int is_float;
-            if (!json_parse_number(p, &ver, &ver_f, &is_float) || is_float ||
-                ver < 0) {
-                set_err(err, p->line, "invalid version");
-                return CFGPACK_ERR_PARSE;
-            }
-            got_version = 1;
-        } else if (strcmp(key, "entries") == 0) {
-            if (!json_expect(p, '[')) {
-                set_err(err, p->line, "expected '['");
-                return CFGPACK_ERR_PARSE;
-            }
-
-            while (json_peek(p) != ']' && json_peek(p) != '\0') {
-                if (!json_expect(p, '{')) {
-                    set_err(err, p->line, "expected '{'");
-                    return CFGPACK_ERR_PARSE;
-                }
-
-                int got_index = 0, got_ename = 0, got_type = 0, got_default = 0;
-                cfgpack_type_t entry_type = CFGPACK_TYPE_U8;
-
-                while (json_peek(p) != '}' && json_peek(p) != '\0') {
-                    char ekey[32];
-                    size_t ekey_len;
-                    if (!json_parse_string(p, ekey, sizeof(ekey), &ekey_len)) {
-                        set_err(err, p->line, "expected entry key");
-                        return CFGPACK_ERR_PARSE;
-                    }
-                    if (!json_expect(p, ':')) {
-                        set_err(err, p->line, "expected ':'");
-                        return CFGPACK_ERR_PARSE;
-                    }
-
-                    if (strcmp(ekey, "index") == 0) {
-                        int64_t idx;
-                        double idx_f;
-                        int is_float;
-                        if (!json_parse_number(p, &idx, &idx_f, &is_float) ||
-                            is_float || idx < 0 || idx > 65535) {
-                            set_err(err, p->line, "invalid index");
-                            return CFGPACK_ERR_BOUNDS;
-                        }
-                        if (idx == 0) {
-                            set_err(err, p->line,
-                                    "index 0 is reserved for schema name");
-                            return CFGPACK_ERR_RESERVED_INDEX;
-                        }
-                        got_index = 1;
-                    } else if (strcmp(ekey, "name") == 0) {
-                        char name_buf[32];
-                        if (!json_parse_string(p, name_buf, sizeof(name_buf),
-                                               NULL)) {
-                            set_err(err, p->line, "invalid entry name");
-                            return CFGPACK_ERR_PARSE;
-                        }
-                        if (name_too_long(name_buf)) {
-                            set_err(err, p->line, "name too long");
-                            return CFGPACK_ERR_BOUNDS;
-                        }
-                        got_ename = 1;
-                    } else if (strcmp(ekey, "type") == 0) {
-                        char type_buf[16];
-                        if (!json_parse_string(p, type_buf, sizeof(type_buf),
-                                               NULL)) {
-                            set_err(err, p->line, "invalid type");
-                            return CFGPACK_ERR_PARSE;
-                        }
-                        cfgpack_err_t trc = parse_type(type_buf, &entry_type);
-                        if (trc != CFGPACK_OK) {
-                            set_err(err, p->line, "invalid type");
-                            return trc;
-                        }
-                        got_type = 1;
-                    } else if (strcmp(ekey, "value") == 0) {
-                        char c = json_peek(p);
-                        if (json_match_literal(p, "null")) {
-                            /* null default — fine */
-                        } else if (c == '"') {
-                            char str_buf[CFGPACK_STR_MAX + 1];
-                            size_t str_len = 0;
-                            if (!json_parse_string(p, str_buf, sizeof(str_buf),
-                                                   &str_len)) {
-                                set_err(err, p->line, "invalid string default");
-                                return CFGPACK_ERR_PARSE;
-                            }
-                            /* Validate string length against type if known */
-                            if (got_type && entry_type == CFGPACK_TYPE_FSTR &&
-                                str_len > CFGPACK_FSTR_MAX) {
-                                set_err(err, p->line, "fstr too long");
-                                return CFGPACK_ERR_STR_TOO_LONG;
-                            }
-                        } else {
-                            int64_t ival;
-                            double fval;
-                            int is_float;
-                            if (!json_parse_number(p, &ival, &fval,
-                                                   &is_float)) {
-                                set_err(err, p->line, "invalid default value");
-                                return CFGPACK_ERR_PARSE;
-                            }
-                        }
-                        got_default = 1;
-                    } else {
-                        set_err(err, p->line, "unknown entry key");
-                        return CFGPACK_ERR_PARSE;
-                    }
-
-                    json_expect(p, ',');
-                }
-
-                if (!json_expect(p, '}')) {
-                    set_err(err, p->line, "expected '}'");
-                    return CFGPACK_ERR_PARSE;
-                }
-
-                if (!got_index || !got_ename || !got_type || !got_default) {
-                    set_err(err, p->line, "missing entry field");
-                    return CFGPACK_ERR_PARSE;
-                }
-
-                /* Tally types */
-                if (entry_type == CFGPACK_TYPE_STR) {
-                    str_count++;
-                } else if (entry_type == CFGPACK_TYPE_FSTR) {
-                    fstr_count++;
-                }
-
-                count++;
-                json_expect(p, ',');
-            }
-
-            if (!json_expect(p, ']')) {
-                set_err(err, p->line, "expected ']'");
-                return CFGPACK_ERR_PARSE;
-            }
-            got_entries = 1;
-        } else {
-            set_err(err, p->line, "unknown key");
-            return CFGPACK_ERR_PARSE;
-        }
-
-        json_expect(p, ',');
-    }
-
-    if (!json_expect(p, '}')) {
-        set_err(err, p->line, "expected '}'");
-        return CFGPACK_ERR_PARSE;
-    }
-
-    if (!got_name || !got_version || !got_entries) {
-        set_err(err, p->line, "missing required field");
-        return CFGPACK_ERR_PARSE;
-    }
-
-    out->entry_count = count;
-    out->str_count = str_count;
-    out->fstr_count = fstr_count;
-    out->str_pool_size = str_count * (CFGPACK_STR_MAX + 1) +
-                         fstr_count * (CFGPACK_FSTR_MAX + 1);
-
-    return CFGPACK_OK;
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
- * JSON Schema Parser (buffer-based, no malloc, two-phase string defaults)
- * ───────────────────────────────────────────────────────────────────────────── */
-
-cfgpack_err_t cfgpack_schema_parse_json(const char *data,
-                                        size_t data_len,
-                                        cfgpack_schema_t *out_schema,
-                                        cfgpack_entry_t *entries,
-                                        size_t max_entries,
-                                        cfgpack_value_t *values,
-                                        char *str_pool,
-                                        size_t str_pool_cap,
-                                        uint16_t *str_offsets,
-                                        size_t str_offsets_count,
-                                        cfgpack_parse_error_t *err) {
     json_parser_t parser = {data, data_len, 0, 1};
     json_parser_t *p = &parser;
     size_t count = 0;
-
-    /* Zero values array up front */
-    memset(values, 0, max_entries * sizeof(cfgpack_value_t));
 
     /* Expect top-level object */
     if (!json_expect(p, '{')) {
@@ -1731,10 +1383,18 @@ cfgpack_err_t cfgpack_schema_parse_json(const char *data,
         }
 
         if (strcmp(key, "name") == 0) {
-            if (!json_parse_string(p, out_schema->map_name,
-                                   sizeof(out_schema->map_name), NULL)) {
-                set_err(err, p->line, "invalid name");
-                return CFGPACK_ERR_PARSE;
+            if (measuring) {
+                char name_buf[64];
+                if (!json_parse_string(p, name_buf, sizeof(name_buf), NULL)) {
+                    set_err(err, p->line, "invalid name");
+                    return CFGPACK_ERR_PARSE;
+                }
+            } else {
+                if (!json_parse_string(p, out_schema->map_name,
+                                       sizeof(out_schema->map_name), NULL)) {
+                    set_err(err, p->line, "invalid name");
+                    return CFGPACK_ERR_PARSE;
+                }
             }
             got_name = 1;
         } else if (strcmp(key, "version") == 0) {
@@ -1746,7 +1406,9 @@ cfgpack_err_t cfgpack_schema_parse_json(const char *data,
                 set_err(err, p->line, "invalid version");
                 return CFGPACK_ERR_PARSE;
             }
-            out_schema->version = (uint32_t)ver;
+            if (!measuring) {
+                out_schema->version = (uint32_t)ver;
+            }
             got_version = 1;
         } else if (strcmp(key, "entries") == 0) {
             if (!json_expect(p, '[')) {
@@ -1755,7 +1417,7 @@ cfgpack_err_t cfgpack_schema_parse_json(const char *data,
             }
 
             while (json_peek(p) != ']' && json_peek(p) != '\0') {
-                if (count >= max_entries) {
+                if (!measuring && count >= max_entries) {
                     set_err(err, p->line, "too many entries");
                     return CFGPACK_ERR_BOUNDS;
                 }
@@ -1765,12 +1427,16 @@ cfgpack_err_t cfgpack_schema_parse_json(const char *data,
                     return CFGPACK_ERR_PARSE;
                 }
 
-                cfgpack_entry_t *e = &entries[count];
-                memset(e, 0, sizeof(*e));
+                cfgpack_entry_t *e = NULL;
+                if (!measuring) {
+                    e = &entries[count];
+                    memset(e, 0, sizeof(*e));
+                }
 
                 int got_index = 0, got_ename = 0, got_type = 0, got_default = 0;
+                cfgpack_type_t entry_type = CFGPACK_TYPE_U8;
 
-                /* Temporary storage for default value (parsed after we know the type) */
+                /* Temporary storage for default value */
                 int default_is_null = 0;
                 int default_is_string = 0;
                 int default_is_number = 0;
@@ -1801,7 +1467,14 @@ cfgpack_err_t cfgpack_schema_parse_json(const char *data,
                             set_err(err, p->line, "invalid index");
                             return CFGPACK_ERR_BOUNDS;
                         }
-                        e->index = (uint16_t)idx;
+                        if (idx == 0) {
+                            set_err(err, p->line,
+                                    "index 0 is reserved for schema name");
+                            return CFGPACK_ERR_RESERVED_INDEX;
+                        }
+                        if (!measuring) {
+                            e->index = (uint16_t)idx;
+                        }
                         got_index = 1;
                     } else if (strcmp(ekey, "name") == 0) {
                         char name_buf[32];
@@ -1814,8 +1487,10 @@ cfgpack_err_t cfgpack_schema_parse_json(const char *data,
                             set_err(err, p->line, "name too long");
                             return CFGPACK_ERR_BOUNDS;
                         }
-                        size_t name_len = strlen(name_buf);
-                        memcpy(e->name, name_buf, name_len + 1);
+                        if (!measuring) {
+                            size_t name_len = strlen(name_buf);
+                            memcpy(e->name, name_buf, name_len + 1);
+                        }
                         got_ename = 1;
                     } else if (strcmp(ekey, "type") == 0) {
                         char type_buf[16];
@@ -1824,10 +1499,20 @@ cfgpack_err_t cfgpack_schema_parse_json(const char *data,
                             set_err(err, p->line, "invalid type");
                             return CFGPACK_ERR_PARSE;
                         }
-                        cfgpack_err_t trc = parse_type(type_buf, &e->type);
-                        if (trc != CFGPACK_OK) {
-                            set_err(err, p->line, "invalid type");
-                            return trc;
+                        if (measuring) {
+                            cfgpack_err_t trc = parse_type(type_buf,
+                                                           &entry_type);
+                            if (trc != CFGPACK_OK) {
+                                set_err(err, p->line, "invalid type");
+                                return trc;
+                            }
+                        } else {
+                            cfgpack_err_t trc = parse_type(type_buf, &e->type);
+                            if (trc != CFGPACK_OK) {
+                                set_err(err, p->line, "invalid type");
+                                return trc;
+                            }
+                            entry_type = e->type;
                         }
                         got_type = 1;
                     } else if (strcmp(ekey, "value") == 0) {
@@ -1835,16 +1520,21 @@ cfgpack_err_t cfgpack_schema_parse_json(const char *data,
                         if (json_match_literal(p, "null")) {
                             default_is_null = 1;
                         } else if (c == '"') {
-                            /* String default - parse into temp buffer */
                             if (!json_parse_string(p, default_str,
                                                    sizeof(default_str),
                                                    &default_str_len)) {
                                 set_err(err, p->line, "invalid string default");
                                 return CFGPACK_ERR_PARSE;
                             }
+                            /* Validate string length against type if known */
+                            if (measuring && got_type &&
+                                entry_type == CFGPACK_TYPE_FSTR &&
+                                default_str_len > CFGPACK_FSTR_MAX) {
+                                set_err(err, p->line, "fstr too long");
+                                return CFGPACK_ERR_STR_TOO_LONG;
+                            }
                             default_is_string = 1;
                         } else {
-                            /* Numeric default */
                             if (!json_parse_number(p, &default_ival,
                                                    &default_fval,
                                                    &default_is_float)) {
@@ -1855,12 +1545,10 @@ cfgpack_err_t cfgpack_schema_parse_json(const char *data,
                         }
                         got_default = 1;
                     } else {
-                        /* Skip unknown key value */
                         set_err(err, p->line, "unknown entry key");
                         return CFGPACK_ERR_PARSE;
                     }
 
-                    /* Skip comma if present */
                     json_expect(p, ',');
                 }
 
@@ -1874,81 +1562,76 @@ cfgpack_err_t cfgpack_schema_parse_json(const char *data,
                     return CFGPACK_ERR_PARSE;
                 }
 
-                if (e->index == 0) {
-                    set_err(err, p->line,
-                            "index 0 is reserved for schema name");
-                    return CFGPACK_ERR_RESERVED_INDEX;
-                }
+                if (measuring) {
+                    /* Tally types */
+                    if (entry_type == CFGPACK_TYPE_STR) {
+                        str_count++;
+                    } else if (entry_type == CFGPACK_TYPE_FSTR) {
+                        fstr_count++;
+                    }
+                } else {
+                    if (e->index == 0) {
+                        set_err(err, p->line,
+                                "index 0 is reserved for schema name");
+                        return CFGPACK_ERR_RESERVED_INDEX;
+                    }
 
-                /* Assign default values into compact values */
-                if (default_is_null) {
-                    e->has_default = 0;
-                    values[count].type = e->type;
-                } else if (default_is_string) {
-                    e->has_default = 1;
-                    values[count].type = e->type;
-                    /* String data will be written to pool in phase 2 (after sort).
-                     * Store the string temporarily: we'll re-parse from the JSON
-                     * input. But since JSON entries come with all data inline,
-                     * we can build a fat value now and apply after sorting. */
-
-                    /* For JSON, we have the string data right here in default_str.
-                     * We'll mark has_default and store type. The actual pool write
-                     * happens below after sorting. We need to stash the string data.
-                     * Since we can't store it in the values array (it only has offsets),
-                     * we'll do a second pass below. But for JSON we have a simpler
-                     * approach: we process entries after sorting using the same
-                     * technique as .map: re-parse the JSON. */
-                    if (e->type == CFGPACK_TYPE_FSTR) {
-                        if (default_str_len > CFGPACK_FSTR_MAX) {
-                            set_err(err, p->line, "fstr too long");
-                            return CFGPACK_ERR_STR_TOO_LONG;
+                    /* Assign default values into compact values */
+                    if (default_is_null) {
+                        e->has_default = 0;
+                        values[count].type = e->type;
+                    } else if (default_is_string) {
+                        e->has_default = 1;
+                        values[count].type = e->type;
+                        if (e->type == CFGPACK_TYPE_FSTR) {
+                            if (default_str_len > CFGPACK_FSTR_MAX) {
+                                set_err(err, p->line, "fstr too long");
+                                return CFGPACK_ERR_STR_TOO_LONG;
+                            }
+                        } else {
+                            if (default_str_len > CFGPACK_STR_MAX) {
+                                set_err(err, p->line, "str too long");
+                                return CFGPACK_ERR_STR_TOO_LONG;
+                            }
                         }
-                    } else {
-                        if (default_str_len > CFGPACK_STR_MAX) {
-                            set_err(err, p->line, "str too long");
-                            return CFGPACK_ERR_STR_TOO_LONG;
+                    } else if (default_is_number) {
+                        e->has_default = 1;
+                        values[count].type = e->type;
+                        switch (e->type) {
+                        case CFGPACK_TYPE_U8:
+                        case CFGPACK_TYPE_U16:
+                        case CFGPACK_TYPE_U32:
+                        case CFGPACK_TYPE_U64:
+                            values[count].v.u64 = (uint64_t)default_ival;
+                            break;
+                        case CFGPACK_TYPE_I8:
+                        case CFGPACK_TYPE_I16:
+                        case CFGPACK_TYPE_I32:
+                        case CFGPACK_TYPE_I64:
+                            values[count].v.i64 = default_ival;
+                            break;
+                        case CFGPACK_TYPE_F32:
+                            values[count].v.f32 = default_is_float
+                                                      ? (float)default_fval
+                                                      : (float)default_ival;
+                            break;
+                        case CFGPACK_TYPE_F64:
+                            values[count].v.f64 = default_is_float
+                                                      ? default_fval
+                                                      : (double)default_ival;
+                            break;
+                        default: break;
                         }
                     }
-                } else if (default_is_number) {
-                    e->has_default = 1;
-                    values[count].type = e->type;
-                    switch (e->type) {
-                    case CFGPACK_TYPE_U8:
-                    case CFGPACK_TYPE_U16:
-                    case CFGPACK_TYPE_U32:
-                    case CFGPACK_TYPE_U64:
-                        values[count].v.u64 = (uint64_t)default_ival;
-                        break;
-                    case CFGPACK_TYPE_I8:
-                    case CFGPACK_TYPE_I16:
-                    case CFGPACK_TYPE_I32:
-                    case CFGPACK_TYPE_I64:
-                        values[count].v.i64 = default_ival;
-                        break;
-                    case CFGPACK_TYPE_F32:
-                        values[count].v.f32 = default_is_float
-                                                  ? (float)default_fval
-                                                  : (float)default_ival;
-                        break;
-                    case CFGPACK_TYPE_F64:
-                        values[count].v.f64 = default_is_float
-                                                  ? default_fval
-                                                  : (double)default_ival;
-                        break;
-                    default: break;
-                    }
-                }
 
-                /* Check for duplicates */
-                if (has_duplicate(entries, count, e->index, e->name)) {
-                    set_err(err, p->line, "duplicate");
-                    return CFGPACK_ERR_DUPLICATE;
+                    /* Check for duplicates */
+                    if (has_duplicate(entries, count, e->index, e->name)) {
+                        set_err(err, p->line, "duplicate");
+                        return CFGPACK_ERR_DUPLICATE;
+                    }
                 }
 
                 count++;
-
-                /* Skip comma if present */
                 json_expect(p, ',');
             }
 
@@ -1958,12 +1641,10 @@ cfgpack_err_t cfgpack_schema_parse_json(const char *data,
             }
             got_entries = 1;
         } else {
-            /* Skip unknown top-level key */
             set_err(err, p->line, "unknown key");
             return CFGPACK_ERR_PARSE;
         }
 
-        /* Skip comma if present */
         json_expect(p, ',');
     }
 
@@ -1977,20 +1658,22 @@ cfgpack_err_t cfgpack_schema_parse_json(const char *data,
         return CFGPACK_ERR_PARSE;
     }
 
-    /* Sort entries and values by index */
-    sort_entries(entries, values, count);
-    out_schema->entries = entries;
-    out_schema->entry_count = count;
-
-    /* Compute string pool offsets in sorted order */
-    size_t pool_needed = compute_str_offsets(entries, count, str_offsets,
-                                             str_offsets_count);
-    if (pool_needed > str_pool_cap) {
-        set_err(err, 0, "string pool too small");
-        return CFGPACK_ERR_BOUNDS;
+    /* ── Measure mode: fill output and return ──────────────────────────── */
+    if (measuring) {
+        measure->entry_count = count;
+        measure->str_count = str_count;
+        measure->fstr_count = fstr_count;
+        measure->str_pool_size = str_count * (CFGPACK_STR_MAX + 1) +
+                                 fstr_count * (CFGPACK_FSTR_MAX + 1);
+        return CFGPACK_OK;
     }
-    if (str_pool_cap > 0) {
-        memset(str_pool, 0, str_pool_cap);
+
+    /* ── Parse mode: finalize and extract string defaults ──────────────── */
+
+    /* Sort entries, assign schema, set up string pool */
+    cfgpack_err_t frc = schema_finalize(opts, count);
+    if (frc != CFGPACK_OK) {
+        return frc;
     }
 
     /* ── Phase 2: Re-parse JSON to extract string defaults ────────────── */
@@ -2118,6 +1801,27 @@ cfgpack_err_t cfgpack_schema_parse_json(const char *data,
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
+ * Schema Measure (JSON) — public wrapper
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+cfgpack_err_t cfgpack_schema_measure_json(const char *data,
+                                          size_t data_len,
+                                          cfgpack_schema_measure_t *out,
+                                          cfgpack_parse_error_t *err) {
+    return parse_schema_json_impl(data, data_len, NULL, out, err);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * JSON Schema Parser — public wrapper
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+cfgpack_err_t cfgpack_schema_parse_json(const char *data,
+                                        size_t data_len,
+                                        const cfgpack_parse_opts_t *opts) {
+    return parse_schema_json_impl(data, data_len, opts, NULL, opts->err);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
  * MessagePack Schema - Helpers
  * ───────────────────────────────────────────────────────────────────────────── */
 
@@ -2197,178 +1901,52 @@ static cfgpack_err_t mp_decode_array_header(cfgpack_reader_t *r,
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
- * MessagePack Schema Measure (single-pass scan)
+ * MessagePack Schema — shared implementation for measure and parse
  * ───────────────────────────────────────────────────────────────────────────── */
 
-cfgpack_err_t cfgpack_schema_measure_msgpack(const uint8_t *data,
-                                             size_t data_len,
-                                             cfgpack_schema_measure_t *out,
-                                             cfgpack_parse_error_t *err) {
-    cfgpack_reader_t reader;
-    cfgpack_reader_init(&reader, data, data_len);
-    cfgpack_reader_t *r = &reader;
-    cfgpack_err_t rc;
+/**
+ * @brief Internal implementation shared by cfgpack_schema_measure_msgpack and
+ *        cfgpack_schema_parse_msgpack.
+ *
+ * When opts is non-NULL (parse mode): full two-phase parse with output.
+ * When measure is non-NULL (measure mode): single-pass tally, no output.
+ * Exactly one of opts/measure must be non-NULL.
+ */
+static cfgpack_err_t parse_schema_msgpack_impl(
+    const uint8_t *data,
+    size_t data_len,
+    const cfgpack_parse_opts_t *opts,
+    cfgpack_schema_measure_t *measure,
+    cfgpack_parse_error_t *err) {
+    const int measuring = (measure != NULL);
 
-    /* Top-level map */
-    uint32_t top_count;
-    rc = cfgpack_msgpack_decode_map_header(r, &top_count);
-    if (rc != CFGPACK_OK) {
-        set_err(err, 0, "invalid msgpack: expected top-level map");
-        return CFGPACK_ERR_DECODE;
+    /* Parse-mode locals (only used when !measuring) */
+    cfgpack_schema_t *out_schema = NULL;
+    cfgpack_entry_t *entries = NULL;
+    size_t max_entries = 0;
+    cfgpack_value_t *values = NULL;
+    char *str_pool = NULL;
+    uint16_t *str_offsets = NULL;
+
+    if (!measuring) {
+        out_schema = opts->out_schema;
+        entries = opts->entries;
+        max_entries = opts->max_entries;
+        values = opts->values;
+        str_pool = opts->str_pool;
+        str_offsets = opts->str_offsets;
+        memset(values, 0, max_entries * sizeof(cfgpack_value_t));
     }
 
-    size_t entry_count = 0;
+    /* Measure-mode locals */
     size_t str_count = 0;
     size_t fstr_count = 0;
-    int got_entries = 0;
 
-    for (uint32_t ti = 0; ti < top_count; ++ti) {
-        uint64_t tkey;
-        rc = cfgpack_msgpack_decode_uint64(r, &tkey);
-        if (rc != CFGPACK_OK) {
-            set_err(err, 0, "invalid msgpack: expected uint key");
-            return CFGPACK_ERR_DECODE;
-        }
-
-        if (tkey == MP_SCHEMA_KEY_ENTRIES) {
-            uint32_t arr_count;
-            rc = mp_decode_array_header(r, &arr_count);
-            if (rc != CFGPACK_OK) {
-                set_err(err, 0, "expected array for entries");
-                return CFGPACK_ERR_DECODE;
-            }
-
-            for (uint32_t ei = 0; ei < arr_count; ++ei) {
-                uint32_t ecount;
-                rc = cfgpack_msgpack_decode_map_header(r, &ecount);
-                if (rc != CFGPACK_OK) {
-                    set_err(err, 0, "expected entry map");
-                    return CFGPACK_ERR_DECODE;
-                }
-
-                cfgpack_type_t entry_type = CFGPACK_TYPE_U8;
-                int got_type = 0;
-
-                for (uint32_t ek = 0; ek < ecount; ++ek) {
-                    uint64_t ekey;
-                    rc = cfgpack_msgpack_decode_uint64(r, &ekey);
-                    if (rc != CFGPACK_OK) {
-                        set_err(err, 0, "expected entry key");
-                        return CFGPACK_ERR_DECODE;
-                    }
-
-                    if (ekey == MP_ENTRY_KEY_INDEX) {
-                        uint64_t idx;
-                        rc = cfgpack_msgpack_decode_uint64(r, &idx);
-                        if (rc != CFGPACK_OK) {
-                            set_err(err, 0, "invalid index");
-                            return CFGPACK_ERR_DECODE;
-                        }
-                        if (idx == 0) {
-                            set_err(err, 0,
-                                    "index 0 is reserved for schema name");
-                            return CFGPACK_ERR_RESERVED_INDEX;
-                        }
-                        if (idx > 65535) {
-                            set_err(err, 0, "index out of range");
-                            return CFGPACK_ERR_BOUNDS;
-                        }
-                    } else if (ekey == MP_ENTRY_KEY_NAME) {
-                        const uint8_t *nptr;
-                        uint32_t nlen;
-                        rc = cfgpack_msgpack_decode_str(r, &nptr, &nlen);
-                        if (rc != CFGPACK_OK) {
-                            set_err(err, 0, "invalid entry name");
-                            return CFGPACK_ERR_DECODE;
-                        }
-                        if (nlen > 5 || nlen == 0) {
-                            set_err(err, 0, "name too long");
-                            return CFGPACK_ERR_BOUNDS;
-                        }
-                    } else if (ekey == MP_ENTRY_KEY_TYPE) {
-                        uint64_t type_val;
-                        rc = cfgpack_msgpack_decode_uint64(r, &type_val);
-                        if (rc != CFGPACK_OK) {
-                            set_err(err, 0, "invalid type");
-                            return CFGPACK_ERR_DECODE;
-                        }
-                        if (type_val >= MP_TYPE_COUNT) {
-                            set_err(err, 0, "invalid type");
-                            return CFGPACK_ERR_INVALID_TYPE;
-                        }
-                        entry_type = (cfgpack_type_t)type_val;
-                        got_type = 1;
-                    } else if (ekey == MP_ENTRY_KEY_VALUE) {
-                        rc = cfgpack_msgpack_skip_value(r);
-                        if (rc != CFGPACK_OK) {
-                            set_err(err, 0, "invalid default value");
-                            return CFGPACK_ERR_DECODE;
-                        }
-                    } else {
-                        rc = cfgpack_msgpack_skip_value(r);
-                        if (rc != CFGPACK_OK) {
-                            set_err(err, 0, "invalid value");
-                            return CFGPACK_ERR_DECODE;
-                        }
-                    }
-                }
-
-                if (got_type) {
-                    if (entry_type == CFGPACK_TYPE_STR) {
-                        str_count++;
-                    } else if (entry_type == CFGPACK_TYPE_FSTR) {
-                        fstr_count++;
-                    }
-                }
-                entry_count++;
-            }
-            got_entries = 1;
-        } else {
-            rc = cfgpack_msgpack_skip_value(r);
-            if (rc != CFGPACK_OK) {
-                set_err(err, 0, "invalid top-level value");
-                return CFGPACK_ERR_DECODE;
-            }
-        }
-    }
-
-    if (!got_entries) {
-        set_err(err, 0, "missing entries");
-        return CFGPACK_ERR_DECODE;
-    }
-
-    out->entry_count = entry_count;
-    out->str_count = str_count;
-    out->fstr_count = fstr_count;
-    out->str_pool_size = str_count * (CFGPACK_STR_MAX + 1) +
-                         fstr_count * (CFGPACK_FSTR_MAX + 1);
-
-    return CFGPACK_OK;
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
- * MessagePack Schema Parser (two-phase, no malloc)
- * ───────────────────────────────────────────────────────────────────────────── */
-
-cfgpack_err_t cfgpack_schema_parse_msgpack(const uint8_t *data,
-                                           size_t data_len,
-                                           cfgpack_schema_t *out_schema,
-                                           cfgpack_entry_t *entries,
-                                           size_t max_entries,
-                                           cfgpack_value_t *values,
-                                           char *str_pool,
-                                           size_t str_pool_cap,
-                                           uint16_t *str_offsets,
-                                           size_t str_offsets_count,
-                                           cfgpack_parse_error_t *err) {
     cfgpack_reader_t reader;
     cfgpack_reader_init(&reader, data, data_len);
     cfgpack_reader_t *r = &reader;
     cfgpack_err_t rc;
     size_t count = 0;
-
-    /* Zero values array up front */
-    memset(values, 0, max_entries * sizeof(cfgpack_value_t));
 
     /* Top-level map */
     uint32_t top_count;
@@ -2380,38 +1958,56 @@ cfgpack_err_t cfgpack_schema_parse_msgpack(const uint8_t *data,
 
     int got_name = 0, got_version = 0, got_entries = 0;
 
-    /* ── Phase 1: Decode entries and scalar defaults ───────────────────── */
+    /* ── Phase 1: Decode/measure entries ───────────────────────────────── */
     for (uint32_t ti = 0; ti < top_count; ++ti) {
         uint64_t tkey;
         rc = cfgpack_msgpack_decode_uint64(r, &tkey);
         if (rc != CFGPACK_OK) {
-            set_err(err, 0, "expected uint key");
+            set_err(err, 0,
+                    measuring ? "invalid msgpack: expected uint key"
+                              : "expected uint key");
             return CFGPACK_ERR_DECODE;
         }
 
         if (tkey == MP_SCHEMA_KEY_NAME) {
-            const uint8_t *nptr;
-            uint32_t nlen;
-            rc = cfgpack_msgpack_decode_str(r, &nptr, &nlen);
-            if (rc != CFGPACK_OK) {
-                set_err(err, 0, "invalid name");
-                return CFGPACK_ERR_DECODE;
+            if (measuring) {
+                rc = cfgpack_msgpack_skip_value(r);
+                if (rc != CFGPACK_OK) {
+                    set_err(err, 0, "invalid top-level value");
+                    return CFGPACK_ERR_DECODE;
+                }
+            } else {
+                const uint8_t *nptr;
+                uint32_t nlen;
+                rc = cfgpack_msgpack_decode_str(r, &nptr, &nlen);
+                if (rc != CFGPACK_OK) {
+                    set_err(err, 0, "invalid name");
+                    return CFGPACK_ERR_DECODE;
+                }
+                if (nlen >= sizeof(out_schema->map_name)) {
+                    set_err(err, 0, "name too long");
+                    return CFGPACK_ERR_BOUNDS;
+                }
+                memcpy(out_schema->map_name, nptr, nlen);
+                out_schema->map_name[nlen] = '\0';
             }
-            if (nlen >= sizeof(out_schema->map_name)) {
-                set_err(err, 0, "name too long");
-                return CFGPACK_ERR_BOUNDS;
-            }
-            memcpy(out_schema->map_name, nptr, nlen);
-            out_schema->map_name[nlen] = '\0';
             got_name = 1;
         } else if (tkey == MP_SCHEMA_KEY_VERSION) {
-            uint64_t ver;
-            rc = cfgpack_msgpack_decode_uint64(r, &ver);
-            if (rc != CFGPACK_OK) {
-                set_err(err, 0, "invalid version");
-                return CFGPACK_ERR_DECODE;
+            if (measuring) {
+                rc = cfgpack_msgpack_skip_value(r);
+                if (rc != CFGPACK_OK) {
+                    set_err(err, 0, "invalid top-level value");
+                    return CFGPACK_ERR_DECODE;
+                }
+            } else {
+                uint64_t ver;
+                rc = cfgpack_msgpack_decode_uint64(r, &ver);
+                if (rc != CFGPACK_OK) {
+                    set_err(err, 0, "invalid version");
+                    return CFGPACK_ERR_DECODE;
+                }
+                out_schema->version = (uint32_t)ver;
             }
-            out_schema->version = (uint32_t)ver;
             got_version = 1;
         } else if (tkey == MP_SCHEMA_KEY_ENTRIES) {
             uint32_t arr_count;
@@ -2422,7 +2018,7 @@ cfgpack_err_t cfgpack_schema_parse_msgpack(const uint8_t *data,
             }
 
             for (uint32_t ei = 0; ei < arr_count; ++ei) {
-                if (count >= max_entries) {
+                if (!measuring && count >= max_entries) {
                     set_err(err, 0, "too many entries");
                     return CFGPACK_ERR_BOUNDS;
                 }
@@ -2434,9 +2030,13 @@ cfgpack_err_t cfgpack_schema_parse_msgpack(const uint8_t *data,
                     return CFGPACK_ERR_DECODE;
                 }
 
-                cfgpack_entry_t *e = &entries[count];
-                memset(e, 0, sizeof(*e));
+                cfgpack_entry_t *e = NULL;
+                if (!measuring) {
+                    e = &entries[count];
+                    memset(e, 0, sizeof(*e));
+                }
 
+                cfgpack_type_t entry_type = CFGPACK_TYPE_U8;
                 int got_idx = 0, got_ename = 0, got_type = 0, got_default = 0;
                 int default_is_nil = 0;
 
@@ -2464,7 +2064,9 @@ cfgpack_err_t cfgpack_schema_parse_msgpack(const uint8_t *data,
                             set_err(err, 0, "index out of range");
                             return CFGPACK_ERR_BOUNDS;
                         }
-                        e->index = (uint16_t)idx;
+                        if (!measuring) {
+                            e->index = (uint16_t)idx;
+                        }
                         got_idx = 1;
                     } else if (ekey == MP_ENTRY_KEY_NAME) {
                         const uint8_t *nptr;
@@ -2478,8 +2080,10 @@ cfgpack_err_t cfgpack_schema_parse_msgpack(const uint8_t *data,
                             set_err(err, 0, "name too long");
                             return CFGPACK_ERR_BOUNDS;
                         }
-                        memcpy(e->name, nptr, nlen);
-                        e->name[nlen] = '\0';
+                        if (!measuring) {
+                            memcpy(e->name, nptr, nlen);
+                            e->name[nlen] = '\0';
+                        }
                         got_ename = 1;
                     } else if (ekey == MP_ENTRY_KEY_TYPE) {
                         uint64_t type_val;
@@ -2492,14 +2096,25 @@ cfgpack_err_t cfgpack_schema_parse_msgpack(const uint8_t *data,
                             set_err(err, 0, "invalid type");
                             return CFGPACK_ERR_INVALID_TYPE;
                         }
-                        e->type = (cfgpack_type_t)type_val;
+                        entry_type = (cfgpack_type_t)type_val;
+                        if (!measuring) {
+                            e->type = entry_type;
+                        }
                         got_type = 1;
                     } else if (ekey == MP_ENTRY_KEY_VALUE) {
-                        if (r->pos < r->len && r->data[r->pos] == 0xC0) {
-                            r->pos++;
-                            default_is_nil = 1;
+                        if (!measuring) {
+                            if (r->pos < r->len && r->data[r->pos] == 0xC0) {
+                                r->pos++;
+                                default_is_nil = 1;
+                            } else {
+                                /* Skip value for now; phase 2 will decode it */
+                                rc = cfgpack_msgpack_skip_value(r);
+                                if (rc != CFGPACK_OK) {
+                                    set_err(err, 0, "invalid default value");
+                                    return CFGPACK_ERR_DECODE;
+                                }
+                            }
                         } else {
-                            /* Skip value for now; phase 2 will decode it */
                             rc = cfgpack_msgpack_skip_value(r);
                             if (rc != CFGPACK_OK) {
                                 set_err(err, 0, "invalid default value");
@@ -2516,22 +2131,32 @@ cfgpack_err_t cfgpack_schema_parse_msgpack(const uint8_t *data,
                     }
                 }
 
-                if (!got_idx || !got_ename || !got_type || !got_default) {
-                    set_err(err, 0, "missing entry field");
-                    return CFGPACK_ERR_DECODE;
-                }
-
-                if (default_is_nil) {
-                    e->has_default = 0;
+                if (measuring) {
+                    if (got_type) {
+                        if (entry_type == CFGPACK_TYPE_STR) {
+                            str_count++;
+                        } else if (entry_type == CFGPACK_TYPE_FSTR) {
+                            fstr_count++;
+                        }
+                    }
                 } else {
-                    e->has_default = 1;
-                }
-                values[count].type = e->type;
+                    if (!got_idx || !got_ename || !got_type || !got_default) {
+                        set_err(err, 0, "missing entry field");
+                        return CFGPACK_ERR_DECODE;
+                    }
 
-                /* Check for duplicates */
-                if (has_duplicate(entries, count, e->index, e->name)) {
-                    set_err(err, 0, "duplicate");
-                    return CFGPACK_ERR_DUPLICATE;
+                    if (default_is_nil) {
+                        e->has_default = 0;
+                    } else {
+                        e->has_default = 1;
+                    }
+                    values[count].type = e->type;
+
+                    /* Check for duplicates */
+                    if (has_duplicate(entries, count, e->index, e->name)) {
+                        set_err(err, 0, "duplicate");
+                        return CFGPACK_ERR_DUPLICATE;
+                    }
                 }
 
                 count++;
@@ -2546,25 +2171,32 @@ cfgpack_err_t cfgpack_schema_parse_msgpack(const uint8_t *data,
         }
     }
 
-    if (!got_name || !got_version || !got_entries) {
+    if (!got_entries) {
+        set_err(err, 0,
+                measuring ? "missing entries" : "missing required field");
+        return CFGPACK_ERR_DECODE;
+    }
+
+    /* ── Measure mode: fill output and return ──────────────────────────── */
+    if (measuring) {
+        measure->entry_count = count;
+        measure->str_count = str_count;
+        measure->fstr_count = fstr_count;
+        measure->str_pool_size = str_count * (CFGPACK_STR_MAX + 1) +
+                                 fstr_count * (CFGPACK_FSTR_MAX + 1);
+        return CFGPACK_OK;
+    }
+
+    /* ── Parse mode: check required fields, finalize, Phase 2 ──────────── */
+    if (!got_name || !got_version) {
         set_err(err, 0, "missing required field");
         return CFGPACK_ERR_DECODE;
     }
 
-    /* Sort entries and values by index */
-    sort_entries(entries, values, count);
-    out_schema->entries = entries;
-    out_schema->entry_count = count;
-
-    /* Compute string pool offsets in sorted order */
-    size_t pool_needed = compute_str_offsets(entries, count, str_offsets,
-                                             str_offsets_count);
-    if (pool_needed > str_pool_cap) {
-        set_err(err, 0, "string pool too small");
-        return CFGPACK_ERR_BOUNDS;
-    }
-    if (str_pool_cap > 0) {
-        memset(str_pool, 0, str_pool_cap);
+    /* Sort entries, assign schema, set up string pool */
+    cfgpack_err_t frc = schema_finalize(opts, count);
+    if (frc != CFGPACK_OK) {
+        return frc;
     }
 
     /* ── Phase 2: Re-decode msgpack to extract default values ──────────── */
@@ -2708,6 +2340,27 @@ cfgpack_err_t cfgpack_schema_parse_msgpack(const uint8_t *data,
     }
 
     return CFGPACK_OK;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * MessagePack Schema Measure — public wrapper
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+cfgpack_err_t cfgpack_schema_measure_msgpack(const uint8_t *data,
+                                             size_t data_len,
+                                             cfgpack_schema_measure_t *out,
+                                             cfgpack_parse_error_t *err) {
+    return parse_schema_msgpack_impl(data, data_len, NULL, out, err);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * MessagePack Schema Parser — public wrapper
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+cfgpack_err_t cfgpack_schema_parse_msgpack(const uint8_t *data,
+                                           size_t data_len,
+                                           const cfgpack_parse_opts_t *opts) {
+    return parse_schema_msgpack_impl(data, data_len, opts, NULL, opts->err);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────

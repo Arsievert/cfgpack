@@ -15,27 +15,20 @@
 
 /* Helper: parse a JSON schema and init a context from it. */
 static cfgpack_err_t json_init(const char *json,
-                               cfgpack_schema_t *schema,
-                               cfgpack_entry_t *entries,
-                               size_t max_entries,
-                               cfgpack_value_t *values,
-                               char *str_pool,
-                               size_t str_pool_cap,
-                               uint16_t *str_offsets,
-                               size_t str_offsets_count,
+                               const cfgpack_parse_opts_t *opts,
                                cfgpack_ctx_t *ctx) {
-    cfgpack_parse_error_t err;
-    cfgpack_err_t rc = cfgpack_schema_parse_json(json, strlen(json), schema,
-                                                 entries, max_entries, values,
-                                                 str_pool, str_pool_cap,
-                                                 str_offsets, str_offsets_count,
-                                                 &err);
+    cfgpack_err_t rc = cfgpack_schema_parse_json(json, strlen(json), opts);
     if (rc != CFGPACK_OK) {
-        LOG("JSON parse error: %s (line %zu)", err.message, err.line);
+        cfgpack_parse_error_t *err = opts->err;
+        if (err) {
+            LOG("JSON parse error: %s (line %zu)", err->message, err->line);
+        }
         return rc;
     }
-    return cfgpack_init(ctx, schema, values, schema->entry_count, str_pool,
-                        str_pool_cap, str_offsets, str_offsets_count);
+    return cfgpack_init(ctx, opts->out_schema, opts->values,
+                        opts->out_schema->entry_count, opts->str_pool,
+                        opts->str_pool_cap, opts->str_offsets,
+                        opts->str_offsets_count);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -71,12 +64,15 @@ TEST_CASE(test_json_remap_basic) {
     char sp1[1], sp2[1];
     uint16_t so1[1], so2[1];
 
+    cfgpack_parse_error_t perr;
     LOG("Parsing v1 JSON schema");
-    CHECK(json_init(v1_json, &s1, e1, 2, v1, sp1, sizeof(sp1), so1, 0, &c1) ==
-          CFGPACK_OK);
+    cfgpack_parse_opts_t opts1 = {&s1,         e1,  2, v1,   sp1,
+                                  sizeof(sp1), so1, 0, &perr};
+    CHECK(json_init(v1_json, &opts1, &c1) == CFGPACK_OK);
     LOG("Parsing v2 JSON schema");
-    CHECK(json_init(v2_json, &s2, e2, 2, v2, sp2, sizeof(sp2), so2, 0, &c2) ==
-          CFGPACK_OK);
+    cfgpack_parse_opts_t opts2 = {&s2,         e2,  2, v2,   sp2,
+                                  sizeof(sp2), so2, 0, &perr};
+    CHECK(json_init(v2_json, &opts2, &c2) == CFGPACK_OK);
 
     CHECK(cfgpack_set_u8(&c1, 10, 42) == CFGPACK_OK);
     CHECK(cfgpack_set_u8(&c1, 11, 99) == CFGPACK_OK);
@@ -131,10 +127,13 @@ TEST_CASE(test_json_remap_type_widening) {
     char sp1[1], sp2[1];
     uint16_t so1[1], so2[1];
 
-    CHECK(json_init(v1_json, &s1, e1, 1, v1, sp1, sizeof(sp1), so1, 0, &c1) ==
-          CFGPACK_OK);
-    CHECK(json_init(v2_json, &s2, e2, 1, v2, sp2, sizeof(sp2), so2, 0, &c2) ==
-          CFGPACK_OK);
+    cfgpack_parse_error_t perr;
+    cfgpack_parse_opts_t opts1 = {&s1,         e1,  1, v1,   sp1,
+                                  sizeof(sp1), so1, 0, &perr};
+    CHECK(json_init(v1_json, &opts1, &c1) == CFGPACK_OK);
+    cfgpack_parse_opts_t opts2 = {&s2,         e2,  1, v2,   sp2,
+                                  sizeof(sp2), so2, 0, &perr};
+    CHECK(json_init(v2_json, &opts2, &c2) == CFGPACK_OK);
 
     CHECK(cfgpack_set_u8(&c1, 1, 200) == CFGPACK_OK);
     LOG("Set v1 val@1 = 200 (u8)");
@@ -189,11 +188,14 @@ TEST_CASE(test_json_remap_strings) {
     char sp1[256], sp2[256];
     uint16_t so1[2], so2[2];
 
-    CHECK(json_init(v1_json, &s1, e1, 2, v1, sp1, sizeof(sp1), so1, 2, &c1) ==
-          CFGPACK_OK);
+    cfgpack_parse_error_t perr;
+    cfgpack_parse_opts_t opts1 = {&s1,         e1,  2, v1,   sp1,
+                                  sizeof(sp1), so1, 2, &perr};
+    CHECK(json_init(v1_json, &opts1, &c1) == CFGPACK_OK);
     LOG("Parsed v1 JSON: str@5, fstr@6");
-    CHECK(json_init(v2_json, &s2, e2, 2, v2, sp2, sizeof(sp2), so2, 2, &c2) ==
-          CFGPACK_OK);
+    cfgpack_parse_opts_t opts2 = {&s2,         e2,  2, v2,   sp2,
+                                  sizeof(sp2), so2, 2, &perr};
+    CHECK(json_init(v2_json, &opts2, &c2) == CFGPACK_OK);
     LOG("Parsed v2 JSON: str@15, fstr@16");
 
     /* Override defaults with runtime values */
@@ -259,10 +261,13 @@ TEST_CASE(test_json_remap_defaults_restored) {
     char sp1[1], sp2[1];
     uint16_t so1[1], so2[1];
 
-    CHECK(json_init(v1_json, &s1, e1, 1, v1, sp1, sizeof(sp1), so1, 0, &c1) ==
-          CFGPACK_OK);
-    CHECK(json_init(v2_json, &s2, e2, 3, v2, sp2, sizeof(sp2), so2, 0, &c2) ==
-          CFGPACK_OK);
+    cfgpack_parse_error_t perr;
+    cfgpack_parse_opts_t opts1 = {&s1,         e1,  1, v1,   sp1,
+                                  sizeof(sp1), so1, 0, &perr};
+    CHECK(json_init(v1_json, &opts1, &c1) == CFGPACK_OK);
+    cfgpack_parse_opts_t opts2 = {&s2,         e2,  3, v2,   sp2,
+                                  sizeof(sp2), so2, 0, &perr};
+    CHECK(json_init(v2_json, &opts2, &c2) == CFGPACK_OK);
 
     /* Verify v2 defaults were parsed and entries have has_default=1 */
     LOG("v2 entry b: has_default=%d, c: has_default=%d", e2[1].has_default,
@@ -348,10 +353,13 @@ TEST_CASE(test_json_remap_mixed_types) {
     char sp1[512], sp2[512];
     uint16_t so1[2], so2[2];
 
-    CHECK(json_init(v1_json, &s1, e1, 5, v1, sp1, sizeof(sp1), so1, 2, &c1) ==
-          CFGPACK_OK);
-    CHECK(json_init(v2_json, &s2, e2, 5, v2, sp2, sizeof(sp2), so2, 2, &c2) ==
-          CFGPACK_OK);
+    cfgpack_parse_error_t perr;
+    cfgpack_parse_opts_t opts1 = {&s1,         e1,  5, v1,   sp1,
+                                  sizeof(sp1), so1, 2, &perr};
+    CHECK(json_init(v1_json, &opts1, &c1) == CFGPACK_OK);
+    cfgpack_parse_opts_t opts2 = {&s2,         e2,  5, v2,   sp2,
+                                  sizeof(sp2), so2, 2, &perr};
+    CHECK(json_init(v2_json, &opts2, &c2) == CFGPACK_OK);
     LOG("Both schemas parsed from JSON");
 
     CHECK(cfgpack_set_u8(&c1, 1, 25) == CFGPACK_OK);
@@ -436,10 +444,13 @@ TEST_CASE(test_json_remap_no_default_stays_absent) {
     char sp1[1], sp2[1];
     uint16_t so1[1], so2[1];
 
-    CHECK(json_init(v1_json, &s1, e1, 1, v1, sp1, sizeof(sp1), so1, 0, &c1) ==
-          CFGPACK_OK);
-    CHECK(json_init(v2_json, &s2, e2, 3, v2, sp2, sizeof(sp2), so2, 0, &c2) ==
-          CFGPACK_OK);
+    cfgpack_parse_error_t perr;
+    cfgpack_parse_opts_t opts1 = {&s1,         e1,  1, v1,   sp1,
+                                  sizeof(sp1), so1, 0, &perr};
+    CHECK(json_init(v1_json, &opts1, &c1) == CFGPACK_OK);
+    cfgpack_parse_opts_t opts2 = {&s2,         e2,  3, v2,   sp2,
+                                  sizeof(sp2), so2, 0, &perr};
+    CHECK(json_init(v2_json, &opts2, &c2) == CFGPACK_OK);
 
     /* Confirm has_default flags from JSON parse */
     LOG("v2 b@2: has_default=%d, c@3: has_default=%d", e2[1].has_default,
@@ -503,10 +514,13 @@ TEST_CASE(test_json_remap_decoded_overrides_default) {
     char sp1[1], sp2[1];
     uint16_t so1[1], so2[1];
 
-    CHECK(json_init(v1_json, &s1, e1, 1, v1, sp1, sizeof(sp1), so1, 0, &c1) ==
-          CFGPACK_OK);
-    CHECK(json_init(v2_json, &s2, e2, 1, v2, sp2, sizeof(sp2), so2, 0, &c2) ==
-          CFGPACK_OK);
+    cfgpack_parse_error_t perr;
+    cfgpack_parse_opts_t opts1 = {&s1,         e1,  1, v1,   sp1,
+                                  sizeof(sp1), so1, 0, &perr};
+    CHECK(json_init(v1_json, &opts1, &c1) == CFGPACK_OK);
+    cfgpack_parse_opts_t opts2 = {&s2,         e2,  1, v2,   sp2,
+                                  sizeof(sp2), so2, 0, &perr};
+    CHECK(json_init(v2_json, &opts2, &c2) == CFGPACK_OK);
 
     CHECK(cfgpack_set_u8(&c1, 1, 42) == CFGPACK_OK);
     LOG("Set v1: val@1=42 (v2 default is 99)");
@@ -567,10 +581,13 @@ TEST_CASE(test_json_remap_widening_with_defaults) {
     char sp1[1], sp2[1];
     uint16_t so1[1], so2[1];
 
-    CHECK(json_init(v1_json, &s1, e1, 2, v1, sp1, sizeof(sp1), so1, 0, &c1) ==
-          CFGPACK_OK);
-    CHECK(json_init(v2_json, &s2, e2, 3, v2, sp2, sizeof(sp2), so2, 0, &c2) ==
-          CFGPACK_OK);
+    cfgpack_parse_error_t perr;
+    cfgpack_parse_opts_t opts1 = {&s1,         e1,  2, v1,   sp1,
+                                  sizeof(sp1), so1, 0, &perr};
+    CHECK(json_init(v1_json, &opts1, &c1) == CFGPACK_OK);
+    cfgpack_parse_opts_t opts2 = {&s2,         e2,  3, v2,   sp2,
+                                  sizeof(sp2), so2, 0, &perr};
+    CHECK(json_init(v2_json, &opts2, &c2) == CFGPACK_OK);
 
     CHECK(cfgpack_set_u8(&c1, 10, 200) == CFGPACK_OK);
     CHECK(cfgpack_set_u8(&c1, 11, 150) == CFGPACK_OK);
@@ -632,10 +649,13 @@ TEST_CASE(test_json_remap_fstr_to_str_widening) {
     char sp1[64], sp2[128];
     uint16_t so1[1], so2[1];
 
-    CHECK(json_init(v1_json, &s1, e1, 1, v1, sp1, sizeof(sp1), so1, 1, &c1) ==
-          CFGPACK_OK);
-    CHECK(json_init(v2_json, &s2, e2, 1, v2, sp2, sizeof(sp2), so2, 1, &c2) ==
-          CFGPACK_OK);
+    cfgpack_parse_error_t perr;
+    cfgpack_parse_opts_t opts1 = {&s1,         e1,  1, v1,   sp1,
+                                  sizeof(sp1), so1, 1, &perr};
+    CHECK(json_init(v1_json, &opts1, &c1) == CFGPACK_OK);
+    cfgpack_parse_opts_t opts2 = {&s2,         e2,  1, v2,   sp2,
+                                  sizeof(sp2), so2, 1, &perr};
+    CHECK(json_init(v2_json, &opts2, &c2) == CFGPACK_OK);
 
     CHECK(cfgpack_set_fstr(&c1, 1, "short") == CFGPACK_OK);
     LOG("Set v1: fstr@1='short'");
@@ -691,10 +711,13 @@ TEST_CASE(test_json_remap_string_defaults_restored) {
     char sp1[1], sp2[256];
     uint16_t so1[1], so2[2];
 
-    CHECK(json_init(v1_json, &s1, e1, 1, v1, sp1, sizeof(sp1), so1, 0, &c1) ==
-          CFGPACK_OK);
-    CHECK(json_init(v2_json, &s2, e2, 3, v2, sp2, sizeof(sp2), so2, 2, &c2) ==
-          CFGPACK_OK);
+    cfgpack_parse_error_t perr;
+    cfgpack_parse_opts_t opts1 = {&s1,         e1,  1, v1,   sp1,
+                                  sizeof(sp1), so1, 0, &perr};
+    CHECK(json_init(v1_json, &opts1, &c1) == CFGPACK_OK);
+    cfgpack_parse_opts_t opts2 = {&s2,         e2,  3, v2,   sp2,
+                                  sizeof(sp2), so2, 2, &perr};
+    CHECK(json_init(v2_json, &opts2, &c2) == CFGPACK_OK);
 
     CHECK(cfgpack_set_u8(&c1, 1, 77) == CFGPACK_OK);
     LOG("Set v1: val@1=77");

@@ -154,56 +154,37 @@ cfgpack_err_t cfgpack_schema_measure_json_file(const char *path,
 }
 
 cfgpack_err_t cfgpack_parse_schema_file(const char *path,
-                                        cfgpack_schema_t *out_schema,
-                                        cfgpack_entry_t *entries,
-                                        size_t max_entries,
-                                        cfgpack_value_t *values,
-                                        char *str_pool,
-                                        size_t str_pool_cap,
-                                        uint16_t *str_offsets,
-                                        size_t str_offsets_count,
+                                        const cfgpack_parse_opts_t *opts,
                                         char *scratch,
-                                        size_t scratch_cap,
-                                        cfgpack_parse_error_t *err) {
+                                        size_t scratch_cap) {
     size_t len = 0;
     cfgpack_err_t rc = read_file(path, scratch, scratch_cap, &len);
     if (rc != CFGPACK_OK) {
-        if (err) {
-            err->line = 0;
-            snprintf(err->message, sizeof(err->message), "unable to open file");
+        if (opts->err) {
+            opts->err->line = 0;
+            snprintf(opts->err->message, sizeof(opts->err->message),
+                     "unable to open file");
         }
         return rc;
     }
-    return cfgpack_parse_schema(scratch, len, out_schema, entries, max_entries,
-                                values, str_pool, str_pool_cap, str_offsets,
-                                str_offsets_count, err);
+    return cfgpack_parse_schema(scratch, len, opts);
 }
 
 cfgpack_err_t cfgpack_schema_parse_json_file(const char *path,
-                                             cfgpack_schema_t *out_schema,
-                                             cfgpack_entry_t *entries,
-                                             size_t max_entries,
-                                             cfgpack_value_t *values,
-                                             char *str_pool,
-                                             size_t str_pool_cap,
-                                             uint16_t *str_offsets,
-                                             size_t str_offsets_count,
+                                             const cfgpack_parse_opts_t *opts,
                                              char *scratch,
-                                             size_t scratch_cap,
-                                             cfgpack_parse_error_t *err) {
+                                             size_t scratch_cap) {
     size_t len = 0;
     cfgpack_err_t rc = read_file(path, scratch, scratch_cap, &len);
     if (rc != CFGPACK_OK) {
-        if (err) {
-            err->line = 0;
-            snprintf(err->message, sizeof(err->message), "unable to open file");
+        if (opts->err) {
+            opts->err->line = 0;
+            snprintf(opts->err->message, sizeof(opts->err->message),
+                     "unable to open file");
         }
         return rc;
     }
-    return cfgpack_schema_parse_json(scratch, len, out_schema, entries,
-                                     max_entries, values, str_pool,
-                                     str_pool_cap, str_offsets,
-                                     str_offsets_count, err);
+    return cfgpack_schema_parse_json(scratch, len, opts);
 }
 
 cfgpack_err_t cfgpack_schema_write_json_file(const cfgpack_ctx_t *ctx,

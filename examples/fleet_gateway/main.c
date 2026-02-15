@@ -249,10 +249,19 @@ static int load_msgpack_schema(const uint8_t *mp_data,
     }
 
     /* Phase 3: Parse msgpack binary into measured buffers */
-    rc = cfgpack_schema_parse_msgpack(mp_data, mp_len, schema, entries,
-                                      m.entry_count, values, str_pool,
-                                      m.str_pool_size > 0 ? m.str_pool_size : 0,
-                                      str_offsets, str_off_count, &perr);
+    cfgpack_parse_opts_t opts = {
+        .out_schema = schema,
+        .entries = entries,
+        .max_entries = m.entry_count,
+        .values = values,
+        .str_pool = str_pool,
+        .str_pool_cap = m.str_pool_size > 0 ? m.str_pool_size : 0,
+        .str_offsets = str_offsets,
+        .str_offsets_count = str_off_count,
+        .err = &perr,
+    };
+
+    rc = cfgpack_schema_parse_msgpack(mp_data, mp_len, &opts);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Parse error (%s): %s\n", label, perr.message);
         free_buffers();
@@ -440,7 +449,7 @@ int main(void) {
 
     printf(
         "╔══════════════════════════════════════════════════════════════════╗\n"
-        "║  CFGPack Fleet Gateway: msgpack binary schemas + v1->v2->v3    ║\n"
+        "║  CFGPack Fleet Gateway: msgpack binary schemas + v1->v2->v3      ║\n"
         "╚══════════════════════════════════════════════════════════════════╝\n"
         "\n");
 

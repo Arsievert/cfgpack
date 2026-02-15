@@ -277,10 +277,19 @@ static int load_schema(const char *path,
     }
 
     /* Phase 3: Parse schema into the measured buffers */
-    rc = cfgpack_parse_schema(map_buf, len, schema, entries, m.entry_count,
-                              values, str_pool,
-                              m.str_pool_size > 0 ? m.str_pool_size : 0,
-                              str_offsets, str_off_count, &perr);
+    cfgpack_parse_opts_t opts = {
+        .out_schema = schema,
+        .entries = entries,
+        .max_entries = m.entry_count,
+        .values = values,
+        .str_pool = str_pool,
+        .str_pool_cap = m.str_pool_size > 0 ? m.str_pool_size : 0,
+        .str_offsets = str_offsets,
+        .str_offsets_count = str_off_count,
+        .err = &perr,
+    };
+
+    rc = cfgpack_parse_schema(map_buf, len, &opts);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Parse error (%s line %zu): %s\n", path, perr.line,
                 perr.message);
@@ -315,7 +324,8 @@ int main(void) {
 
     printf(
         "╔══════════════════════════════════════════════════════════════╗\n");
-    printf("║  CFGPack Low-Memory Example: measure API + schema migration ║\n");
+    printf(
+        "║  CFGPack Low-Memory Example: measure API + schema migration  ║\n");
     printf(
         "╚══════════════════════════════════════════════════════════════╝\n\n");
 

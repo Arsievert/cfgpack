@@ -263,9 +263,45 @@ static cfgpack_err_t decode_value(cfgpack_reader_t *r,
  * Additionally, small unsigned integers can be read as signed types since
  * MessagePack encodes small non-negative values as positive fixint/uint:
  * - u8 -> i8/i16/i32/i64 (value must fit, checked at decode time)
- * - u16 -> i16/i32/i64
- * - u32 -> i32/i64
- * - u64 -> i64
+ */
+
+/**
+ * @brief Type coercion lookup table indexed by [wire_type][schema_type].
+ *
+ * Encodes all permitted widening coercions (and exact matches) as a 12x12
+ * boolean matrix.  Row = wire type, column = schema type.
+ *
+ * Rules:
+ * - Exact match is always allowed (diagonal).
+ * - Unsigned widening: u8->u16/u32/u64, u16->u32/u64, u32->u64.
+ * - Unsigned to signed: u8->i8/i16/i32/i64, u16->i16/i32/i64,
+ *   u32->i32/i64, u64->i64.
+ * - Signed widening: i8->i16/i32/i64, i16->i32/i64, i32->i64.
+ * - Float widening: f32->f64.
+ * - String widening: fstr->str.
+ */
+/* clang-format off */
+#define _N  12  /* Number of cfgpack types */
+static const uint8_t coerce_table[_N][_N] = {
+    /*               U8 U16 U32 U64  I8 I16 I32 I64 F32 F64 STR FSTR */
+    /* U8   */ {      1,  1,  1,  1,  1,  1,  1,  1,  0,  0,  0,  0 },
+    /* U16  */ {      0,  1,  1,  1,  0,  1,  1,  1,  0,  0,  0,  0 },
+    /* U32  */ {      0,  0,  1,  1,  0,  0,  1,  1,  0,  0,  0,  0 },
+    /* U64  */ {      0,  0,  0,  1,  0,  0,  0,  1,  0,  0,  0,  0 },
+    /* I8   */ {      0,  0,  0,  0,  1,  1,  1,  1,  0,  0,  0,  0 },
+    /* I16  */ {      0,  0,  0,  0,  0,  1,  1,  1,  0,  0,  0,  0 },
+    /* I32  */ {      0,  0,  0,  0,  0,  0,  1,  1,  0,  0,  0,  0 },
+    /* I64  */ {      0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0 },
+    /* F32  */ {      0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  0,  0 },
+    /* F64  */ {      0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0 },
+    /* STR  */ {      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0 },
+    /* FSTR */ {      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1 },
+};
+#undef _N
+/* clang-format on */
+
+/**
+ * @brief Check whether a wire type can be coerced to a schema type.
  *
  * @param wire_type   Type detected from msgpack wire format.
  * @param schema_type Type declared in schema.
@@ -273,78 +309,10 @@ static cfgpack_err_t decode_value(cfgpack_reader_t *r,
  */
 static int can_coerce_type(cfgpack_type_t wire_type,
                            cfgpack_type_t schema_type) {
-    if (wire_type == schema_type) {
-        return 1;
+    if ((unsigned)wire_type >= 12 || (unsigned)schema_type >= 12) {
+        return 0;
     }
-
-    /* Unsigned widening */
-    if (wire_type == CFGPACK_TYPE_U8) {
-        if (schema_type == CFGPACK_TYPE_U16 ||
-            schema_type == CFGPACK_TYPE_U32 ||
-            schema_type == CFGPACK_TYPE_U64) {
-            return 1;
-        }
-        /* Small unsigned -> signed (value range checked at decode) */
-        if (schema_type == CFGPACK_TYPE_I8 || schema_type == CFGPACK_TYPE_I16 ||
-            schema_type == CFGPACK_TYPE_I32 ||
-            schema_type == CFGPACK_TYPE_I64) {
-            return 1;
-        }
-    }
-    if (wire_type == CFGPACK_TYPE_U16) {
-        if (schema_type == CFGPACK_TYPE_U32 ||
-            schema_type == CFGPACK_TYPE_U64) {
-            return 1;
-        }
-        /* u16 -> signed (value range checked at decode) */
-        if (schema_type == CFGPACK_TYPE_I16 ||
-            schema_type == CFGPACK_TYPE_I32 ||
-            schema_type == CFGPACK_TYPE_I64) {
-            return 1;
-        }
-    }
-    if (wire_type == CFGPACK_TYPE_U32) {
-        if (schema_type == CFGPACK_TYPE_U64) {
-            return 1;
-        }
-        /* u32 -> signed (value range checked at decode) */
-        if (schema_type == CFGPACK_TYPE_I32 ||
-            schema_type == CFGPACK_TYPE_I64) {
-            return 1;
-        }
-    }
-    if (wire_type == CFGPACK_TYPE_U64) {
-        /* u64 -> i64 (value range checked at decode) */
-        if (schema_type == CFGPACK_TYPE_I64) {
-            return 1;
-        }
-    }
-
-    /* Signed widening */
-    if (wire_type == CFGPACK_TYPE_I8) {
-        return schema_type == CFGPACK_TYPE_I16 ||
-               schema_type == CFGPACK_TYPE_I32 ||
-               schema_type == CFGPACK_TYPE_I64;
-    }
-    if (wire_type == CFGPACK_TYPE_I16) {
-        return schema_type == CFGPACK_TYPE_I32 ||
-               schema_type == CFGPACK_TYPE_I64;
-    }
-    if (wire_type == CFGPACK_TYPE_I32) {
-        return schema_type == CFGPACK_TYPE_I64;
-    }
-
-    /* Float widening */
-    if (wire_type == CFGPACK_TYPE_F32) {
-        return schema_type == CFGPACK_TYPE_F64;
-    }
-
-    /* String widening: fstr -> str */
-    if (wire_type == CFGPACK_TYPE_FSTR) {
-        return schema_type == CFGPACK_TYPE_STR;
-    }
-
-    return 0;
+    return coerce_table[wire_type][schema_type];
 }
 
 /**

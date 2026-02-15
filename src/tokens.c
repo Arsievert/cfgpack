@@ -1,11 +1,3 @@
-/* tokens.c
- *
- * Author: Austin Sievert (arsievert1@gmail.com)
- * URL:    https://github.com/arsievert/cfgpack
- *
- * License: MIT
- */
-
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
@@ -13,6 +5,7 @@
 
 #include "tokens.h"
 
+/** @copydoc tokens_create */
 int tokens_create(tokens_t *tokens, uint16_t n, char **provided) {
     tokens->max = 0;
     tokens->used = 0;
@@ -58,16 +51,7 @@ static int _is_delimeter(char s, const char *d) {
     return (0);
 }
 
-/**
- * @brief Tokenize an input string in-place using delimiters.
- *
- * @param tokens       Token container to fill.
- * @param input        Mutable input string to split (NUL terminators inserted).
- * @param delimeters   Delimiter characters (string of separators).
- * @param n_tokens     Maximum tokens to extract.
- * @param stop_offset  Optional offset where parsing stopped.
- * @return 0 on success; -1 on invalid args or capacity issues.
- */
+/** @copydoc tokens_find */
 int tokens_find(tokens_t *tokens,
                 char *input,
                 const char *delimeters,
@@ -117,6 +101,7 @@ int tokens_find(tokens_t *tokens,
     return (0);
 }
 
+/** @copydoc tokens_destroy */
 int tokens_destroy(tokens_t *tokens) {
     if (tokens->index && tokens->owns) {
         free(tokens->index);

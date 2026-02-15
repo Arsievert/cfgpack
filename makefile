@@ -32,6 +32,7 @@ CORESRC := src/core.c                   \
            src/msgpack.c                \
            src/schema_parser.c          \
            src/tokens.c                 \
+           src/wbuf.c                   \
            third_party/lz4/lz4.c        \
            third_party/heatshrink/heatshrink_decoder.c
 

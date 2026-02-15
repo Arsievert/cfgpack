@@ -285,10 +285,19 @@ int main(int argc, char **argv) {
     /* ═══════════════════════════════════════════════════════════════════════
      * 3. PARSE JSON SCHEMA
      * ═══════════════════════════════════════════════════════════════════════ */
-    rc = cfgpack_schema_parse_json(json_buf, json_len, &schema, entries,
-                                   MAX_ENTRIES, values, str_pool,
-                                   sizeof(str_pool), str_offsets, NUM_STR_SLOTS,
-                                   &parse_err);
+    cfgpack_parse_opts_t opts = {
+        .out_schema = &schema,
+        .entries = entries,
+        .max_entries = MAX_ENTRIES,
+        .values = values,
+        .str_pool = str_pool,
+        .str_pool_cap = sizeof(str_pool),
+        .str_offsets = str_offsets,
+        .str_offsets_count = NUM_STR_SLOTS,
+        .err = &parse_err,
+    };
+
+    rc = cfgpack_schema_parse_json(json_buf, json_len, &opts);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Schema parse error at line %zu: %s\n", parse_err.line,
                 parse_err.message);
@@ -421,10 +430,7 @@ int main(int argc, char **argv) {
     /* Re-initialize context (simulates device reboot) */
 
     /* Re-parse schema to restore defaults into values/str_pool */
-    rc = cfgpack_schema_parse_json(json_buf, json_len, &schema, entries,
-                                   MAX_ENTRIES, values, str_pool,
-                                   sizeof(str_pool), str_offsets, NUM_STR_SLOTS,
-                                   &parse_err);
+    rc = cfgpack_schema_parse_json(json_buf, json_len, &opts);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Schema re-parse error: %s\n", parse_err.message);
         return 1;

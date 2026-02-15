@@ -66,10 +66,11 @@ TEST_CASE(test_parse_schema_file_nonexistent) {
     cfgpack_parse_error_t err;
 
     LOG("Calling cfgpack_parse_schema_file with bad path");
-    CHECK(cfgpack_parse_schema_file("/tmp/cfgpack_nope.map", &schema, entries,
-                                    8, values, str_pool, sizeof(str_pool),
-                                    str_offsets, 4, scratch, sizeof(scratch),
-                                    &err) == CFGPACK_ERR_IO);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  8,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 4,        &err};
+    CHECK(cfgpack_parse_schema_file("/tmp/cfgpack_nope.map", &opts, scratch,
+                                    sizeof(scratch)) == CFGPACK_ERR_IO);
     LOG("Correctly returned: CFGPACK_ERR_IO");
 
     return TEST_OK;
@@ -90,11 +91,12 @@ TEST_CASE(test_json_parse_file_nonexistent) {
     cfgpack_parse_error_t err;
 
     LOG("Calling cfgpack_schema_parse_json_file with bad path");
-    CHECK(cfgpack_schema_parse_json_file("/tmp/cfgpack_nope.json", &schema,
-                                         entries, 8, values, str_pool,
-                                         sizeof(str_pool), str_offsets, 4,
-                                         scratch, sizeof(scratch),
-                                         &err) == CFGPACK_ERR_IO);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  8,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 4,        &err};
+    CHECK(cfgpack_schema_parse_json_file("/tmp/cfgpack_nope.json", &opts,
+                                         scratch,
+                                         sizeof(scratch)) == CFGPACK_ERR_IO);
     LOG("Correctly returned: CFGPACK_ERR_IO");
 
     return TEST_OK;

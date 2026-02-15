@@ -107,18 +107,24 @@ int main(int argc, char *argv[]) {
     }
 
     /* Phase 2: parse */
+    cfgpack_parse_opts_t opts = {
+        .out_schema = &schema,
+        .entries = entries,
+        .max_entries = m.entry_count,
+        .values = values,
+        .str_pool = str_pool,
+        .str_pool_cap = m.str_pool_size,
+        .str_offsets = str_offsets,
+        .str_offsets_count = m.str_count + m.fstr_count,
+        .err = &perr,
+    };
+
     if (is_json) {
-        rc = cfgpack_schema_parse_json_file(input_path, &schema, entries,
-                                            m.entry_count, values, str_pool,
-                                            m.str_pool_size, str_offsets,
-                                            m.str_count + m.fstr_count, scratch,
-                                            sizeof(scratch), &perr);
+        rc = cfgpack_schema_parse_json_file(input_path, &opts, scratch,
+                                            sizeof(scratch));
     } else {
-        rc = cfgpack_parse_schema_file(input_path, &schema, entries,
-                                       m.entry_count, values, str_pool,
-                                       m.str_pool_size, str_offsets,
-                                       m.str_count + m.fstr_count, scratch,
-                                       sizeof(scratch), &perr);
+        rc = cfgpack_parse_schema_file(input_path, &opts, scratch,
+                                       sizeof(scratch));
     }
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Parse failed: %s\n", perr.message);

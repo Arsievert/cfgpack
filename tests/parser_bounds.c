@@ -41,9 +41,10 @@ TEST_CASE(test_duplicate_name) {
     LOG("  2 foo u8 0  # duplicate name");
 
     LOG("Parsing file (expecting CFGPACK_ERR_DUPLICATE)");
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 128, values,
-                                   str_pool, sizeof(str_pool), str_offsets, 128,
-                                   scratch, sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  128,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 128,      &err};
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_ERR_DUPLICATE);
     LOG("Correctly rejected: CFGPACK_ERR_DUPLICATE");
 
@@ -70,9 +71,10 @@ TEST_CASE(test_name_too_long) {
     LOG("File contents: '1 toolong u8 0' (name is 7 chars, max is 5)");
 
     LOG("Parsing file (expecting CFGPACK_ERR_BOUNDS)");
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 128, values,
-                                   str_pool, sizeof(str_pool), str_offsets, 128,
-                                   scratch, sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  128,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 128,      &err};
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_ERR_BOUNDS);
     LOG("Correctly rejected: CFGPACK_ERR_BOUNDS");
 
@@ -97,9 +99,10 @@ TEST_CASE(test_index_too_large) {
     LOG("File contents: '70000 foo u8 0'");
 
     LOG("Parsing file (expecting CFGPACK_ERR_BOUNDS)");
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 128, values,
-                                   str_pool, sizeof(str_pool), str_offsets, 128,
-                                   scratch, sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  128,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 128,      &err};
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_ERR_BOUNDS);
     LOG("Correctly rejected: CFGPACK_ERR_BOUNDS");
 
@@ -124,9 +127,10 @@ TEST_CASE(test_missing_header) {
     LOG("File contents: '1 foo u8 0' (missing 'name version' header)");
 
     LOG("Parsing file (expecting CFGPACK_ERR_PARSE)");
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 128, values,
-                                   str_pool, sizeof(str_pool), str_offsets, 128,
-                                   scratch, sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  128,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 128,      &err};
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_ERR_PARSE);
     LOG("Correctly rejected: CFGPACK_ERR_PARSE");
 
@@ -154,9 +158,10 @@ TEST_CASE(test_missing_fields) {
     LOG("  1 foo  # missing type and default");
 
     LOG("Parsing file (expecting CFGPACK_ERR_PARSE)");
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 128, values,
-                                   str_pool, sizeof(str_pool), str_offsets, 128,
-                                   scratch, sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  128,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 128,      &err};
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_ERR_PARSE);
     LOG("Correctly rejected: CFGPACK_ERR_PARSE");
 
@@ -187,9 +192,10 @@ TEST_CASE(test_too_many_entries) {
     LOG("File has header + 129 entries");
 
     LOG("Parsing file (expecting CFGPACK_ERR_BOUNDS)");
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 128, values,
-                                   str_pool, sizeof(str_pool), str_offsets, 128,
-                                   scratch, sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  128,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 128,      &err};
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_ERR_BOUNDS);
     LOG("Correctly rejected: CFGPACK_ERR_BOUNDS");
 
@@ -220,9 +226,10 @@ TEST_CASE(test_accept_128_entries) {
     LOG("File has header + 128 entries");
 
     LOG("Parsing file (expecting success)");
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 128, values,
-                                   str_pool, sizeof(str_pool), str_offsets, 128,
-                                   scratch, sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  128,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 128,      &err};
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_OK);
     LOG("Parse succeeded");
 
@@ -251,9 +258,10 @@ TEST_CASE(test_unknown_type) {
     LOG("File contents: '1 foo nope NIL'");
 
     LOG("Parsing file (expecting CFGPACK_ERR_INVALID_TYPE)");
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 128, values,
-                                   str_pool, sizeof(str_pool), str_offsets, 128,
-                                   scratch, sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  128,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 128,      &err};
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_ERR_INVALID_TYPE);
     LOG("Correctly rejected: CFGPACK_ERR_INVALID_TYPE");
 
@@ -278,9 +286,10 @@ TEST_CASE(test_header_non_numeric_version) {
     LOG("File contents: 'demo x' (version should be numeric)");
 
     LOG("Parsing file (expecting CFGPACK_ERR_PARSE)");
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 8, values, str_pool,
-                                   sizeof(str_pool), str_offsets, 8, scratch,
-                                   sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  8,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 8,        &err};
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_ERR_PARSE);
     LOG("Correctly rejected: CFGPACK_ERR_PARSE");
 
@@ -305,9 +314,10 @@ TEST_CASE(test_name_length_edges) {
     CHECK(
         write_file(ok_path, "demo 1\n1 abcde u8 0  # exactly 5 chars - OK\n") ==
         TEST_OK);
-    rc = cfgpack_parse_schema_file(ok_path, &schema, entries, 8, values,
-                                   str_pool, sizeof(str_pool), str_offsets, 8,
-                                   scratch, sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  8,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 8,        &err};
+    rc = cfgpack_parse_schema_file(ok_path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_OK);
     CHECK(schema.entry_count == 1);
     LOG("5-char name accepted (correct)");
@@ -316,9 +326,7 @@ TEST_CASE(test_name_length_edges) {
     CHECK(
         write_file(bad_path, "demo 1\n1 abcdef u8 0  # 6 chars - too long\n") ==
         TEST_OK);
-    rc = cfgpack_parse_schema_file(bad_path, &schema, entries, 8, values,
-                                   str_pool, sizeof(str_pool), str_offsets, 8,
-                                   scratch, sizeof(scratch), &err);
+    rc = cfgpack_parse_schema_file(bad_path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_ERR_BOUNDS);
     LOG("6-char name rejected: CFGPACK_ERR_BOUNDS (correct)");
 
@@ -342,9 +350,10 @@ TEST_CASE(test_index_edges) {
     LOG("Testing max valid index: 65535");
     CHECK(write_file(ok_path, "demo 1\n65535 a u8 0  # max valid index\n") ==
           TEST_OK);
-    rc = cfgpack_parse_schema_file(ok_path, &schema, entries, 8, values,
-                                   str_pool, sizeof(str_pool), str_offsets, 8,
-                                   scratch, sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  8,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 8,        &err};
+    rc = cfgpack_parse_schema_file(ok_path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_OK);
     CHECK(schema.entries[0].index == 65535);
     LOG("Index 65535 accepted, entries[0].index = %u (correct)",
@@ -353,9 +362,7 @@ TEST_CASE(test_index_edges) {
     LOG("Testing out of range: 65536");
     CHECK(write_file(bad_path, "demo 1\n65536 a u8 0  # out of range\n") ==
           TEST_OK);
-    rc = cfgpack_parse_schema_file(bad_path, &schema, entries, 8, values,
-                                   str_pool, sizeof(str_pool), str_offsets, 8,
-                                   scratch, sizeof(scratch), &err);
+    rc = cfgpack_parse_schema_file(bad_path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_ERR_BOUNDS);
     LOG("Index 65536 rejected: CFGPACK_ERR_BOUNDS (correct)");
 
@@ -382,9 +389,10 @@ TEST_CASE(test_unsorted_input_sorted_output) {
     LOG("File order: index 3, then 1, then 2");
 
     LOG("Parsing file");
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 4, values, str_pool,
-                                   sizeof(str_pool), str_offsets, 4, scratch,
-                                   sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  4,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 4,        &err};
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_OK);
     LOG("Parse succeeded");
 
@@ -415,17 +423,16 @@ TEST_CASE(test_default_u8_out_of_range) {
 
     LOG("Testing u8 default = 256 (max is 255)");
     CHECK(write_file(path, "demo 1\n1 foo u8 256\n") == TEST_OK);
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 8, values, str_pool,
-                                   sizeof(str_pool), str_offsets, 8, scratch,
-                                   sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  8,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 8,        &err};
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_ERR_BOUNDS);
     LOG("256 rejected: CFGPACK_ERR_BOUNDS (correct)");
 
     LOG("Testing u8 default = 255 (max valid)");
     CHECK(write_file(path, "demo 1\n1 foo u8 255\n") == TEST_OK);
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 8, values, str_pool,
-                                   sizeof(str_pool), str_offsets, 8, scratch,
-                                   sizeof(scratch), &err);
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_OK);
     CHECK(values[0].v.u64 == 255);
     LOG("255 accepted, values[0].v.u64 = %" PRIu64 " (correct)",
@@ -449,25 +456,22 @@ TEST_CASE(test_default_i8_out_of_range) {
 
     LOG("Testing i8 default = 128 (max is 127)");
     CHECK(write_file(path, "demo 1\n1 foo i8 128\n") == TEST_OK);
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 8, values, str_pool,
-                                   sizeof(str_pool), str_offsets, 8, scratch,
-                                   sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  8,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 8,        &err};
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_ERR_BOUNDS);
     LOG("128 rejected: CFGPACK_ERR_BOUNDS (correct)");
 
     LOG("Testing i8 default = -129 (min is -128)");
     CHECK(write_file(path, "demo 1\n1 foo i8 -129\n") == TEST_OK);
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 8, values, str_pool,
-                                   sizeof(str_pool), str_offsets, 8, scratch,
-                                   sizeof(scratch), &err);
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_ERR_BOUNDS);
     LOG("-129 rejected: CFGPACK_ERR_BOUNDS (correct)");
 
     LOG("Testing valid edge values: -128 and 127");
     CHECK(write_file(path, "demo 1\n1 foo i8 -128\n2 bar i8 127\n") == TEST_OK);
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 8, values, str_pool,
-                                   sizeof(str_pool), str_offsets, 8, scratch,
-                                   sizeof(scratch), &err);
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_OK);
     CHECK(values[0].v.i64 == -128);
     CHECK(values[1].v.i64 == 127);
@@ -494,18 +498,17 @@ TEST_CASE(test_default_fstr_too_long) {
     LOG("Testing fstr default with 17 chars (max is 16)");
     CHECK(write_file(path, "demo 1\n1 foo fstr \"12345678901234567\"\n") ==
           TEST_OK);
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 8, values, str_pool,
-                                   sizeof(str_pool), str_offsets, 8, scratch,
-                                   sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  8,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 8,        &err};
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_ERR_STR_TOO_LONG);
     LOG("17-char string rejected: CFGPACK_ERR_STR_TOO_LONG (correct)");
 
     LOG("Testing fstr default with exactly 16 chars");
     CHECK(write_file(path, "demo 1\n1 foo fstr \"1234567890123456\"\n") ==
           TEST_OK);
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 8, values, str_pool,
-                                   sizeof(str_pool), str_offsets, 8, scratch,
-                                   sizeof(scratch), &err);
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_OK);
     CHECK(values[0].v.fstr.len == 16);
     LOG("16-char string accepted, len = %u (correct)", values[0].v.fstr.len);
@@ -529,9 +532,10 @@ TEST_CASE(test_default_hex_binary_literals) {
     LOG("Testing hex defaults: u8=0xFF, u16=0xABCD");
     CHECK(write_file(path, "demo 1\n1 foo u8 0xFF\n2 bar u16 0xABCD\n") ==
           TEST_OK);
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 8, values, str_pool,
-                                   sizeof(str_pool), str_offsets, 8, scratch,
-                                   sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  8,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 8,        &err};
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_OK);
     CHECK(values[0].v.u64 == 0xFF);
     CHECK(values[1].v.u64 == 0xABCD);
@@ -540,9 +544,7 @@ TEST_CASE(test_default_hex_binary_literals) {
 
     LOG("Testing hex out of range: u8=0x100 (max 0xFF)");
     CHECK(write_file(path, "demo 1\n1 foo u8 0x100\n") == TEST_OK);
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 8, values, str_pool,
-                                   sizeof(str_pool), str_offsets, 8, scratch,
-                                   sizeof(scratch), &err);
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_ERR_BOUNDS);
     LOG("0x100 rejected for u8: CFGPACK_ERR_BOUNDS (correct)");
 
@@ -564,25 +566,22 @@ TEST_CASE(test_default_invalid_format) {
 
     LOG("Testing non-numeric value 'abc' for integer type");
     CHECK(write_file(path, "demo 1\n1 foo u8 abc\n") == TEST_OK);
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 8, values, str_pool,
-                                   sizeof(str_pool), str_offsets, 8, scratch,
-                                   sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  8,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 8,        &err};
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_ERR_PARSE);
     LOG("'abc' rejected for u8: CFGPACK_ERR_PARSE (correct)");
 
     LOG("Testing non-quoted string 'hello' for str type");
     CHECK(write_file(path, "demo 1\n1 foo str hello\n") == TEST_OK);
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 8, values, str_pool,
-                                   sizeof(str_pool), str_offsets, 8, scratch,
-                                   sizeof(scratch), &err);
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_ERR_PARSE);
     LOG("Unquoted string rejected: CFGPACK_ERR_PARSE (correct)");
 
     LOG("Testing unterminated string");
     CHECK(write_file(path, "demo 1\n1 foo str \"hello\n") == TEST_OK);
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 8, values, str_pool,
-                                   sizeof(str_pool), str_offsets, 8, scratch,
-                                   sizeof(scratch), &err);
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_ERR_PARSE);
     LOG("Unterminated string rejected: CFGPACK_ERR_PARSE (correct)");
 
@@ -604,9 +603,10 @@ TEST_CASE(test_default_escape_sequences) {
 
     LOG("Testing escape sequences: \\n, \\t in string");
     CHECK(write_file(path, "demo 1\n1 foo fstr \"a\\nb\\tc\"\n") == TEST_OK);
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 8, values, str_pool,
-                                   sizeof(str_pool), str_offsets, 8, scratch,
-                                   sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  8,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 8,        &err};
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_OK);
     LOG("Parse succeeded");
 
@@ -668,9 +668,10 @@ TEST_CASE(test_json_writer_basic) {
     char buf[64];
 
     LOG("Parsing input schema: %s", in_path);
-    rc = cfgpack_parse_schema_file(in_path, &schema, entries, 128, values,
-                                   str_pool, sizeof(str_pool), str_offsets, 128,
-                                   scratch, sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  128,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 128,      &err};
+    rc = cfgpack_parse_schema_file(in_path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_OK);
     LOG("Parse succeeded");
 
@@ -713,9 +714,10 @@ TEST_CASE(test_json_roundtrip) {
     cfgpack_err_t rc;
 
     LOG("Step 1: Parse .map file");
-    rc = cfgpack_parse_schema_file(map_path, &schema1, entries1, 128, values1,
-                                   str_pool1, sizeof(str_pool1), str_offsets1,
-                                   128, scratch, sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts1 = {&schema1,     entries1,  128,
+                                  values1,      str_pool1, sizeof(str_pool1),
+                                  str_offsets1, 128,       &err};
+    rc = cfgpack_parse_schema_file(map_path, &opts1, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_OK);
     LOG("Parsed: name='%s', version=%u, entries=%zu", schema1.map_name,
         schema1.version, schema1.entry_count);
@@ -732,10 +734,11 @@ TEST_CASE(test_json_roundtrip) {
     print_file("Generated JSON (from .map)", json_path);
 
     LOG("Step 3: Parse JSON back");
-    rc = cfgpack_schema_parse_json_file(json_path, &schema2, entries2, 128,
-                                        values2, str_pool2, sizeof(str_pool2),
-                                        str_offsets2, 128, scratch,
-                                        sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts2 = {&schema2,     entries2,  128,
+                                  values2,      str_pool2, sizeof(str_pool2),
+                                  str_offsets2, 128,       &err};
+    rc = cfgpack_schema_parse_json_file(json_path, &opts2, scratch,
+                                        sizeof(scratch));
     if (rc != CFGPACK_OK) {
         LOG("JSON parse error: %s (line %zu)", err.message, err.line);
     }
@@ -843,10 +846,11 @@ TEST_CASE(test_json_parse_direct) {
     print_file("Input JSON", json_path);
 
     LOG("Parsing JSON");
-    rc = cfgpack_schema_parse_json_file(json_path, &schema, entries, 128,
-                                        values, str_pool, sizeof(str_pool),
-                                        str_offsets, 128, scratch,
-                                        sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  128,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 128,      &err};
+    rc = cfgpack_schema_parse_json_file(json_path, &opts, scratch,
+                                        sizeof(scratch));
     if (rc != CFGPACK_OK) {
         LOG("JSON parse error: %s (line %zu)", err.message, err.line);
     }
@@ -928,9 +932,10 @@ TEST_CASE(test_reserved_index_zero_map) {
     LOG("File contents: '0 foo u8 0' (index 0 is reserved)");
 
     LOG("Parsing file (expecting CFGPACK_ERR_RESERVED_INDEX)");
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 8, values, str_pool,
-                                   sizeof(str_pool), str_offsets, 8, scratch,
-                                   sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  8,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 8,        &err};
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_ERR_RESERVED_INDEX);
     LOG("Correctly rejected: CFGPACK_ERR_RESERVED_INDEX");
 
@@ -964,9 +969,11 @@ TEST_CASE(test_reserved_index_zero_json) {
     print_file("Input JSON", json_path);
 
     LOG("Parsing JSON (expecting CFGPACK_ERR_RESERVED_INDEX)");
-    rc = cfgpack_schema_parse_json_file(json_path, &schema, entries, 8, values,
-                                        str_pool, sizeof(str_pool), str_offsets,
-                                        8, scratch, sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  8,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 8,        &err};
+    rc = cfgpack_schema_parse_json_file(json_path, &opts, scratch,
+                                        sizeof(scratch));
     CHECK(rc == CFGPACK_ERR_RESERVED_INDEX);
     LOG("Correctly rejected: CFGPACK_ERR_RESERVED_INDEX");
 

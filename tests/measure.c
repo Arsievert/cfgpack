@@ -56,9 +56,10 @@ TEST_CASE(test_measure_map_sample) {
     char str_pool[2048];
     uint16_t str_offsets[128];
 
-    rc = cfgpack_parse_schema_file(path, &schema, entries, 128, values,
-                                   str_pool, sizeof(str_pool), str_offsets, 128,
-                                   scratch, sizeof(scratch), &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  128,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 128,      &err};
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
     CHECK(rc == CFGPACK_OK);
 
     cfgpack_schema_sizing_t sizing;
@@ -250,9 +251,10 @@ TEST_CASE(test_measure_json_valid) {
     char str_pool[512];
     uint16_t str_offsets[16];
 
-    rc = cfgpack_schema_parse_json(json, json_len, &schema, entries, 16, values,
-                                   str_pool, sizeof(str_pool), str_offsets, 16,
-                                   &err);
+    cfgpack_parse_opts_t opts = {&schema,     entries,  16,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 16,       &err};
+    rc = cfgpack_schema_parse_json(json, json_len, &opts);
     CHECK(rc == CFGPACK_OK);
 
     cfgpack_schema_sizing_t sizing;
@@ -410,9 +412,12 @@ TEST_CASE(test_measure_then_parse_map) {
     CHECK(m.str_pool_size == sizeof(str_pool));
 
     cfgpack_schema_t schema;
-    rc = cfgpack_parse_schema(map, map_len, &schema, entries, m.entry_count,
-                              values, str_pool, m.str_pool_size, str_offsets,
-                              m.str_count + m.fstr_count, &err);
+    cfgpack_parse_opts_t opts = {&schema,       entries,
+                                 m.entry_count, values,
+                                 str_pool,      m.str_pool_size,
+                                 str_offsets,   m.str_count + m.fstr_count,
+                                 &err};
+    rc = cfgpack_parse_schema(map, map_len, &opts);
     CHECK(rc == CFGPACK_OK);
     CHECK(schema.entry_count == 4);
     LOG("Parse succeeded with measure-sized buffers");
@@ -469,10 +474,12 @@ TEST_CASE(test_measure_then_parse_json) {
     CHECK(m.str_pool_size == sizeof(str_pool));
 
     cfgpack_schema_t schema;
-    rc = cfgpack_schema_parse_json(json, json_len, &schema, entries,
-                                   m.entry_count, values, str_pool,
-                                   m.str_pool_size, str_offsets,
-                                   m.str_count + m.fstr_count, &err);
+    cfgpack_parse_opts_t opts = {&schema,       entries,
+                                 m.entry_count, values,
+                                 str_pool,      m.str_pool_size,
+                                 str_offsets,   m.str_count + m.fstr_count,
+                                 &err};
+    rc = cfgpack_schema_parse_json(json, json_len, &opts);
     CHECK(rc == CFGPACK_OK);
     CHECK(schema.entry_count == 4);
     LOG("Parse succeeded with measure-sized buffers");
