@@ -94,6 +94,24 @@ cfgpack_err_t cfgpack_schema_get_sizing(const cfgpack_schema_t *schema,
                                         cfgpack_schema_sizing_t *out);
 ```
 
+### Parse Options
+
+All parse functions accept a `cfgpack_parse_opts_t` struct that bundles the output schema, entry/value arrays, string pool, and error output:
+
+```c
+typedef struct {
+    cfgpack_schema_t *out_schema;       /* Output schema to populate */
+    cfgpack_entry_t *entries;           /* Caller-provided entry array */
+    size_t max_entries;                 /* Capacity of entries array */
+    cfgpack_value_t *values;           /* Caller-provided values array */
+    char *str_pool;                     /* Caller-provided string pool */
+    size_t str_pool_cap;               /* Capacity of string pool in bytes */
+    uint16_t *str_offsets;             /* Caller-provided string offset array */
+    size_t str_offsets_count;          /* Number of string offset slots */
+    cfgpack_parse_error_t *err;        /* Output parse error details */
+} cfgpack_parse_opts_t;
+```
+
 ### Schema Measurement (Pre-Parse)
 
 Use the measure functions to determine buffer sizes **before** parsing, without allocating any output buffers. This is the recommended approach when schema size is not known at compile time (e.g., loading from external storage). The measure pass requires only ~32 bytes of stack vs ~8KB for a full discovery parse into oversized buffers.
@@ -122,7 +140,7 @@ cfgpack_err_t cfgpack_schema_measure_msgpack(const uint8_t *data, size_t data_le
                                              cfgpack_parse_error_t *err);
 ```
 
-Both functions validate structure, types, reserved index 0, name length, and default values. Duplicate checking (which requires O(n) storage) is deferred to the subsequent `cfgpack_parse_schema()` / `cfgpack_schema_parse_json()` / `cfgpack_schema_parse_msgpack()` call.
+All three functions validate structure, types, reserved index 0, name length, and default values. Duplicate checking (which requires O(n) storage) is deferred to the subsequent parse call.
 
 After measuring, allocate exact-sized buffers and parse:
 
@@ -135,9 +153,18 @@ cfgpack_value_t *values    = malloc(m.entry_count * sizeof(cfgpack_value_t));
 char            *str_pool  = malloc(m.str_pool_size);
 uint16_t        *str_off   = malloc((m.str_count + m.fstr_count) * sizeof(uint16_t));
 
-cfgpack_parse_schema(data, len, &schema, entries, m.entry_count,
-                     values, str_pool, m.str_pool_size,
-                     str_off, m.str_count + m.fstr_count, &err);
+cfgpack_parse_opts_t opts = {
+    .out_schema       = &schema,
+    .entries          = entries,
+    .max_entries      = m.entry_count,
+    .values           = values,
+    .str_pool         = str_pool,
+    .str_pool_cap     = m.str_pool_size,
+    .str_offsets      = str_off,
+    .str_offsets_count = m.str_count + m.fstr_count,
+    .err              = &err,
+};
+cfgpack_parse_schema(data, len, &opts);
 ```
 
 ### Parsing and Serialization
@@ -147,27 +174,15 @@ Default values are written directly into the caller-provided `values` array and 
 ```c
 /* Parse schema from .map buffer */
 cfgpack_err_t cfgpack_parse_schema(const char *data, size_t data_len,
-                                   cfgpack_schema_t *out, cfgpack_entry_t *entries,
-                                   size_t max_entries, cfgpack_value_t *values,
-                                   char *str_pool, size_t str_pool_cap,
-                                   uint16_t *str_offsets, size_t str_offsets_count,
-                                   cfgpack_parse_error_t *err);
+                                   const cfgpack_parse_opts_t *opts);
 
 /* Parse schema from JSON buffer */
 cfgpack_err_t cfgpack_schema_parse_json(const char *data, size_t data_len,
-                                        cfgpack_schema_t *out, cfgpack_entry_t *entries,
-                                        size_t max_entries, cfgpack_value_t *values,
-                                        char *str_pool, size_t str_pool_cap,
-                                        uint16_t *str_offsets, size_t str_offsets_count,
-                                        cfgpack_parse_error_t *err);
+                                        const cfgpack_parse_opts_t *opts);
 
 /* Parse schema from MessagePack binary buffer */
 cfgpack_err_t cfgpack_schema_parse_msgpack(const uint8_t *data, size_t data_len,
-                                           cfgpack_schema_t *out, cfgpack_entry_t *entries,
-                                           size_t max_entries, cfgpack_value_t *values,
-                                           char *str_pool, size_t str_pool_cap,
-                                           uint16_t *str_offsets, size_t str_offsets_count,
-                                           cfgpack_parse_error_t *err);
+                                           const cfgpack_parse_opts_t *opts);
 
 /* Write schema and current values to JSON buffer */
 cfgpack_err_t cfgpack_schema_write_json(const cfgpack_ctx_t *ctx,
@@ -344,8 +359,18 @@ uint16_t str_offsets[128];
 uint8_t scratch[4096];
 
 /* Parse schema — defaults are written directly into values[] and str_pool[] */
-cfgpack_parse_schema(map_data, map_len, &schema, entries, 128,
-                     values, str_pool, sizeof(str_pool), str_offsets, 128, &err);
+cfgpack_parse_opts_t opts = {
+    .out_schema       = &schema,
+    .entries          = entries,
+    .max_entries      = 128,
+    .values           = values,
+    .str_pool         = str_pool,
+    .str_pool_cap     = sizeof(str_pool),
+    .str_offsets      = str_offsets,
+    .str_offsets_count = 128,
+    .err              = &err,
+};
+cfgpack_parse_schema(map_data, map_len, &opts);
 
 /* Initialize context — values and str_pool already contain defaults from parsing */
 cfgpack_ctx_t ctx;
@@ -393,9 +418,18 @@ uint16_t        *str_off  = malloc((m.str_count + m.fstr_count) * sizeof(uint16_
 
 /* 3. Parse into exact-sized buffers */
 cfgpack_schema_t schema;
-cfgpack_parse_schema(map_data, map_len, &schema, entries, m.entry_count,
-                     values, str_pool, m.str_pool_size,
-                     str_off, m.str_count + m.fstr_count, &err);
+cfgpack_parse_opts_t opts = {
+    .out_schema        = &schema,
+    .entries           = entries,
+    .max_entries       = m.entry_count,
+    .values            = values,
+    .str_pool          = str_pool,
+    .str_pool_cap      = m.str_pool_size,
+    .str_offsets       = str_off,
+    .str_offsets_count = m.str_count + m.fstr_count,
+    .err               = &err,
+};
+cfgpack_parse_schema(map_data, map_len, &opts);
 
 /* 4. Initialize context — identical to the static example from here on */
 cfgpack_ctx_t ctx;
@@ -403,7 +437,7 @@ cfgpack_init(&ctx, &schema, values, m.entry_count,
              str_pool, m.str_pool_size, str_off, m.str_count + m.fstr_count);
 ```
 
-The same pattern works with `cfgpack_schema_measure_json()` for JSON schemas and `cfgpack_schema_measure_msgpack()` for MessagePack binary schemas.
+The same pattern works with `cfgpack_schema_measure_json()` / `cfgpack_schema_parse_json()` for JSON schemas and `cfgpack_schema_measure_msgpack()` / `cfgpack_schema_parse_msgpack()` for MessagePack binary schemas.
 
 ## File I/O Wrappers (Optional)
 
@@ -426,23 +460,13 @@ cfgpack_err_t cfgpack_schema_measure_json_file(const char *path,
 
 /* Parse a .map schema from a file */
 cfgpack_err_t cfgpack_parse_schema_file(const char *path,
-                                        cfgpack_schema_t *out_schema,
-                                        cfgpack_entry_t *entries, size_t max_entries,
-                                        cfgpack_value_t *values,
-                                        char *str_pool, size_t str_pool_cap,
-                                        uint16_t *str_offsets, size_t str_offsets_count,
-                                        char *scratch, size_t scratch_cap,
-                                        cfgpack_parse_error_t *err);
+                                        const cfgpack_parse_opts_t *opts,
+                                        char *scratch, size_t scratch_cap);
 
 /* Parse a JSON schema from a file */
 cfgpack_err_t cfgpack_schema_parse_json_file(const char *path,
-                                             cfgpack_schema_t *out_schema,
-                                             cfgpack_entry_t *entries, size_t max_entries,
-                                             cfgpack_value_t *values,
-                                             char *str_pool, size_t str_pool_cap,
-                                             uint16_t *str_offsets, size_t str_offsets_count,
-                                             char *scratch, size_t scratch_cap,
-                                             cfgpack_parse_error_t *err);
+                                             const cfgpack_parse_opts_t *opts,
+                                             char *scratch, size_t scratch_cap);
 
 /* Write schema and values as JSON to a file */
 cfgpack_err_t cfgpack_schema_write_json_file(const cfgpack_ctx_t *ctx, const char *path,

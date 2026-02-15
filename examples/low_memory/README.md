@@ -37,10 +37,18 @@ values      = malloc(m.entry_count * sizeof(cfgpack_value_t));
 str_pool    = malloc(m.str_pool_size);
 str_offsets = malloc((m.str_count + m.fstr_count) * sizeof(uint16_t));
 
-cfgpack_parse_schema(map_data, map_len, &schema,
-                     entries, m.entry_count, values,
-                     str_pool, m.str_pool_size,
-                     str_offsets, m.str_count + m.fstr_count, &err);
+cfgpack_parse_opts_t opts = {
+    .out_schema        = &schema,
+    .entries           = entries,
+    .max_entries       = m.entry_count,
+    .values            = values,
+    .str_pool          = str_pool,
+    .str_pool_cap      = m.str_pool_size,
+    .str_offsets       = str_offsets,
+    .str_offsets_count = m.str_count + m.fstr_count,
+    .err               = &err,
+};
+cfgpack_parse_schema(map_data, map_len, &opts);
 
 cfgpack_init(&ctx, &schema, values, m.entry_count,
              str_pool, m.str_pool_size,

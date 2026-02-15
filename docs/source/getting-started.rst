@@ -19,8 +19,18 @@ Include just ``cfgpack/cfgpack.h``; it re-exports the public API surface.
    uint8_t scratch[4096];
 
    // Parse schema — defaults are written directly into values[] and str_pool[]
-   cfgpack_parse_schema(map_data, map_len, &schema, entries, 128,
-                        values, str_pool, sizeof(str_pool), str_offsets, 128, &err);
+   cfgpack_parse_opts_t opts = {
+       .out_schema       = &schema,
+       .entries          = entries,
+       .max_entries      = 128,
+       .values           = values,
+       .str_pool         = str_pool,
+       .str_pool_cap     = sizeof(str_pool),
+       .str_offsets      = str_offsets,
+       .str_offsets_count = 128,
+       .err              = &err,
+   };
+   cfgpack_parse_schema(map_data, map_len, &opts);
 
    // Initialize runtime context — values and str_pool already contain defaults
    cfgpack_ctx_t ctx;
