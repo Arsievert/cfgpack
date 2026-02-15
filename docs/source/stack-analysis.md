@@ -84,9 +84,9 @@ Run `make stack-usage-O0` or `make stack-usage-Os` to reproduce these measuremen
 | `cfgpack_schema_measure` | 896 | 816 | Pre-parse measurement |
 | `cfgpack_schema_measure_json` | 544 | 368 | JSON pre-parse measurement |
 | `cfgpack_schema_write_json` | 144 | 160 | JSON schema writer |
-| `cfgpack_schema_measure_msgpack` | 288 | 240 | Msgpack pre-parse measurement |
-| `cfgpack_schema_parse_msgpack` | 736 | 496 | Msgpack schema parser |
-| `cfgpack_schema_write_msgpack` | 192 | 128 | Msgpack schema writer |
+| `cfgpack_schema_measure_msgpack` | 208 | 176 | Msgpack pre-parse measurement |
+| `cfgpack_schema_parse_msgpack` | 656 | 448 | Msgpack schema parser |
+| `cfgpack_schema_write_msgpack` | 176 | 128 | Msgpack schema writer |
 | `cfgpack_schema_get_sizing` | 64 | 0 | |
 | `cfgpack_schema_free` | 16 | 0 | |
 
@@ -130,9 +130,9 @@ computed by summing frame sizes along the deepest call chain.
 | `cfgpack_init` | ~128 B | ~0 B |
 | `cfgpack_parse_schema` | ~1,408 B | ~880 B |
 | `cfgpack_schema_parse_json` | ~1,104 B | ~576 B |
-| `cfgpack_schema_parse_msgpack` | ~736 B | ~496 B |
+| `cfgpack_schema_parse_msgpack` | ~656 B | ~448 B |
 | `cfgpack_schema_measure` | ~896 B | ~816 B |
-| `cfgpack_schema_measure_msgpack` | ~288 B | ~240 B |
+| `cfgpack_schema_measure_msgpack` | ~208 B | ~176 B |
 
 ## Configuration Knobs Affecting Stack Usage
 
