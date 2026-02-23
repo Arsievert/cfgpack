@@ -12,6 +12,8 @@
 
 #include <stddef.h>
 
+#include "cfgpack/error.h"
+
 /**
  * @brief Write buffer that tracks total bytes needed, even when overflowing.
  *
@@ -107,5 +109,20 @@ void wbuf_put_double(wbuf_t *w, double val);
  * @param val Value to format.
  */
 void wbuf_put_float(wbuf_t *w, float val);
+
+/**
+ * @brief Append @p n bytes from @p src, failing on overflow.
+ *
+ * Unlike @ref wbuf_append, this function does @b not perform partial writes.
+ * If the data does not fit, the buffer is left unchanged and an error is
+ * returned.  This is intended for binary serialization (e.g. MessagePack)
+ * where truncation would produce corrupt output.
+ *
+ * @param w   Write buffer.
+ * @param src Source data to append.
+ * @param n   Number of bytes to append.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_ENCODE if capacity exceeded.
+ */
+cfgpack_err_t wbuf_try_append(wbuf_t *w, const void *src, size_t n);
 
 #endif /* _WBUF_H_ */

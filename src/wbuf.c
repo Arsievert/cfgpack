@@ -116,3 +116,13 @@ void wbuf_put_float(wbuf_t *w, float val) {
     wbuf_put_double(w, (double)val);
 #endif
 }
+
+/** @copydoc wbuf_try_append */
+cfgpack_err_t wbuf_try_append(wbuf_t *w, const void *src, size_t n) {
+    if (w->len + n > w->cap) {
+        return (CFGPACK_ERR_ENCODE);
+    }
+    memcpy(w->buf + w->len, src, n);
+    w->len += n;
+    return (CFGPACK_OK);
+}

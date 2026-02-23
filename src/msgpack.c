@@ -1,24 +1,18 @@
 #include "cfgpack/msgpack.h"
 
 #include "cfgpack/config.h"
+#include "wbuf.h"
 
 #include <string.h>
 
 void cfgpack_buf_init(cfgpack_buf_t *buf, uint8_t *storage, size_t cap) {
-    buf->data = storage;
-    buf->len = 0;
-    buf->cap = cap;
+    wbuf_init((wbuf_t *)buf, (char *)storage, cap);
 }
 
 cfgpack_err_t cfgpack_buf_append(cfgpack_buf_t *buf,
                                  const void *src,
                                  size_t len) {
-    if (buf->len + len > buf->cap) {
-        return (CFGPACK_ERR_ENCODE);
-    }
-    memcpy(buf->data + buf->len, src, len);
-    buf->len += len;
-    return (CFGPACK_OK);
+    return wbuf_try_append((wbuf_t *)buf, src, len);
 }
 
 cfgpack_err_t cfgpack_msgpack_encode_uint64(cfgpack_buf_t *buf, uint64_t v) {

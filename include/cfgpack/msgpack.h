@@ -19,8 +19,8 @@
  */
 typedef struct {
     uint8_t *data;
-    size_t len;
     size_t cap;
+    size_t len;
 } cfgpack_buf_t;
 
 /**
