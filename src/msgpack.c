@@ -586,6 +586,9 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
             if (count == 0) {
                 goto value_done;
             }
+            if (count > UINT32_MAX / 2) {
+                return CFGPACK_ERR_DECODE;
+            }
             if (depth + 1 >= CFGPACK_SKIP_MAX_DEPTH) {
                 return CFGPACK_ERR_DECODE;
             }

@@ -20,6 +20,7 @@ A MessagePack-based configuration library for embedded systems.
 - [Schema Versioning](docs/source/versioning.md) — Version detection, migration, and type widening
 - [Compression](docs/source/compression.md) — LZ4/heatshrink decompression support
 - [Stack Analysis](docs/source/stack-analysis.md) — Per-function stack frame sizes for embedded budgeting
+- [Fuzz Testing](docs/source/fuzz-testing.md) — libFuzzer harnesses for parser and decode robustness
 
 ## Map Format
 
@@ -131,6 +132,34 @@ Running tests...
 
 TOTAL: 152/152 passed
 ```
+
+### Fuzz Testing
+
+Five [libFuzzer](https://llvm.org/docs/LibFuzzer.html) harnesses exercise the parsers and decode paths with randomized input. AddressSanitizer and UndefinedBehaviorSanitizer are enabled by default.
+
+**Prerequisites (macOS):** Apple Clang does not ship libFuzzer. Install Homebrew LLVM:
+```bash
+brew install llvm
+```
+The build auto-detects Homebrew LLVM when the default `clang` lacks libFuzzer support.
+
+**Build and run:**
+```bash
+make fuzz                  # build harnesses + generate seed corpus
+scripts/run-fuzz.sh        # 60s per target (default)
+scripts/run-fuzz.sh 10     # 10s per target
+scripts/run-fuzz.sh 0      # run indefinitely (Ctrl-C to stop)
+```
+
+| Target | What it fuzzes |
+|--------|----------------|
+| `fuzz_parse_map` | `.map` text schema parser |
+| `fuzz_parse_json` | JSON schema parser |
+| `fuzz_parse_msgpack` | MessagePack binary schema parser |
+| `fuzz_pagein` | `cfgpack_pagein_buf()` against a fixed schema |
+| `fuzz_msgpack_decode` | All low-level msgpack decode functions |
+
+See [Fuzz Testing](docs/source/fuzz-testing.md) for detailed documentation on the harness architecture, seed corpus generation, and crash investigation.
 
 ## Examples
 

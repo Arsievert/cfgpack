@@ -165,6 +165,9 @@ format-check: ## Check formatting without modifying files
 
 clean: ## Remove build artifacts
 	-@$(RM) -rvf -- $(BUILD) compile_commands.json .cache
+	-@$(RM) -rf -- tests/fuzz/corpus_map/* tests/fuzz/corpus_json/* \
+		tests/fuzz/corpus_msgpack/* tests/fuzz/corpus_pagein/* \
+		tests/fuzz/corpus_decode/* tests/fuzz/build/*
 
 clean-docs: ## Remove generated documentation
 	-@$(RM) -rf -- $(BUILD)/docs docs/.venv
@@ -172,6 +175,10 @@ clean-docs: ## Remove generated documentation
 help: ## List targets with descriptions
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9][^:]*:.*##/ {printf "%-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
+# --- Fuzz targets (delegated to tests/fuzz/Makefile) ---------------------------
+fuzz: ## Build all fuzz harnesses (requires clang with libFuzzer)
+	@$(MAKE) -C tests/fuzz fuzz ROOT=$(CURDIR) BUILD=$(CURDIR)/$(BUILD) OUT=$(CURDIR)/$(OUT) CC=$(CC)
+
 # --- Phony / Includes ---------------------------------------------------------
-.PHONY: all tests clean clean-docs help docs tools format format-check compile_commands
+.PHONY: all tests clean clean-docs help docs tools format format-check compile_commands fuzz
 -include $(DEPS)

@@ -2206,19 +2206,35 @@ static cfgpack_err_t parse_schema_msgpack_impl(
         cfgpack_reader_t *rp = &r2;
 
         uint32_t top2;
-        cfgpack_msgpack_decode_map_header(rp, &top2);
+        rc = cfgpack_msgpack_decode_map_header(rp, &top2);
+        if (rc != CFGPACK_OK) {
+            set_err(err, 0, "phase2 decode error");
+            return CFGPACK_ERR_DECODE;
+        }
 
         for (uint32_t ti = 0; ti < top2; ++ti) {
             uint64_t tkey;
-            cfgpack_msgpack_decode_uint64(rp, &tkey);
+            rc = cfgpack_msgpack_decode_uint64(rp, &tkey);
+            if (rc != CFGPACK_OK) {
+                set_err(err, 0, "phase2 decode error");
+                return CFGPACK_ERR_DECODE;
+            }
 
             if (tkey == MP_SCHEMA_KEY_ENTRIES) {
                 uint32_t arr_count;
-                mp_decode_array_header(rp, &arr_count);
+                rc = mp_decode_array_header(rp, &arr_count);
+                if (rc != CFGPACK_OK) {
+                    set_err(err, 0, "phase2 decode error");
+                    return CFGPACK_ERR_DECODE;
+                }
 
                 for (uint32_t ei = 0; ei < arr_count; ++ei) {
                     uint32_t ecount;
-                    cfgpack_msgpack_decode_map_header(rp, &ecount);
+                    rc = cfgpack_msgpack_decode_map_header(rp, &ecount);
+                    if (rc != CFGPACK_OK) {
+                        set_err(err, 0, "phase2 decode error");
+                        return CFGPACK_ERR_DECODE;
+                    }
 
                     uint16_t entry_index = 0;
                     cfgpack_type_t entry_type = CFGPACK_TYPE_U8;
@@ -2237,19 +2253,35 @@ static cfgpack_err_t parse_schema_msgpack_impl(
 
                     for (uint32_t ek = 0; ek < ecount; ++ek) {
                         uint64_t ekey;
-                        cfgpack_msgpack_decode_uint64(rp, &ekey);
+                        rc = cfgpack_msgpack_decode_uint64(rp, &ekey);
+                        if (rc != CFGPACK_OK) {
+                            set_err(err, 0, "phase2 decode error");
+                            return CFGPACK_ERR_DECODE;
+                        }
 
                         if (ekey == MP_ENTRY_KEY_INDEX) {
                             uint64_t idx;
-                            cfgpack_msgpack_decode_uint64(rp, &idx);
+                            rc = cfgpack_msgpack_decode_uint64(rp, &idx);
+                            if (rc != CFGPACK_OK) {
+                                set_err(err, 0, "phase2 decode error");
+                                return CFGPACK_ERR_DECODE;
+                            }
                             entry_index = (uint16_t)idx;
                         } else if (ekey == MP_ENTRY_KEY_NAME) {
                             const uint8_t *np;
                             uint32_t nl;
-                            cfgpack_msgpack_decode_str(rp, &np, &nl);
+                            rc = cfgpack_msgpack_decode_str(rp, &np, &nl);
+                            if (rc != CFGPACK_OK) {
+                                set_err(err, 0, "phase2 decode error");
+                                return CFGPACK_ERR_DECODE;
+                            }
                         } else if (ekey == MP_ENTRY_KEY_TYPE) {
                             uint64_t type_val;
-                            cfgpack_msgpack_decode_uint64(rp, &type_val);
+                            rc = cfgpack_msgpack_decode_uint64(rp, &type_val);
+                            if (rc != CFGPACK_OK) {
+                                set_err(err, 0, "phase2 decode error");
+                                return CFGPACK_ERR_DECODE;
+                            }
                             if (type_val < MP_TYPE_COUNT) {
                                 entry_type = (cfgpack_type_t)type_val;
                             }
@@ -2258,26 +2290,48 @@ static cfgpack_err_t parse_schema_msgpack_impl(
                                 rp->data[rp->pos] == 0xC0) {
                                 rp->pos++;
                                 /* no default */
+                            } else if (rp->pos >= rp->len) {
+                                set_err(err, 0, "truncated default value");
+                                return CFGPACK_ERR_DECODE;
                             } else {
                                 entry_has_default = 1;
                                 uint8_t vb = rp->data[rp->pos];
                                 if (vb == 0xCA) {
-                                    cfgpack_msgpack_decode_f32(rp, &def_f32);
+                                    rc = cfgpack_msgpack_decode_f32(rp,
+                                                                    &def_f32);
+                                    if (rc != CFGPACK_OK) {
+                                        set_err(err, 0, "phase2 decode error");
+                                        return CFGPACK_ERR_DECODE;
+                                    }
                                     def_is_f32 = 1;
                                 } else if (vb == 0xCB) {
-                                    cfgpack_msgpack_decode_f64(rp, &def_f64);
+                                    rc = cfgpack_msgpack_decode_f64(rp,
+                                                                    &def_f64);
+                                    if (rc != CFGPACK_OK) {
+                                        set_err(err, 0, "phase2 decode error");
+                                        return CFGPACK_ERR_DECODE;
+                                    }
                                     def_is_f64 = 1;
                                 } else if ((vb & 0xE0) == 0xE0 || vb == 0xD0 ||
                                            vb == 0xD1 || vb == 0xD2 ||
                                            vb == 0xD3) {
-                                    cfgpack_msgpack_decode_int64(rp, &def_i64);
+                                    rc = cfgpack_msgpack_decode_int64(rp,
+                                                                      &def_i64);
+                                    if (rc != CFGPACK_OK) {
+                                        set_err(err, 0, "phase2 decode error");
+                                        return CFGPACK_ERR_DECODE;
+                                    }
                                     def_is_int = 1;
                                 } else if ((vb & 0xE0) == 0xA0 || vb == 0xD9 ||
                                            vb == 0xDA || vb == 0xDB) {
                                     const uint8_t *sptr;
                                     uint32_t slen;
-                                    cfgpack_msgpack_decode_str(rp, &sptr,
-                                                               &slen);
+                                    rc = cfgpack_msgpack_decode_str(rp, &sptr,
+                                                                    &slen);
+                                    if (rc != CFGPACK_OK) {
+                                        set_err(err, 0, "phase2 decode error");
+                                        return CFGPACK_ERR_DECODE;
+                                    }
                                     has_string_default = 1;
                                     fat.type = entry_type;
                                     if (entry_type == CFGPACK_TYPE_FSTR) {
@@ -2298,12 +2352,21 @@ static cfgpack_err_t parse_schema_msgpack_impl(
                                         fat.v.str.data[slen] = '\0';
                                     }
                                 } else {
-                                    cfgpack_msgpack_decode_uint64(rp, &def_u64);
+                                    rc = cfgpack_msgpack_decode_uint64(
+                                        rp, &def_u64);
+                                    if (rc != CFGPACK_OK) {
+                                        set_err(err, 0, "phase2 decode error");
+                                        return CFGPACK_ERR_DECODE;
+                                    }
                                     def_is_uint = 1;
                                 }
                             }
                         } else {
-                            cfgpack_msgpack_skip_value(rp);
+                            rc = cfgpack_msgpack_skip_value(rp);
+                            if (rc != CFGPACK_OK) {
+                                set_err(err, 0, "phase2 decode error");
+                                return CFGPACK_ERR_DECODE;
+                            }
                         }
                     }
 
@@ -2334,7 +2397,11 @@ static cfgpack_err_t parse_schema_msgpack_impl(
                     }
                 }
             } else {
-                cfgpack_msgpack_skip_value(rp);
+                rc = cfgpack_msgpack_skip_value(rp);
+                if (rc != CFGPACK_OK) {
+                    set_err(err, 0, "phase2 decode error");
+                    return CFGPACK_ERR_DECODE;
+                }
             }
         }
     }

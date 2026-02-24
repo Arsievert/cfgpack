@@ -16,6 +16,7 @@ Hard caps: max 128 schema entries.
    versioning
    compression
    stack-analysis
+   fuzz-testing
 
 Features
 --------
