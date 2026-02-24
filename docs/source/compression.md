@@ -68,7 +68,19 @@ make tools
 
 Where `<algorithm>` is either `lz4` or `heatshrink`.
 
-Example:
+### Output Formats
+
+- **LZ4**: The output file contains a 4-byte little-endian original (uncompressed) size header followed by the LZ4-compressed data:
+  ```
+  [0..3]  4-byte little-endian original size
+  [4..N]  LZ4-compressed data
+  ```
+  This header is required because LZ4 decompression needs to know the output buffer size. The `examples/fleet_gateway/` example demonstrates reading this format at runtime.
+
+- **Heatshrink**: The output file contains raw compressed data only (no header). Heatshrink is a streaming decoder and does not require the original size up front.
+
+### Examples
+
 ```bash
 # Compress a serialized config blob
 ./build/out/cfgpack-compress lz4 config.bin config.lz4

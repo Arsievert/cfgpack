@@ -9,12 +9,10 @@ A MessagePack-based configuration library for embedded systems.
 - Defines a fixed-cap schema (up to 128 entries) with typed values (u/i 8–64, f32/f64, str/fstr) and 5-char names.
 - Parses `.map`, JSON, and MessagePack binary schemas into caller-owned buffers; no heap allocations.
 - Supports **default values** for schema entries, automatically applied at initialization.
-- Initializes runtime with caller-provided value and presence buffers; tracks presence bits and supports set/get/print/size/version.
 - Supports set/get by index and by schema name with type/length validation.
 - Encodes/decodes MessagePack maps; pageout to buffer or file, pagein from buffer or file, with size caps.
 - **Schema versioning**: Embeds schema name in serialized blobs for version detection.
 - **Remapping**: Migrates config between schema versions with index remapping, type widening, and automatic default restoration for new entries.
-- Returns explicit errors for parse/encode/decode/type/bounds/IO issues.
 
 ## Documentation
 
@@ -33,7 +31,6 @@ A MessagePack-based configuration library for embedded systems.
   - `DEFAULT`: default value for this entry (see below)
   - `# description`: optional trailing comment for documentation (not stored in binary)
 - Comments: lines starting with `#` are ignored; inline `#` comments after the default value are also ignored.
-- Hard caps in this profile: 128 entries.
 
 ### Default Values
 
@@ -157,7 +154,7 @@ cd examples/datalogger && make run
 
 ### fleet_gateway
 
-Fleet management gateway demonstrating msgpack binary schemas (pre-compiled from `.map` files via `cfgpack-schema-pack`) and a three-version migration chain (v1 -> v2 -> v3). Uses `cfgpack_schema_measure_msgpack()` for right-sized heap allocation with no static buffer guessing. Covers all five migration scenarios: keep, widen, move, remove, and add.
+Fleet management gateway demonstrating LZ4-compressed msgpack binary schemas (pre-compiled from `.map` files via `cfgpack-schema-pack` and compressed with `cfgpack-compress lz4`) and a three-version migration chain (v1 -> v2 -> v3). Shows runtime LZ4 decompression of schema data before parsing, and uses `cfgpack_schema_measure_msgpack()` for right-sized heap allocation with no static buffer guessing. Covers all five migration scenarios: keep, widen, move, remove, and add.
 
 ```bash
 cd examples/fleet_gateway && make run
