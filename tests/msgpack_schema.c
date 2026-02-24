@@ -821,6 +821,145 @@ TEST_CASE(test_err_str_too_long) {
     return TEST_OK;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 15. Error: float default for FSTR type -> ERR_TYPE_MISMATCH
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_err_type_mismatch_float_for_fstr) {
+    LOG_SECTION("Float default for FSTR type returns ERR_TYPE_MISMATCH");
+
+    /* Build msgpack: schema with one FSTR entry whose default is float32.
+     * This is the exact crash scenario found by the custom mutator fuzzer:
+     * the float32 bits get reinterpreted as fstr.offset/len, causing OOB
+     * reads in pageout. */
+    uint8_t mp[256];
+    cfgpack_buf_t buf;
+    cfgpack_buf_init(&buf, mp, sizeof(mp));
+
+    cfgpack_msgpack_encode_map_header(&buf, 3);
+    cfgpack_msgpack_encode_uint64(&buf, 0); /* key: name */
+    cfgpack_msgpack_encode_str(&buf, "tm", 2);
+    cfgpack_msgpack_encode_uint64(&buf, 1); /* key: version */
+    cfgpack_msgpack_encode_uint64(&buf, 1);
+    cfgpack_msgpack_encode_uint64(&buf, 2); /* key: entries */
+    uint8_t arr = 0x91;                     /* array(1) */
+    cfgpack_buf_append(&buf, &arr, 1);
+    cfgpack_msgpack_encode_map_header(&buf, 4);
+    cfgpack_msgpack_encode_uint64(&buf, 0); /* key: index */
+    cfgpack_msgpack_encode_uint64(&buf, 1);
+    cfgpack_msgpack_encode_uint64(&buf, 1); /* key: name */
+    cfgpack_msgpack_encode_str(&buf, "a", 1);
+    cfgpack_msgpack_encode_uint64(&buf, 2); /* key: type */
+    cfgpack_msgpack_encode_uint64(&buf, CFGPACK_TYPE_FSTR);
+    cfgpack_msgpack_encode_uint64(&buf, 3);  /* key: value */
+    cfgpack_msgpack_encode_f32(&buf, 3.14f); /* WRONG: float for fstr */
+
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[4];
+    cfgpack_value_t values[4];
+    char str_pool[64];
+    uint16_t str_offsets[1];
+    cfgpack_parse_error_t perr;
+
+    cfgpack_parse_opts_t opts = {&schema,     entries,  4,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 1,        &perr};
+    cfgpack_err_t rc = cfgpack_schema_parse_msgpack(mp, buf.len, &opts);
+    CHECK(rc == CFGPACK_ERR_TYPE_MISMATCH);
+    LOG("Correctly returned ERR_TYPE_MISMATCH: %s", perr.message);
+
+    return TEST_OK;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 16. Error: string default for U8 type -> ERR_TYPE_MISMATCH
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_err_type_mismatch_str_for_u8) {
+    LOG_SECTION("String default for U8 type returns ERR_TYPE_MISMATCH");
+
+    uint8_t mp[256];
+    cfgpack_buf_t buf;
+    cfgpack_buf_init(&buf, mp, sizeof(mp));
+
+    cfgpack_msgpack_encode_map_header(&buf, 3);
+    cfgpack_msgpack_encode_uint64(&buf, 0); /* key: name */
+    cfgpack_msgpack_encode_str(&buf, "tm", 2);
+    cfgpack_msgpack_encode_uint64(&buf, 1); /* key: version */
+    cfgpack_msgpack_encode_uint64(&buf, 1);
+    cfgpack_msgpack_encode_uint64(&buf, 2); /* key: entries */
+    uint8_t arr = 0x91;                     /* array(1) */
+    cfgpack_buf_append(&buf, &arr, 1);
+    cfgpack_msgpack_encode_map_header(&buf, 4);
+    cfgpack_msgpack_encode_uint64(&buf, 0); /* key: index */
+    cfgpack_msgpack_encode_uint64(&buf, 1);
+    cfgpack_msgpack_encode_uint64(&buf, 1); /* key: name */
+    cfgpack_msgpack_encode_str(&buf, "b", 1);
+    cfgpack_msgpack_encode_uint64(&buf, 2); /* key: type */
+    cfgpack_msgpack_encode_uint64(&buf, CFGPACK_TYPE_U8);
+    cfgpack_msgpack_encode_uint64(&buf, 3);      /* key: value */
+    cfgpack_msgpack_encode_str(&buf, "oops", 4); /* WRONG: string for u8 */
+
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[4];
+    cfgpack_value_t values[4];
+    char str_pool[64];
+    uint16_t str_offsets[1];
+    cfgpack_parse_error_t perr;
+
+    cfgpack_parse_opts_t opts = {&schema,     entries,  4,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 1,        &perr};
+    cfgpack_err_t rc = cfgpack_schema_parse_msgpack(mp, buf.len, &opts);
+    CHECK(rc == CFGPACK_ERR_TYPE_MISMATCH);
+    LOG("Correctly returned ERR_TYPE_MISMATCH: %s", perr.message);
+
+    return TEST_OK;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 17. Error: integer default for STR type -> ERR_TYPE_MISMATCH
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_err_type_mismatch_int_for_str) {
+    LOG_SECTION("Integer default for STR type returns ERR_TYPE_MISMATCH");
+
+    uint8_t mp[256];
+    cfgpack_buf_t buf;
+    cfgpack_buf_init(&buf, mp, sizeof(mp));
+
+    cfgpack_msgpack_encode_map_header(&buf, 3);
+    cfgpack_msgpack_encode_uint64(&buf, 0); /* key: name */
+    cfgpack_msgpack_encode_str(&buf, "tm", 2);
+    cfgpack_msgpack_encode_uint64(&buf, 1); /* key: version */
+    cfgpack_msgpack_encode_uint64(&buf, 1);
+    cfgpack_msgpack_encode_uint64(&buf, 2); /* key: entries */
+    uint8_t arr = 0x91;                     /* array(1) */
+    cfgpack_buf_append(&buf, &arr, 1);
+    cfgpack_msgpack_encode_map_header(&buf, 4);
+    cfgpack_msgpack_encode_uint64(&buf, 0); /* key: index */
+    cfgpack_msgpack_encode_uint64(&buf, 1);
+    cfgpack_msgpack_encode_uint64(&buf, 1); /* key: name */
+    cfgpack_msgpack_encode_str(&buf, "c", 1);
+    cfgpack_msgpack_encode_uint64(&buf, 2); /* key: type */
+    cfgpack_msgpack_encode_uint64(&buf, CFGPACK_TYPE_STR);
+    cfgpack_msgpack_encode_uint64(&buf, 3);  /* key: value */
+    cfgpack_msgpack_encode_uint64(&buf, 42); /* WRONG: int for str */
+
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[4];
+    cfgpack_value_t values[4];
+    char str_pool[CFGPACK_STR_MAX + 1];
+    uint16_t str_offsets[1];
+    cfgpack_parse_error_t perr;
+
+    cfgpack_parse_opts_t opts = {&schema,     entries,  4,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 1,        &perr};
+    cfgpack_err_t rc = cfgpack_schema_parse_msgpack(mp, buf.len, &opts);
+    CHECK(rc == CFGPACK_ERR_TYPE_MISMATCH);
+    LOG("Correctly returned ERR_TYPE_MISMATCH: %s", perr.message);
+
+    return TEST_OK;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
 int main(void) {
@@ -850,6 +989,15 @@ int main(void) {
     overall |= (test_case_result("err_truncated", test_err_truncated()) !=
                 TEST_OK);
     overall |= (test_case_result("err_str_too_long", test_err_str_too_long()) !=
+                TEST_OK);
+    overall |= (test_case_result("err_type_mismatch_float_for_fstr",
+                                 test_err_type_mismatch_float_for_fstr()) !=
+                TEST_OK);
+    overall |= (test_case_result("err_type_mismatch_str_for_u8",
+                                 test_err_type_mismatch_str_for_u8()) !=
+                TEST_OK);
+    overall |= (test_case_result("err_type_mismatch_int_for_str",
+                                 test_err_type_mismatch_int_for_str()) !=
                 TEST_OK);
 
     if (overall == TEST_OK) {

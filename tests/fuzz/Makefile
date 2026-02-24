@@ -65,6 +65,7 @@ FUZZ_LDFLAGS := -fsanitize=fuzzer,address,undefined $(_EXTRA_LDFLAGS)
 FUZZSRC := fuzz_parse_map.c    \
            fuzz_parse_json.c   \
            fuzz_parse_msgpack.c \
+           fuzz_parse_msgpack_mutator.c \
            fuzz_pagein.c        \
            fuzz_msgpack_decode.c
 FUZZBINS := $(FUZZSRC:%.c=$(OUT)/%)

@@ -24,8 +24,8 @@ BOLD='\033[1m'
 RESET='\033[0m'
 
 # Targets and their corpus directories (parallel lists, same order)
-TARGETS="fuzz_parse_map fuzz_parse_json fuzz_parse_msgpack fuzz_pagein fuzz_msgpack_decode"
-CORPORA="corpus_map corpus_json corpus_msgpack corpus_pagein corpus_decode"
+TARGETS="fuzz_parse_map fuzz_parse_json fuzz_parse_msgpack fuzz_parse_msgpack_mutator fuzz_pagein fuzz_msgpack_decode"
+CORPORA="corpus_map corpus_json corpus_msgpack corpus_msgpack_mutator corpus_pagein corpus_decode"
 
 # Check that fuzz binaries exist
 missing=0

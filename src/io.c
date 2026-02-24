@@ -48,10 +48,16 @@ static cfgpack_err_t encode_value(cfgpack_buf_t *buf,
     case CFGPACK_TYPE_F32: return cfgpack_msgpack_encode_f32(buf, v->v.f32);
     case CFGPACK_TYPE_F64: return cfgpack_msgpack_encode_f64(buf, v->v.f64);
     case CFGPACK_TYPE_STR: {
+        if ((size_t)v->v.str.offset + v->v.str.len > ctx->str_pool_cap) {
+            return CFGPACK_ERR_ENCODE;
+        }
         const char *str = ctx->str_pool + v->v.str.offset;
         return cfgpack_msgpack_encode_str(buf, str, v->v.str.len);
     }
     case CFGPACK_TYPE_FSTR: {
+        if ((size_t)v->v.fstr.offset + v->v.fstr.len > ctx->str_pool_cap) {
+            return CFGPACK_ERR_ENCODE;
+        }
         const char *str = ctx->str_pool + v->v.fstr.offset;
         return cfgpack_msgpack_encode_str(buf, str, v->v.fstr.len);
     }

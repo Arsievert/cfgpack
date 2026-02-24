@@ -125,17 +125,17 @@ Running tests...
   json_remap:    10/10 passed
   measure:       15/15 passed
   msgpack:       16/16 passed
-  msgpack_schema: 14/14 passed
+  msgpack_schema: 17/17 passed
   parser_bounds: 23/23 passed
   parser:        3/3 passed
   runtime:       24/24 passed
 
-TOTAL: 152/152 passed
+TOTAL: 155/155 passed
 ```
 
 ### Fuzz Testing
 
-Five [libFuzzer](https://llvm.org/docs/LibFuzzer.html) harnesses exercise the parsers and decode paths with randomized input. AddressSanitizer and UndefinedBehaviorSanitizer are enabled by default.
+Six [libFuzzer](https://llvm.org/docs/LibFuzzer.html) harnesses exercise the parsers and decode paths with randomized input. AddressSanitizer and UndefinedBehaviorSanitizer are enabled by default.
 
 **Prerequisites (macOS):** Apple Clang does not ship libFuzzer. Install Homebrew LLVM:
 ```bash
@@ -156,6 +156,7 @@ scripts/run-fuzz.sh 0      # run indefinitely (Ctrl-C to stop)
 | `fuzz_parse_map` | `.map` text schema parser |
 | `fuzz_parse_json` | JSON schema parser |
 | `fuzz_parse_msgpack` | MessagePack binary schema parser |
+| `fuzz_parse_msgpack_mutator` | Structure-aware msgpack schema fuzzer (custom mutator) |
 | `fuzz_pagein` | `cfgpack_pagein_buf()` against a fixed schema |
 | `fuzz_msgpack_decode` | All low-level msgpack decode functions |
 

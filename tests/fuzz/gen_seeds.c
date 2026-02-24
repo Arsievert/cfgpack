@@ -7,6 +7,7 @@
  *   - corpus_msgpack/ (msgpack schema blobs)
  *   - corpus_pagein/  (pageout'd config blobs)
  *   - corpus_decode/  (raw msgpack primitives)
+ *   - corpus_msgpack_mutator/ (random byte seeds for custom mutator)
  *
  * Build: make gen-seeds
  * Run:   build/out/gen_seeds   (writes files into tests/fuzz/corpus_xxx/)
@@ -332,6 +333,56 @@ static void gen_decode_seeds(void) {
     write_file("tests/fuzz/corpus_decode/map_nested.bin", storage, buf.len);
 }
 
+/* ── msgpack mutator corpus seeds (random bytes for custom mutator) ───── */
+
+static void gen_msgpack_mutator_seeds(void) {
+    printf("corpus_msgpack_mutator:\n");
+
+    /*
+     * The custom mutator in fuzz_parse_msgpack_mutator.c interprets the
+     * fuzzer input as random bytes that parameterize schema generation.
+     * These seeds don't need to be valid msgpack — they're consumed by
+     * the rng_t reader.  Different byte patterns will exercise different
+     * corruption modes and entry counts.
+     */
+
+    /* Seed 1: all zeros — CORRUPT_NONE mode, minimal params */
+    {
+        uint8_t data[32];
+        memset(data, 0x00, sizeof(data));
+        write_file("tests/fuzz/corpus_msgpack_mutator/zeros.bin", data,
+                   sizeof(data));
+    }
+
+    /* Seed 2: incrementing bytes — exercises sequential corruption modes */
+    {
+        uint8_t data[64];
+        for (size_t i = 0; i < sizeof(data); ++i) {
+            data[i] = (uint8_t)(i & 0xFF);
+        }
+        write_file("tests/fuzz/corpus_msgpack_mutator/incr.bin", data,
+                   sizeof(data));
+    }
+
+    /* Seed 3: high byte values — exercises upper corruption modes */
+    {
+        uint8_t data[48];
+        memset(data, 0xFF, sizeof(data));
+        write_file("tests/fuzz/corpus_msgpack_mutator/high.bin", data,
+                   sizeof(data));
+    }
+
+    /* Seed 4: mixed pattern — alternating bytes for variety */
+    {
+        uint8_t data[48];
+        for (size_t i = 0; i < sizeof(data); ++i) {
+            data[i] = (uint8_t)((i & 1) ? 0xAA : 0x55);
+        }
+        write_file("tests/fuzz/corpus_msgpack_mutator/mixed.bin", data,
+                   sizeof(data));
+    }
+}
+
 /* ── main ───────────────────────────────────────────────────────────────── */
 
 int main(void) {
@@ -344,6 +395,8 @@ int main(void) {
     gen_pagein_seeds();
     printf("\n");
     gen_decode_seeds();
+    printf("\n");
+    gen_msgpack_mutator_seeds();
 
     printf("\nDone.\n");
     return 0;

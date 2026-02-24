@@ -23,6 +23,21 @@ typedef enum {
 } cfgpack_err_t;
 ```
 
+| Code | When returned |
+|------|---------------|
+| `CFGPACK_OK` | Operation succeeded. |
+| `CFGPACK_ERR_PARSE` | General parse failure (malformed `.map` or JSON syntax). |
+| `CFGPACK_ERR_INVALID_TYPE` | Unknown or out-of-range type code in a schema. |
+| `CFGPACK_ERR_DUPLICATE` | Duplicate entry index or name in a schema. |
+| `CFGPACK_ERR_BOUNDS` | Index, length, or count out of range (e.g. string pool too small, entry name > 5 chars). |
+| `CFGPACK_ERR_MISSING` | Requested entry not found or not present in the context. |
+| `CFGPACK_ERR_TYPE_MISMATCH` | Value type incompatible with schema entry: (1) default value wire format does not match declared type during schema parsing (e.g. float default for a string entry), (2) narrowing type coercion during remap (e.g. u16 to u8), or (3) wrong-family wire type at runtime pagein. |
+| `CFGPACK_ERR_STR_TOO_LONG` | String value exceeds `CFGPACK_STR_MAX` (64) or `CFGPACK_FSTR_MAX` (16). |
+| `CFGPACK_ERR_IO` | File I/O failure (read/write error). |
+| `CFGPACK_ERR_ENCODE` | Encoding failure or output buffer too small. Also returned as a defense-in-depth check if a string value's offset/length exceeds the string pool capacity. |
+| `CFGPACK_ERR_DECODE` | Decoding failure or malformed msgpack input. |
+| `CFGPACK_ERR_RESERVED_INDEX` | Attempt to use reserved index 0 (reserved for schema name). |
+
 ## Values
 
 ```c

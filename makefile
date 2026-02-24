@@ -166,7 +166,8 @@ format-check: ## Check formatting without modifying files
 clean: ## Remove build artifacts
 	-@$(RM) -rvf -- $(BUILD) compile_commands.json .cache
 	-@$(RM) -rf -- tests/fuzz/corpus_map/* tests/fuzz/corpus_json/* \
-		tests/fuzz/corpus_msgpack/* tests/fuzz/corpus_pagein/* \
+		tests/fuzz/corpus_msgpack/* tests/fuzz/corpus_msgpack_mutator/* \
+		tests/fuzz/corpus_pagein/* \
 		tests/fuzz/corpus_decode/* tests/fuzz/build/*
 
 clean-docs: ## Remove generated documentation

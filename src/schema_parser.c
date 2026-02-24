@@ -2375,6 +2375,33 @@ static cfgpack_err_t parse_schema_msgpack_impl(
                         continue;
                     }
 
+                    /* Validate type/value compatibility before storing the
+                     * default.  A mismatch (e.g. float wire value for a
+                     * string-type entry) would store bits through the wrong
+                     * union member, leading to OOB reads later in pageout. */
+                    int type_is_str = (entry_type == CFGPACK_TYPE_STR ||
+                                       entry_type == CFGPACK_TYPE_FSTR);
+                    int val_is_str = has_string_default;
+                    int val_is_num = (def_is_uint || def_is_int || def_is_f32 ||
+                                      def_is_f64);
+
+                    if (type_is_str && val_is_num) {
+                        set_err(err, 0,
+                                "default value is numeric but type is string");
+                        return CFGPACK_ERR_TYPE_MISMATCH;
+                    }
+                    if (!type_is_str && val_is_str) {
+                        set_err(err, 0,
+                                "default value is string but type is numeric");
+                        return CFGPACK_ERR_TYPE_MISMATCH;
+                    }
+
+                    /* If no recognized value format was decoded, skip setting
+                     * the default to avoid storing uninitialized data. */
+                    if (!val_is_str && !val_is_num) {
+                        continue;
+                    }
+
                     entries[pos].has_default = 1;
 
                     if (has_string_default &&

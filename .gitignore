@@ -10,3 +10,4 @@ tests/fuzz/corpus_json/
 tests/fuzz/corpus_msgpack/
 tests/fuzz/corpus_pagein/
 tests/fuzz/corpus_decode/
+tests/fuzz/corpus_msgpack_mutator/

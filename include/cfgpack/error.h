@@ -16,7 +16,10 @@ typedef enum {
     CFGPACK_ERR_DUPLICATE = -3,    /**< Duplicate index or name. */
     CFGPACK_ERR_BOUNDS = -4,       /**< Out of bounds (index, length, count). */
     CFGPACK_ERR_MISSING = -5,      /**< Entry or value not present. */
-    CFGPACK_ERR_TYPE_MISMATCH = -6, /**< Value type does not match schema. */
+    CFGPACK_ERR_TYPE_MISMATCH = -6, /**< Value type does not match schema
+                                        (e.g. numeric default for a string
+                                        entry, narrowing coercion, or
+                                        wrong-family wire type at runtime). */
     CFGPACK_ERR_STR_TOO_LONG = -7,  /**< String exceeds fixed limits. */
     CFGPACK_ERR_IO = -8,            /**< I/O failure. */
     CFGPACK_ERR_ENCODE = -9,  /**< Encoding failure or output too small. */
