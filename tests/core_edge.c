@@ -1,6 +1,7 @@
 /* Edge-case tests for core get/set, string pool, and utility functions. */
 
 #include "cfgpack/cfgpack.h"
+
 #include "test.h"
 
 #include <stdio.h>

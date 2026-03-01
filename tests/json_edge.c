@@ -1,6 +1,7 @@
 /* JSON parser/writer error paths and edge cases. */
 
 #include "cfgpack/cfgpack.h"
+
 #include "test.h"
 
 #include <stdio.h>

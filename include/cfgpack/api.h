@@ -14,14 +14,14 @@
  * All functions use caller-provided buffers (no heap allocation).
  */
 
-#include <limits.h>
-#include <stddef.h>
-#include <string.h>
-
 #include "config.h"
 #include "error.h"
 #include "schema.h"
 #include "value.h"
+
+#include <limits.h>
+#include <stddef.h>
+#include <string.h>
 
 /**
  * @brief Reserved index for schema name.

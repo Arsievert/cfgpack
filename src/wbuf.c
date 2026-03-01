@@ -1,7 +1,7 @@
+#include "cfgpack/config.h"
+
 #include <stdint.h>
 #include <string.h>
-
-#include "cfgpack/config.h"
 
 #ifdef CFGPACK_HOSTED
   #include <stdio.h>

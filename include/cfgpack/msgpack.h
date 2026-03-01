@@ -9,10 +9,10 @@
  * by cfgpack. These can also be used directly for custom encoding needs.
  */
 
+#include "error.h"
+
 #include <stddef.h>
 #include <stdint.h>
-
-#include "error.h"
 
 /**
  * @brief Fixed-capacity buffer used for MessagePack encoding.

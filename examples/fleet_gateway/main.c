@@ -26,12 +26,13 @@
  *   [4..N]  LZ4-compressed data
  */
 
+#include "cfgpack/cfgpack.h"
+
+#include "lz4.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include "cfgpack/cfgpack.h"
-#include "lz4.h"
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * Remap tables

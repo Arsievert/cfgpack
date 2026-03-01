@@ -3,11 +3,12 @@
 #include "cfgpack/cfgpack.h"
 #include "cfgpack/io_file.h"
 #include "cfgpack/msgpack.h"
+
 #include "test.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
-#include <math.h>
 
 static void make_schema(cfgpack_schema_t *schema,
                         cfgpack_entry_t *entries,

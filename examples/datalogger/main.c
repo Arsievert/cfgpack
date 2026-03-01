@@ -14,10 +14,10 @@
  * - Round-trip verification
  */
 
+#include "cfgpack/cfgpack.h"
+
 #include <stdio.h>
 #include <string.h>
-
-#include "cfgpack/cfgpack.h"
 
 #define MAX_ENTRIES 16
 

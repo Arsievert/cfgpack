@@ -10,11 +10,11 @@
  * All functions use caller-provided buffers (no heap allocation).
  */
 
+#include "error.h"
+#include "value.h"
+
 #include <stddef.h>
 #include <stdint.h>
-
-#include "value.h"
-#include "error.h"
 
 /**
  * @brief Single entry within a schema.

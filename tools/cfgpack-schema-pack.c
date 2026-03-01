@@ -19,14 +19,14 @@
  *   3 - Parse/encode error
  */
 
+#include "cfgpack/cfgpack.h"
+#include "cfgpack/io_file.h"
+#include "cfgpack/msgpack.h"
+
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
-
-#include "cfgpack/cfgpack.h"
-#include "cfgpack/msgpack.h"
-#include "cfgpack/io_file.h"
 
 #define MAX_INPUT_SIZE (64 * 1024)  /* 64 KB max input */
 #define MAX_OUTPUT_SIZE (64 * 1024) /* 64 KB max output */

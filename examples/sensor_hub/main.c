@@ -14,11 +14,12 @@
  * schema in compressed form (e.g., via OTA update) to minimize flash usage.
  */
 
+#include "cfgpack/cfgpack.h"
+
+#include "heatshrink_decoder.h"
+
 #include <stdio.h>
 #include <string.h>
-
-#include "cfgpack/cfgpack.h"
-#include "heatshrink_decoder.h"
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * Buffer Sizes — right-sized for this schema (66 entries, 3 str + 3 fstr)

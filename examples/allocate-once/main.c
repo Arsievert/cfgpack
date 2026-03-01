@@ -13,11 +13,11 @@
  * known at compile time.
  */
 
+#include "cfgpack/cfgpack.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include "cfgpack/cfgpack.h"
 
 /*---------------------------------------------------------------------------*/
 /* Helper to get type name string */

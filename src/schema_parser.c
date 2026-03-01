@@ -1,16 +1,16 @@
-#include "cfgpack/schema.h"
 #include "cfgpack/api.h"
-#include "cfgpack/error.h"
-#include "cfgpack/value.h"
 #include "cfgpack/config.h"
+#include "cfgpack/error.h"
 #include "cfgpack/msgpack.h"
-
-#include <string.h>
-#include <stdlib.h>
-#include <errno.h>
+#include "cfgpack/schema.h"
+#include "cfgpack/value.h"
 
 #include "tokens.h"
 #include "wbuf.h"
+
+#include <errno.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define MAX_LINE_LEN 256
 

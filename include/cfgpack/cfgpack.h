@@ -15,11 +15,11 @@
  * For file-based convenience wrappers, also include io_file.h.
  * For decompression support (LZ4/heatshrink), also include decompress.h.
  */
-#include "config.h"
-#include "error.h"
-#include "value.h"
-#include "schema.h"
 #include "api.h"
+#include "config.h"
 #include "decompress.h"
+#include "error.h"
+#include "schema.h"
+#include "value.h"
 
 #endif /* CFGPACK_CFGPACK_H */

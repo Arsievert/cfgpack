@@ -8,15 +8,16 @@
 
 #include "cfgpack/cfgpack.h"
 #include "cfgpack/msgpack.h"
+
 #include "test.h"
 
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* Include compression libraries for test data generation */
-#include "lz4.h"
 #include "heatshrink_encoder.h"
+#include "lz4.h"
 
 /* Test buffers */
 #define BUF_SIZE 4096

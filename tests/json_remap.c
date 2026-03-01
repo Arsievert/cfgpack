@@ -7,6 +7,7 @@
 
 #include "cfgpack/cfgpack.h"
 #include "cfgpack/msgpack.h"
+
 #include "test.h"
 
 #include <math.h>

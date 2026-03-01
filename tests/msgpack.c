@@ -1,6 +1,7 @@
 /* Direct unit tests for the MessagePack encode/decode layer. */
 
 #include "cfgpack/msgpack.h"
+
 #include "test.h"
 
 #include <math.h>

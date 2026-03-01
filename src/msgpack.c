@@ -1,6 +1,7 @@
 #include "cfgpack/msgpack.h"
 
 #include "cfgpack/config.h"
+
 #include "wbuf.h"
 
 #include <string.h>

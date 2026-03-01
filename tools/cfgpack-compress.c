@@ -20,13 +20,13 @@
  *   3 - Compression error
  */
 
+#include "heatshrink_encoder.h"
+#include "lz4.h"
+
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
-
-#include "lz4.h"
-#include "heatshrink_encoder.h"
 
 #define MAX_INPUT_SIZE (64 * 1024)  /* 64 KB max input */
 #define MAX_OUTPUT_SIZE (64 * 1024) /* 64 KB max output */

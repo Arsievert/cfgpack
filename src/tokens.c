@@ -1,9 +1,9 @@
-#include <stdint.h>
-#include <string.h>
-#include <stdlib.h>
-#include <stdbool.h>
-
 #include "tokens.h"
+
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 
 /** @copydoc tokens_create */
 int tokens_create(tokens_t *tokens, uint16_t n, char **provided) {

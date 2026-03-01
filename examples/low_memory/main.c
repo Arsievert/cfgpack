@@ -27,11 +27,11 @@
  * string pool sizes.
  */
 
+#include "cfgpack/cfgpack.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include "cfgpack/cfgpack.h"
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * v1 -> v2 remap table

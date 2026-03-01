@@ -1,8 +1,8 @@
 #include "cfgpack/api.h"
-#include "cfgpack/msgpack.h"
 #include "cfgpack/error.h"
-#include "cfgpack/value.h"
+#include "cfgpack/msgpack.h"
 #include "cfgpack/schema.h"
+#include "cfgpack/value.h"
 
 #include <string.h>
 

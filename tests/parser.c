@@ -1,6 +1,7 @@
-#include "cfgpack/schema.h"
 #include "cfgpack/cfgpack.h"
 #include "cfgpack/io_file.h"
+#include "cfgpack/schema.h"
+
 #include "test.h"
 
 #include <stdio.h>

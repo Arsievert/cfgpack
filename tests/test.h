@@ -1,8 +1,8 @@
 #ifndef CFGPACK_TEST_H
 #define CFGPACK_TEST_H
 
-#include <stdio.h>
 #include <inttypes.h>
+#include <stdio.h>
 
 /* ANSI color codes */
 #define COLOR_GREEN "\033[32m"

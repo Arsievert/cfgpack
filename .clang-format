@@ -47,9 +47,16 @@ SpacesInParentheses: false
 SpaceAfterCStyleCast: false
 SpacesBeforeTrailingComments: 1
 
-# Includes — do not reorder
-SortIncludes: Never
-IncludeBlocks: Preserve
+# Includes — auto-sort within semantic groups
+SortIncludes: CaseSensitive
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: '^"cfgpack/'
+    Priority: 1
+  - Regex: '^"'
+    Priority: 2
+  - Regex: '^<'
+    Priority: 3
 
 # Comments — do not reflow (preserves section dividers)
 ReflowComments: false

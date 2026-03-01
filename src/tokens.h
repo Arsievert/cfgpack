@@ -10,9 +10,9 @@
  * allocated index buffers.
  */
 
-#include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 /**
  * @brief In-place string tokenizer state.

@@ -17,11 +17,11 @@
  * Compression must be done externally; only decompression is supported.
  */
 
+#include "api.h"
+#include "error.h"
+
 #include <stddef.h>
 #include <stdint.h>
-
-#include "error.h"
-#include "api.h"
 
 #ifdef CFGPACK_LZ4
 /**

@@ -10,9 +10,9 @@
  * patterns without heap allocation.
  */
 
-#include <stddef.h>
-
 #include "cfgpack/error.h"
+
+#include <stddef.h>
 
 /**
  * @brief Write buffer that tracks total bytes needed, even when overflowing.
