@@ -85,6 +85,12 @@ $(OUT)/fuzz_%: fuzz_%.c $(LIBSRC)
 	@$(CC) $(FUZZ_CFLAGS) $(FUZZ_LDFLAGS) -o $@ $< $(LIBSRC)
 
 gen-seeds: $(GEN_SEEDS)
+	@mkdir -p $(ROOT)/tests/fuzz/corpus_json \
+	          $(ROOT)/tests/fuzz/corpus_msgpack \
+	          $(ROOT)/tests/fuzz/corpus_pagein \
+	          $(ROOT)/tests/fuzz/corpus_decode \
+	          $(ROOT)/tests/fuzz/corpus_msgpack_mutator \
+	          $(ROOT)/tests/fuzz/corpus_map
 	@cd $(ROOT) && $(GEN_SEEDS)
 
 $(GEN_SEEDS): $(GEN_SEEDS_SRC) $(LIBSRC)
