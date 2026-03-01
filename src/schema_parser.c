@@ -664,6 +664,9 @@ static cfgpack_err_t parse_schema_map_impl(const char *data,
     cfgpack_err_t frc;
 
     if (!measuring) {
+        if (!opts || !opts->out_schema || !opts->entries || !opts->values) {
+            return CFGPACK_ERR_ARGS;
+        }
         out_schema = opts->out_schema;
         entries = opts->entries;
         max_entries = opts->max_entries;
@@ -964,6 +967,9 @@ static cfgpack_err_t parse_schema_map_impl(const char *data,
 cfgpack_err_t cfgpack_parse_schema(const char *data,
                                    size_t data_len,
                                    const cfgpack_parse_opts_t *opts) {
+    if (!opts) {
+        return CFGPACK_ERR_ARGS;
+    }
     return parse_schema_map_impl(data, data_len, opts, NULL, opts->err);
 }
 
@@ -1367,6 +1373,9 @@ static cfgpack_err_t parse_schema_json_impl(const char *data,
     cfgpack_err_t frc;
 
     if (!measuring) {
+        if (!opts || !opts->out_schema || !opts->entries || !opts->values) {
+            return CFGPACK_ERR_ARGS;
+        }
         out_schema = opts->out_schema;
         entries = opts->entries;
         max_entries = opts->max_entries;
@@ -1866,6 +1875,9 @@ cfgpack_err_t cfgpack_schema_measure_json(const char *data,
 cfgpack_err_t cfgpack_schema_parse_json(const char *data,
                                         size_t data_len,
                                         const cfgpack_parse_opts_t *opts) {
+    if (!opts) {
+        return CFGPACK_ERR_ARGS;
+    }
     return parse_schema_json_impl(data, data_len, opts, NULL, opts->err);
 }
 
@@ -1991,6 +2003,9 @@ static cfgpack_err_t parse_schema_msgpack_impl(
     int got_name = 0, got_version = 0, got_entries = 0;
 
     if (!measuring) {
+        if (!opts || !opts->out_schema || !opts->entries || !opts->values) {
+            return CFGPACK_ERR_ARGS;
+        }
         out_schema = opts->out_schema;
         entries = opts->entries;
         max_entries = opts->max_entries;
@@ -2525,6 +2540,9 @@ cfgpack_err_t cfgpack_schema_measure_msgpack(const uint8_t *data,
 cfgpack_err_t cfgpack_schema_parse_msgpack(const uint8_t *data,
                                            size_t data_len,
                                            const cfgpack_parse_opts_t *opts) {
+    if (!opts) {
+        return CFGPACK_ERR_ARGS;
+    }
     return parse_schema_msgpack_impl(data, data_len, opts, NULL, opts->err);
 }
 
