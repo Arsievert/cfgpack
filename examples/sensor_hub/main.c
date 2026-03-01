@@ -93,7 +93,7 @@ static int decompress_heatshrink(heatshrink_decoder *hsd,
                                            &sink_count);
         if (sink_res < 0) {
             fprintf(stderr, "Heatshrink sink error: %d\n", sink_res);
-            return -1;
+            return (-1);
         }
         input_consumed += sink_count;
 
@@ -104,13 +104,13 @@ static int decompress_heatshrink(heatshrink_decoder *hsd,
                                                &poll_count);
             if (poll_res < 0) {
                 fprintf(stderr, "Heatshrink poll error: %d\n", poll_res);
-                return -1;
+                return (-1);
             }
             total_output += poll_count;
 
             if (total_output > output_cap) {
                 fprintf(stderr, "Output buffer overflow\n");
-                return -1;
+                return (-1);
             }
         } while (poll_res == HSDR_POLL_MORE);
     }
@@ -120,7 +120,7 @@ static int decompress_heatshrink(heatshrink_decoder *hsd,
         finish_res = heatshrink_decoder_finish(hsd);
         if (finish_res < 0) {
             fprintf(stderr, "Heatshrink finish error: %d\n", finish_res);
-            return -1;
+            return (-1);
         }
 
         /* Poll remaining output */
@@ -130,19 +130,19 @@ static int decompress_heatshrink(heatshrink_decoder *hsd,
                                                &poll_count);
             if (poll_res < 0) {
                 fprintf(stderr, "Heatshrink poll error: %d\n", poll_res);
-                return -1;
+                return (-1);
             }
             total_output += poll_count;
 
             if (total_output > output_cap) {
                 fprintf(stderr, "Output buffer overflow\n");
-                return -1;
+                return (-1);
             }
         } while (poll_res == HSDR_POLL_MORE);
     } while (finish_res == HSDR_FINISH_MORE);
 
     *output_len = total_output;
-    return 0;
+    return (0);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -261,7 +261,7 @@ int main(int argc, char **argv) {
     f = fopen(schema_path, "rb");
     if (!f) {
         fprintf(stderr, "Failed to open %s\n", schema_path);
-        return 1;
+        return (1);
     }
     compressed_len = fread(scratch.load.compressed_buf, 1,
                            sizeof(scratch.load.compressed_buf), f);
@@ -276,7 +276,7 @@ int main(int argc, char **argv) {
                               compressed_len, (uint8_t *)json_buf,
                               sizeof(json_buf) - 1, &json_len) != 0) {
         fprintf(stderr, "Decompression failed\n");
-        return 1;
+        return (1);
     }
     json_buf[json_len] = '\0'; /* NUL-terminate for JSON parser */
 
@@ -302,7 +302,7 @@ int main(int argc, char **argv) {
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Schema parse error at line %zu: %s\n", parse_err.line,
                 parse_err.message);
-        return 1;
+        return (1);
     }
 
     printf("Parsed schema: %s v%u (%zu entries)\n\n", schema.map_name,
@@ -315,7 +315,7 @@ int main(int argc, char **argv) {
                       sizeof(str_pool), str_offsets, NUM_STR_SLOTS);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Init failed: %d\n", rc);
-        return 1;
+        return (1);
     }
 
     printf("--- Initial config (first 10 entries) ---\n");
@@ -413,7 +413,7 @@ int main(int argc, char **argv) {
     rc = cfgpack_pageout(&ctx, storage, sizeof(storage), &storage_len);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Pageout failed: %d\n", rc);
-        return 1;
+        return (1);
     }
 
     printf("--- Serialized to MessagePack (%zu bytes) ---\n", storage_len);
@@ -434,21 +434,21 @@ int main(int argc, char **argv) {
     rc = cfgpack_schema_parse_json(json_buf, json_len, &opts);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Schema re-parse error: %s\n", parse_err.message);
-        return 1;
+        return (1);
     }
 
     rc = cfgpack_init(&ctx, &schema, values, MAX_ENTRIES, str_pool,
                       sizeof(str_pool), str_offsets, NUM_STR_SLOTS);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Re-init failed: %d\n", rc);
-        return 1;
+        return (1);
     }
 
     /* Load from storage (pagein) */
     rc = cfgpack_pagein_buf(&ctx, storage, storage_len);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Pagein failed: %d\n", rc);
-        return 1;
+        return (1);
     }
 
     /* Verify modified values */
@@ -526,7 +526,7 @@ int main(int argc, char **argv) {
                                    &parse_err);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "JSON export failed: %d\n", rc);
-        return 1;
+        return (1);
     }
 
     f = fopen("config.json", "w");
@@ -547,5 +547,5 @@ int main(int argc, char **argv) {
     printf("Compression ratio:  %.1f%%\n", 100.0 * compressed_len / json_len);
     printf("MessagePack config: %zu bytes\n", storage_len);
 
-    return errors;
+    return (errors);
 }

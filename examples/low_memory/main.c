@@ -225,7 +225,7 @@ static int load_schema(const char *path,
     FILE *f = fopen(path, "r");
     if (!f) {
         fprintf(stderr, "Failed to open %s\n", path);
-        return -1;
+        return (-1);
     }
     size_t len = fread(map_buf, 1, sizeof(map_buf) - 1, f);
     fclose(f);
@@ -239,7 +239,7 @@ static int load_schema(const char *path,
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Measure error (%s line %zu): %s\n", path, perr.line,
                 perr.message);
-        return -1;
+        return (-1);
     }
 
     /* Validate against compile-time limit */
@@ -247,7 +247,7 @@ static int load_schema(const char *path,
         fprintf(stderr,
                 "Schema has %zu entries, exceeds CFGPACK_MAX_ENTRIES=%d\n",
                 m.entry_count, CFGPACK_MAX_ENTRIES);
-        return -1;
+        return (-1);
     }
 
     size_t str_off_count = m.str_count + m.fstr_count;
@@ -273,7 +273,7 @@ static int load_schema(const char *path,
         (str_off_count > 0 && !str_offsets)) {
         fprintf(stderr, "malloc failed\n");
         free_buffers();
-        return -1;
+        return (-1);
     }
 
     /* Phase 3: Parse schema into the measured buffers */
@@ -294,7 +294,7 @@ static int load_schema(const char *path,
         fprintf(stderr, "Parse error (%s line %zu): %s\n", path, perr.line,
                 perr.message);
         free_buffers();
-        return -1;
+        return (-1);
     }
 
     /* Phase 4: Initialize context */
@@ -304,11 +304,11 @@ static int load_schema(const char *path,
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Init failed: %d\n", rc);
         free_buffers();
-        return -1;
+        return (-1);
     }
 
     *out_m = m;
-    return 0;
+    return (0);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -332,7 +332,7 @@ int main(void) {
     printf("── Phase 1: Load v1 schema (measure -> allocate -> parse) ───\n\n");
 
     if (load_schema("hvac_v1.map", &schema, &ctx, &m) != 0) {
-        return 1;
+        return (1);
     }
 
     printf("Loaded: %s v%u (%zu entries)\n\n", schema.map_name, schema.version,
@@ -361,7 +361,7 @@ int main(void) {
     rc = cfgpack_pageout(&ctx, flash, sizeof(flash), &flash_len);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Pageout failed: %d\n", rc);
-        return 1;
+        return (1);
     }
     printf("  Serialized %zu entries to %zu bytes of MessagePack\n\n",
            cfgpack_get_size(&ctx), flash_len);
@@ -374,7 +374,7 @@ int main(void) {
     rc = cfgpack_peek_name(flash, flash_len, stored_name, sizeof(stored_name));
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "peek_name failed: %d\n", rc);
-        return 1;
+        return (1);
     }
     printf("  Flash contains schema: \"%s\"\n\n", stored_name);
 
@@ -388,7 +388,7 @@ int main(void) {
     printf("── Phase 4: Load v2 schema (measure -> allocate -> parse) ───\n\n");
 
     if (load_schema("hvac_v2.map", &schema, &ctx, &m) != 0) {
-        return 1;
+        return (1);
     }
 
     printf("Loaded: %s v%u (%zu entries)\n\n", schema.map_name, schema.version,
@@ -415,7 +415,7 @@ int main(void) {
                                   REMAP_COUNT);
         if (rc != CFGPACK_OK) {
             fprintf(stderr, "Remap pagein failed: %d\n", rc);
-            return 1;
+            return (1);
         }
         printf("  Migration successful.\n\n");
     } else {
@@ -423,7 +423,7 @@ int main(void) {
         rc = cfgpack_pagein_buf(&ctx, flash, flash_len);
         if (rc != CFGPACK_OK) {
             fprintf(stderr, "Pagein failed: %d\n", rc);
-            return 1;
+            return (1);
         }
     }
 
@@ -603,5 +603,5 @@ int main(void) {
     }
 
     free_buffers();
-    return fail > 0 ? 1 : 0;
+    return (fail > 0 ? 1 : 0);
 }

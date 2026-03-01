@@ -206,7 +206,7 @@ int main(int argc, char **argv) {
     FILE *f = fopen(map_path, "r");
     if (!f) {
         fprintf(stderr, "Failed to open %s\n", map_path);
-        return 1;
+        return (1);
     }
     size_t map_len = fread(map_buf, 1, sizeof(map_buf) - 1, f);
     fclose(f);
@@ -228,7 +228,7 @@ int main(int argc, char **argv) {
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Schema parse error at line %zu: %s\n", parse_err.line,
                 parse_err.message);
-        return 1;
+        return (1);
     }
     printf("Loaded schema: %s (version %u, %zu entries)\n\n", schema.map_name,
            schema.version, schema.entry_count);
@@ -238,7 +238,7 @@ int main(int argc, char **argv) {
                       sizeof(str_pool), str_offsets, MAX_ENTRIES);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Init failed: %d\n", rc);
-        return 1;
+        return (1);
     }
 
     printf("--- Initial config (defaults) ---\n");
@@ -285,7 +285,7 @@ int main(int argc, char **argv) {
     rc = cfgpack_pageout(&ctx, storage, sizeof(storage), &storage_len);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Pageout failed: %d\n", rc);
-        return 1;
+        return (1);
     }
     printf("--- Serialized to %zu bytes (MessagePack) ---\n", storage_len);
     hexdump(storage, storage_len);
@@ -297,7 +297,7 @@ int main(int argc, char **argv) {
                                    &parse_err);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "JSON export failed: %d\n", rc);
-        return 1;
+        return (1);
     }
     printf("--- Exported to JSON (%zu bytes) ---\n", json_len);
     printf("%s\n", json_buf);
@@ -316,14 +316,14 @@ int main(int argc, char **argv) {
     rc = cfgpack_parse_schema(map_buf, map_len, &opts);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Schema re-parse error: %s\n", parse_err.message);
-        return 1;
+        return (1);
     }
 
     rc = cfgpack_init(&ctx, &schema, values, MAX_ENTRIES, str_pool,
                       sizeof(str_pool), str_offsets, MAX_ENTRIES);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Re-init failed: %d\n", rc);
-        return 1;
+        return (1);
     }
 
     printf("--- After re-init (back to defaults) ---\n");
@@ -333,12 +333,12 @@ int main(int argc, char **argv) {
     rc = cfgpack_pagein_buf(&ctx, storage, storage_len);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Pagein failed: %d\n", rc);
-        return 1;
+        return (1);
     }
 
     printf("--- After pagein (restored from storage) ---\n");
     print_config(&ctx);
 
     printf("Round-trip successful!\n");
-    return 0;
+    return (0);
 }

@@ -20,10 +20,10 @@ int tokens_create(tokens_t *tokens, uint16_t n, char **provided) {
 
     if (tokens->index) {
         tokens->max = n;
-        return 0;
+        return (0);
     }
 
-    return -1;
+    return (-1);
 }
 
 /**
@@ -111,5 +111,5 @@ int tokens_destroy(tokens_t *tokens) {
     tokens->max = 0;
     tokens->owns = false;
 
-    return 0;
+    return (0);
 }

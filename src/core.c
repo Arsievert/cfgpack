@@ -19,7 +19,7 @@ static const cfgpack_entry_t *find_entry(const cfgpack_schema_t *schema,
         size_t mid = lo + (hi - lo) / 2;
         uint16_t mid_idx = schema->entries[mid].index;
         if (mid_idx == index) {
-            return &schema->entries[mid];
+            return (&schema->entries[mid]);
         }
         if (mid_idx < index) {
             lo = mid + 1;
@@ -27,7 +27,7 @@ static const cfgpack_entry_t *find_entry(const cfgpack_schema_t *schema,
             hi = mid;
         }
     }
-    return NULL;
+    return (NULL);
 }
 
 /**
@@ -41,10 +41,10 @@ static const cfgpack_entry_t *find_entry_by_name(const cfgpack_schema_t *schema,
                                                  const char *name) {
     for (size_t i = 0; i < schema->entry_count; ++i) {
         if (strcmp(schema->entries[i].name, name) == 0) {
-            return &schema->entries[i];
+            return (&schema->entries[i]);
         }
     }
-    return NULL;
+    return (NULL);
 }
 
 /**
@@ -77,10 +77,10 @@ static int get_str_slot(const cfgpack_schema_t *schema, size_t entry_off) {
     {
         cfgpack_type_t t = schema->entries[entry_off].type;
         if (t != CFGPACK_TYPE_STR && t != CFGPACK_TYPE_FSTR) {
-            return -1;
+            return (-1);
         }
     }
-    return slot;
+    return (slot);
 }
 
 cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx,
@@ -95,11 +95,11 @@ cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx,
     size_t pool_offset = 0;
 
     if (schema->entry_count > CFGPACK_MAX_ENTRIES) {
-        return CFGPACK_ERR_BOUNDS;
+        return (CFGPACK_ERR_BOUNDS);
     }
 
     if (values_count < schema->entry_count) {
-        return CFGPACK_ERR_BOUNDS;
+        return (CFGPACK_ERR_BOUNDS);
     }
 
     /* Compute string slot offsets and verify pool capacity */
@@ -107,14 +107,14 @@ cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx,
         cfgpack_type_t t = schema->entries[i].type;
         if (t == CFGPACK_TYPE_STR) {
             if (str_slot >= str_offsets_count) {
-                return CFGPACK_ERR_BOUNDS;
+                return (CFGPACK_ERR_BOUNDS);
             }
             str_offsets[str_slot] = (uint16_t)pool_offset;
             str_slot++;
             pool_offset += CFGPACK_STR_MAX + 1;
         } else if (t == CFGPACK_TYPE_FSTR) {
             if (str_slot >= str_offsets_count) {
-                return CFGPACK_ERR_BOUNDS;
+                return (CFGPACK_ERR_BOUNDS);
             }
             str_offsets[str_slot] = (uint16_t)pool_offset;
             str_slot++;
@@ -122,7 +122,7 @@ cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx,
         }
     }
     if (pool_offset > str_pool_cap) {
-        return CFGPACK_ERR_BOUNDS;
+        return (CFGPACK_ERR_BOUNDS);
     }
 
     /* Set up context fields — values and str_pool already contain defaults
@@ -143,7 +143,7 @@ cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx,
         }
     }
 
-    return CFGPACK_OK;
+    return (CFGPACK_OK);
 }
 
 void cfgpack_free(cfgpack_ctx_t *ctx) {
@@ -151,7 +151,7 @@ void cfgpack_free(cfgpack_ctx_t *ctx) {
 }
 
 static int type_matches(cfgpack_type_t expect, const cfgpack_value_t *v) {
-    return expect == v->type;
+    return (expect == v->type);
 }
 
 cfgpack_err_t cfgpack_set(cfgpack_ctx_t *ctx,
@@ -161,26 +161,26 @@ cfgpack_err_t cfgpack_set(cfgpack_ctx_t *ctx,
     size_t off;
 
     if (index == 0) {
-        return CFGPACK_ERR_RESERVED_INDEX;
+        return (CFGPACK_ERR_RESERVED_INDEX);
     }
     entry = find_entry(ctx->schema, index);
     if (!entry) {
-        return CFGPACK_ERR_MISSING;
+        return (CFGPACK_ERR_MISSING);
     }
     if (!type_matches(entry->type, value)) {
-        return CFGPACK_ERR_TYPE_MISMATCH;
+        return (CFGPACK_ERR_TYPE_MISMATCH);
     }
     if (value->type == CFGPACK_TYPE_STR && value->v.str.len > CFGPACK_STR_MAX) {
-        return CFGPACK_ERR_STR_TOO_LONG;
+        return (CFGPACK_ERR_STR_TOO_LONG);
     }
     if (value->type == CFGPACK_TYPE_FSTR &&
         value->v.fstr.len > CFGPACK_FSTR_MAX) {
-        return CFGPACK_ERR_STR_TOO_LONG;
+        return (CFGPACK_ERR_STR_TOO_LONG);
     }
     off = entry_offset(ctx->schema, entry);
     ctx->values[off] = *value;
     cfgpack_presence_set(ctx, off);
-    return CFGPACK_OK;
+    return (CFGPACK_OK);
 }
 
 cfgpack_err_t cfgpack_get(const cfgpack_ctx_t *ctx,
@@ -190,18 +190,18 @@ cfgpack_err_t cfgpack_get(const cfgpack_ctx_t *ctx,
     size_t off;
 
     if (index == 0) {
-        return CFGPACK_ERR_RESERVED_INDEX;
+        return (CFGPACK_ERR_RESERVED_INDEX);
     }
     entry = find_entry(ctx->schema, index);
     if (!entry) {
-        return CFGPACK_ERR_MISSING;
+        return (CFGPACK_ERR_MISSING);
     }
     off = entry_offset(ctx->schema, entry);
     if (!cfgpack_presence_get(ctx, off)) {
-        return CFGPACK_ERR_MISSING;
+        return (CFGPACK_ERR_MISSING);
     }
     *out_value = ctx->values[off];
-    return CFGPACK_OK;
+    return (CFGPACK_OK);
 }
 
 cfgpack_err_t cfgpack_set_by_name(cfgpack_ctx_t *ctx,
@@ -211,22 +211,22 @@ cfgpack_err_t cfgpack_set_by_name(cfgpack_ctx_t *ctx,
     size_t off;
 
     if (!entry) {
-        return CFGPACK_ERR_MISSING;
+        return (CFGPACK_ERR_MISSING);
     }
     if (!type_matches(entry->type, value)) {
-        return CFGPACK_ERR_TYPE_MISMATCH;
+        return (CFGPACK_ERR_TYPE_MISMATCH);
     }
     if (value->type == CFGPACK_TYPE_STR && value->v.str.len > CFGPACK_STR_MAX) {
-        return CFGPACK_ERR_STR_TOO_LONG;
+        return (CFGPACK_ERR_STR_TOO_LONG);
     }
     if (value->type == CFGPACK_TYPE_FSTR &&
         value->v.fstr.len > CFGPACK_FSTR_MAX) {
-        return CFGPACK_ERR_STR_TOO_LONG;
+        return (CFGPACK_ERR_STR_TOO_LONG);
     }
     off = entry_offset(ctx->schema, entry);
     ctx->values[off] = *value;
     cfgpack_presence_set(ctx, off);
-    return CFGPACK_OK;
+    return (CFGPACK_OK);
 }
 
 cfgpack_err_t cfgpack_get_by_name(const cfgpack_ctx_t *ctx,
@@ -236,14 +236,14 @@ cfgpack_err_t cfgpack_get_by_name(const cfgpack_ctx_t *ctx,
     size_t off;
 
     if (!entry) {
-        return CFGPACK_ERR_MISSING;
+        return (CFGPACK_ERR_MISSING);
     }
     off = entry_offset(ctx->schema, entry);
     if (!cfgpack_presence_get(ctx, off)) {
-        return CFGPACK_ERR_MISSING;
+        return (CFGPACK_ERR_MISSING);
     }
     *out_value = ctx->values[off];
-    return CFGPACK_OK;
+    return (CFGPACK_OK);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -260,26 +260,26 @@ cfgpack_err_t cfgpack_set_str(cfgpack_ctx_t *ctx,
     char *dst;
 
     if (index == 0) {
-        return CFGPACK_ERR_RESERVED_INDEX;
+        return (CFGPACK_ERR_RESERVED_INDEX);
     }
 
     entry = find_entry(ctx->schema, index);
     if (!entry) {
-        return CFGPACK_ERR_MISSING;
+        return (CFGPACK_ERR_MISSING);
     }
     if (entry->type != CFGPACK_TYPE_STR) {
-        return CFGPACK_ERR_TYPE_MISMATCH;
+        return (CFGPACK_ERR_TYPE_MISMATCH);
     }
 
     len = strlen(str);
     if (len > CFGPACK_STR_MAX) {
-        return CFGPACK_ERR_STR_TOO_LONG;
+        return (CFGPACK_ERR_STR_TOO_LONG);
     }
 
     off = entry_offset(ctx->schema, entry);
     slot = get_str_slot(ctx->schema, off);
     if (slot < 0 || (size_t)slot >= ctx->str_offsets_count) {
-        return CFGPACK_ERR_BOUNDS;
+        return (CFGPACK_ERR_BOUNDS);
     }
 
     pool_off = ctx->str_offsets[slot];
@@ -292,7 +292,7 @@ cfgpack_err_t cfgpack_set_str(cfgpack_ctx_t *ctx,
     ctx->values[off].v.str.len = (uint16_t)len;
     cfgpack_presence_set(ctx, off);
 
-    return CFGPACK_OK;
+    return (CFGPACK_OK);
 }
 
 cfgpack_err_t cfgpack_set_fstr(cfgpack_ctx_t *ctx,
@@ -305,26 +305,26 @@ cfgpack_err_t cfgpack_set_fstr(cfgpack_ctx_t *ctx,
     char *dst;
 
     if (index == 0) {
-        return CFGPACK_ERR_RESERVED_INDEX;
+        return (CFGPACK_ERR_RESERVED_INDEX);
     }
 
     entry = find_entry(ctx->schema, index);
     if (!entry) {
-        return CFGPACK_ERR_MISSING;
+        return (CFGPACK_ERR_MISSING);
     }
     if (entry->type != CFGPACK_TYPE_FSTR) {
-        return CFGPACK_ERR_TYPE_MISMATCH;
+        return (CFGPACK_ERR_TYPE_MISMATCH);
     }
 
     len = strlen(str);
     if (len > CFGPACK_FSTR_MAX) {
-        return CFGPACK_ERR_STR_TOO_LONG;
+        return (CFGPACK_ERR_STR_TOO_LONG);
     }
 
     off = entry_offset(ctx->schema, entry);
     slot = get_str_slot(ctx->schema, off);
     if (slot < 0 || (size_t)slot >= ctx->str_offsets_count) {
-        return CFGPACK_ERR_BOUNDS;
+        return (CFGPACK_ERR_BOUNDS);
     }
 
     pool_off = ctx->str_offsets[slot];
@@ -337,7 +337,7 @@ cfgpack_err_t cfgpack_set_fstr(cfgpack_ctx_t *ctx,
     ctx->values[off].v.fstr.len = (uint8_t)len;
     cfgpack_presence_set(ctx, off);
 
-    return CFGPACK_OK;
+    return (CFGPACK_OK);
 }
 
 cfgpack_err_t cfgpack_set_str_by_name(cfgpack_ctx_t *ctx,
@@ -345,9 +345,9 @@ cfgpack_err_t cfgpack_set_str_by_name(cfgpack_ctx_t *ctx,
                                       const char *str) {
     const cfgpack_entry_t *entry = find_entry_by_name(ctx->schema, name);
     if (!entry) {
-        return CFGPACK_ERR_MISSING;
+        return (CFGPACK_ERR_MISSING);
     }
-    return cfgpack_set_str(ctx, entry->index, str);
+    return (cfgpack_set_str(ctx, entry->index, str));
 }
 
 cfgpack_err_t cfgpack_set_fstr_by_name(cfgpack_ctx_t *ctx,
@@ -355,9 +355,9 @@ cfgpack_err_t cfgpack_set_fstr_by_name(cfgpack_ctx_t *ctx,
                                        const char *str) {
     const cfgpack_entry_t *entry = find_entry_by_name(ctx->schema, name);
     if (!entry) {
-        return CFGPACK_ERR_MISSING;
+        return (CFGPACK_ERR_MISSING);
     }
-    return cfgpack_set_fstr(ctx, entry->index, str);
+    return (cfgpack_set_fstr(ctx, entry->index, str));
 }
 
 cfgpack_err_t cfgpack_get_str(const cfgpack_ctx_t *ctx,
@@ -368,25 +368,25 @@ cfgpack_err_t cfgpack_get_str(const cfgpack_ctx_t *ctx,
     size_t off;
 
     if (index == 0) {
-        return CFGPACK_ERR_RESERVED_INDEX;
+        return (CFGPACK_ERR_RESERVED_INDEX);
     }
 
     entry = find_entry(ctx->schema, index);
     if (!entry) {
-        return CFGPACK_ERR_MISSING;
+        return (CFGPACK_ERR_MISSING);
     }
     if (entry->type != CFGPACK_TYPE_STR) {
-        return CFGPACK_ERR_TYPE_MISMATCH;
+        return (CFGPACK_ERR_TYPE_MISMATCH);
     }
 
     off = entry_offset(ctx->schema, entry);
     if (!cfgpack_presence_get(ctx, off)) {
-        return CFGPACK_ERR_MISSING;
+        return (CFGPACK_ERR_MISSING);
     }
 
     *out = ctx->str_pool + ctx->values[off].v.str.offset;
     *len = ctx->values[off].v.str.len;
-    return CFGPACK_OK;
+    return (CFGPACK_OK);
 }
 
 cfgpack_err_t cfgpack_get_fstr(const cfgpack_ctx_t *ctx,
@@ -397,25 +397,25 @@ cfgpack_err_t cfgpack_get_fstr(const cfgpack_ctx_t *ctx,
     size_t off;
 
     if (index == 0) {
-        return CFGPACK_ERR_RESERVED_INDEX;
+        return (CFGPACK_ERR_RESERVED_INDEX);
     }
 
     entry = find_entry(ctx->schema, index);
     if (!entry) {
-        return CFGPACK_ERR_MISSING;
+        return (CFGPACK_ERR_MISSING);
     }
     if (entry->type != CFGPACK_TYPE_FSTR) {
-        return CFGPACK_ERR_TYPE_MISMATCH;
+        return (CFGPACK_ERR_TYPE_MISMATCH);
     }
 
     off = entry_offset(ctx->schema, entry);
     if (!cfgpack_presence_get(ctx, off)) {
-        return CFGPACK_ERR_MISSING;
+        return (CFGPACK_ERR_MISSING);
     }
 
     *out = ctx->str_pool + ctx->values[off].v.fstr.offset;
     *len = ctx->values[off].v.fstr.len;
-    return CFGPACK_OK;
+    return (CFGPACK_OK);
 }
 
 cfgpack_err_t cfgpack_get_str_by_name(const cfgpack_ctx_t *ctx,
@@ -424,9 +424,9 @@ cfgpack_err_t cfgpack_get_str_by_name(const cfgpack_ctx_t *ctx,
                                       uint16_t *len) {
     const cfgpack_entry_t *entry = find_entry_by_name(ctx->schema, name);
     if (!entry) {
-        return CFGPACK_ERR_MISSING;
+        return (CFGPACK_ERR_MISSING);
     }
-    return cfgpack_get_str(ctx, entry->index, out, len);
+    return (cfgpack_get_str(ctx, entry->index, out, len));
 }
 
 cfgpack_err_t cfgpack_get_fstr_by_name(const cfgpack_ctx_t *ctx,
@@ -435,9 +435,9 @@ cfgpack_err_t cfgpack_get_fstr_by_name(const cfgpack_ctx_t *ctx,
                                        uint8_t *len) {
     const cfgpack_entry_t *entry = find_entry_by_name(ctx->schema, name);
     if (!entry) {
-        return CFGPACK_ERR_MISSING;
+        return (CFGPACK_ERR_MISSING);
     }
-    return cfgpack_get_fstr(ctx, entry->index, out, len);
+    return (cfgpack_get_fstr(ctx, entry->index, out, len));
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -445,7 +445,7 @@ cfgpack_err_t cfgpack_get_fstr_by_name(const cfgpack_ctx_t *ctx,
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 uint32_t cfgpack_get_version(const cfgpack_ctx_t *ctx) {
-    return ctx->schema->version;
+    return (ctx->schema->version);
 }
 
 size_t cfgpack_get_size(const cfgpack_ctx_t *ctx) {
@@ -455,7 +455,7 @@ size_t cfgpack_get_size(const cfgpack_ctx_t *ctx) {
             count++;
         }
     }
-    return count;
+    return (count);
 }
 
 #ifdef CFGPACK_HOSTED
@@ -488,16 +488,16 @@ cfgpack_err_t cfgpack_print(const cfgpack_ctx_t *ctx, uint16_t index) {
     size_t off;
 
     if (!entry) {
-        return CFGPACK_ERR_MISSING;
+        return (CFGPACK_ERR_MISSING);
     }
     off = entry_offset(ctx->schema, entry);
     if (!cfgpack_presence_get(ctx, off)) {
-        return CFGPACK_ERR_MISSING;
+        return (CFGPACK_ERR_MISSING);
     }
     printf("[%u] %s = ", entry->index, entry->name);
     print_value(ctx, off);
     printf("\n");
-    return CFGPACK_OK;
+    return (CFGPACK_OK);
 }
 
 cfgpack_err_t cfgpack_print_all(const cfgpack_ctx_t *ctx) {
@@ -510,7 +510,7 @@ cfgpack_err_t cfgpack_print_all(const cfgpack_ctx_t *ctx) {
         print_value(ctx, i);
         printf("\n");
     }
-    return CFGPACK_OK;
+    return (CFGPACK_OK);
 }
 
 #else /* CFGPACK_EMBEDDED */
@@ -518,12 +518,12 @@ cfgpack_err_t cfgpack_print_all(const cfgpack_ctx_t *ctx) {
 cfgpack_err_t cfgpack_print(const cfgpack_ctx_t *ctx, uint16_t index) {
     (void)ctx;
     (void)index;
-    return CFGPACK_OK;
+    return (CFGPACK_OK);
 }
 
 cfgpack_err_t cfgpack_print_all(const cfgpack_ctx_t *ctx) {
     (void)ctx;
-    return CFGPACK_OK;
+    return (CFGPACK_OK);
 }
 
 #endif /* CFGPACK_HOSTED */

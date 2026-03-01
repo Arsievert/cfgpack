@@ -221,14 +221,14 @@ static int load_msgpack_schema(const uint8_t *mp_data,
     rc = cfgpack_schema_measure_msgpack(mp_data, mp_len, &m, &perr);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Measure error (%s): %s\n", label, perr.message);
-        return -1;
+        return (-1);
     }
 
     if (m.entry_count > CFGPACK_MAX_ENTRIES) {
         fprintf(stderr,
                 "Schema has %zu entries, exceeds CFGPACK_MAX_ENTRIES=%d\n",
                 m.entry_count, CFGPACK_MAX_ENTRIES);
-        return -1;
+        return (-1);
     }
 
     size_t str_off_count = m.str_count + m.fstr_count;
@@ -253,7 +253,7 @@ static int load_msgpack_schema(const uint8_t *mp_data,
         (str_off_count > 0 && !str_offsets)) {
         fprintf(stderr, "malloc failed\n");
         free_buffers();
-        return -1;
+        return (-1);
     }
 
     /* Phase 3: Parse msgpack binary into measured buffers */
@@ -273,7 +273,7 @@ static int load_msgpack_schema(const uint8_t *mp_data,
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Parse error (%s): %s\n", label, perr.message);
         free_buffers();
-        return -1;
+        return (-1);
     }
 
     /* Phase 4: Initialize context */
@@ -283,11 +283,11 @@ static int load_msgpack_schema(const uint8_t *mp_data,
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Init failed: %d\n", rc);
         free_buffers();
-        return -1;
+        return (-1);
     }
 
     *out_m = m;
-    return 0;
+    return (0);
 }
 
 /**
@@ -297,7 +297,7 @@ static uint8_t *read_file(const char *path, size_t *out_len) {
     FILE *f = fopen(path, "rb");
     if (!f) {
         fprintf(stderr, "Failed to open %s\n", path);
-        return NULL;
+        return (NULL);
     }
     fseek(f, 0, SEEK_END);
     long sz = ftell(f);
@@ -305,17 +305,17 @@ static uint8_t *read_file(const char *path, size_t *out_len) {
     if (sz <= 0) {
         fclose(f);
         fprintf(stderr, "Empty or unreadable: %s\n", path);
-        return NULL;
+        return (NULL);
     }
     uint8_t *buf = malloc((size_t)sz);
     if (!buf) {
         fclose(f);
         fprintf(stderr, "malloc failed for %s\n", path);
-        return NULL;
+        return (NULL);
     }
     *out_len = fread(buf, 1, (size_t)sz, f);
     fclose(f);
-    return buf;
+    return (buf);
 }
 
 /**
@@ -331,13 +331,13 @@ static uint8_t *read_lz4_file(const char *path,
     size_t file_len;
     uint8_t *file_data = read_file(path, &file_len);
     if (!file_data) {
-        return NULL;
+        return (NULL);
     }
 
     if (file_len < 4) {
         fprintf(stderr, "LZ4 file too small (no header): %s\n", path);
         free(file_data);
-        return NULL;
+        return (NULL);
     }
 
     /* Read 4-byte little-endian original size */
@@ -354,7 +354,7 @@ static uint8_t *read_lz4_file(const char *path,
         fprintf(stderr, "malloc failed for decompression buffer (%u bytes)\n",
                 orig_size);
         free(file_data);
-        return NULL;
+        return (NULL);
     }
 
     int result = LZ4_decompress_safe((const char *)compressed,
@@ -366,12 +366,12 @@ static uint8_t *read_lz4_file(const char *path,
         fprintf(stderr, "LZ4 decompression failed for %s (error %d)\n", path,
                 result);
         free(decompressed);
-        return NULL;
+        return (NULL);
     }
 
     *out_len = (size_t)orig_size;
     *out_compressed_len = file_len;
-    return decompressed;
+    return (decompressed);
 }
 
 /**
@@ -388,11 +388,11 @@ static int check_str(const cfgpack_ctx_t *ctx,
         memcmp(s, expect, elen) != 0) {
         printf("  FAIL  %-5s (idx %-3u) = ???  (expected \"%s\") [%s]\n", "",
                idx, expect, tag);
-        return 1;
+        return (1);
     }
     printf("  OK    %-5s (idx %-3u) = \"%.*s\"  [%s]\n", "", idx, (int)len, s,
            tag);
-    return 0;
+    return (0);
 }
 
 /**
@@ -409,11 +409,11 @@ static int check_fstr(const cfgpack_ctx_t *ctx,
         memcmp(s, expect, elen) != 0) {
         printf("  FAIL  %-5s (idx %-3u) = ???  (expected \"%s\") [%s]\n", "",
                idx, expect, tag);
-        return 1;
+        return (1);
     }
     printf("  OK    %-5s (idx %-3u) = \"%.*s\"  [%s]\n", "", idx, (int)len, s,
            tag);
-    return 0;
+    return (0);
 }
 
 /**
@@ -427,10 +427,10 @@ static int check_u32(const cfgpack_ctx_t *ctx,
     if (cfgpack_get_u32(ctx, idx, &v) != CFGPACK_OK || v != expect) {
         printf("  FAIL  %-5s (idx %-3u) = ???  (expected %u) [%s]\n", "", idx,
                expect, tag);
-        return 1;
+        return (1);
     }
     printf("  OK    %-5s (idx %-3u) = %u  [%s]\n", "", idx, v, tag);
-    return 0;
+    return (0);
 }
 
 /**
@@ -444,10 +444,10 @@ static int check_u16(const cfgpack_ctx_t *ctx,
     if (cfgpack_get_u16(ctx, idx, &v) != CFGPACK_OK || v != expect) {
         printf("  FAIL  %-5s (idx %-3u) = ???  (expected %u) [%s]\n", "", idx,
                expect, tag);
-        return 1;
+        return (1);
     }
     printf("  OK    %-5s (idx %-3u) = %u  [%s]\n", "", idx, v, tag);
-    return 0;
+    return (0);
 }
 
 /**
@@ -461,10 +461,10 @@ static int check_u8(const cfgpack_ctx_t *ctx,
     if (cfgpack_get_u8(ctx, idx, &v) != CFGPACK_OK || v != expect) {
         printf("  FAIL  %-5s (idx %-3u) = ???  (expected %u) [%s]\n", "", idx,
                expect, tag);
-        return 1;
+        return (1);
     }
     printf("  OK    %-5s (idx %-3u) = %u  [%s]\n", "", idx, v, tag);
-    return 0;
+    return (0);
 }
 
 /**
@@ -478,10 +478,10 @@ static int check_i8(const cfgpack_ctx_t *ctx,
     if (cfgpack_get_i8(ctx, idx, &v) != CFGPACK_OK || v != expect) {
         printf("  FAIL  %-5s (idx %-3u) = ???  (expected %d) [%s]\n", "", idx,
                expect, tag);
-        return 1;
+        return (1);
     }
     printf("  OK    %-5s (idx %-3u) = %d  [%s]\n", "", idx, v, tag);
-    return 0;
+    return (0);
 }
 
 /**
@@ -495,10 +495,10 @@ static int check_absent(const cfgpack_ctx_t *ctx,
     if (rc != CFGPACK_ERR_MISSING) {
         printf("  FAIL  %-5s (idx %-3u) = <present>  (expected absent) [%s]\n",
                "", idx, tag);
-        return 1;
+        return (1);
     }
     printf("  OK    %-5s (idx %-3u) = <absent>  [%s]\n", "", idx, tag);
-    return 0;
+    return (0);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -532,7 +532,7 @@ int main(void) {
         free(v1_mp);
         free(v2_mp);
         free(v3_mp);
-        return 1;
+        return (1);
     }
 
     printf("Schema files (LZ4-compressed -> decompressed):\n");
@@ -552,7 +552,7 @@ int main(void) {
            "\n");
 
     if (load_msgpack_schema(v1_mp, v1_len, "v1", &schema, &ctx, &m) != 0) {
-        return 1;
+        return (1);
     }
 
     printf("  Loaded: %s v%u (%zu entries)\n\n", schema.map_name,
@@ -596,7 +596,7 @@ int main(void) {
     rc = cfgpack_pageout(&ctx, flash, sizeof(flash), &flash_len);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Pageout failed: %d\n", rc);
-        return 1;
+        return (1);
     }
     printf("  Serialized %zu entries -> %zu bytes of MessagePack\n\n",
            cfgpack_get_size(&ctx), flash_len);
@@ -612,12 +612,12 @@ int main(void) {
     rc = cfgpack_peek_name(flash, flash_len, stored_name, sizeof(stored_name));
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "peek_name failed: %d\n", rc);
-        return 1;
+        return (1);
     }
     printf("  Flash contains: \"%s\"\n", stored_name);
 
     if (load_msgpack_schema(v2_mp, v2_len, "v2", &schema, &ctx, &m) != 0) {
-        return 1;
+        return (1);
     }
     printf("  Loaded: %s v%u (%zu entries)\n\n", schema.map_name,
            schema.version, schema.entry_count);
@@ -636,7 +636,7 @@ int main(void) {
                               V1_V2_REMAP_COUNT);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "v1->v2 pagein_remap failed: %d\n", rc);
-        return 1;
+        return (1);
     }
 
     /* ── Verify v1 -> v2 migration ──────────────────────────────────────── */
@@ -713,7 +713,7 @@ int main(void) {
     rc = cfgpack_pageout(&ctx, flash, sizeof(flash), &flash_len);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Pageout v2 failed: %d\n", rc);
-        return 1;
+        return (1);
     }
     printf("  Serialized %zu entries -> %zu bytes\n\n", cfgpack_get_size(&ctx),
            flash_len);
@@ -728,12 +728,12 @@ int main(void) {
     rc = cfgpack_peek_name(flash, flash_len, stored_name, sizeof(stored_name));
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "peek_name failed: %d\n", rc);
-        return 1;
+        return (1);
     }
     printf("  Flash contains: \"%s\"\n", stored_name);
 
     if (load_msgpack_schema(v3_mp, v3_len, "v3", &schema, &ctx, &m) != 0) {
-        return 1;
+        return (1);
     }
     printf("  Loaded: %s v%u (%zu entries)\n\n", schema.map_name,
            schema.version, schema.entry_count);
@@ -747,7 +747,7 @@ int main(void) {
                               V2_V3_REMAP_COUNT);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "v2->v3 pagein_remap failed: %d\n", rc);
-        return 1;
+        return (1);
     }
 
     /* ── Verify v2 -> v3 migration ──────────────────────────────────────── */
@@ -840,5 +840,5 @@ int main(void) {
     free(v1_mp);
     free(v2_mp);
     free(v3_mp);
-    return fail > 0 ? 1 : 0;
+    return (fail > 0 ? 1 : 0);
 }

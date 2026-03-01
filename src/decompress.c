@@ -20,10 +20,10 @@ cfgpack_err_t cfgpack_pagein_lz4(cfgpack_ctx_t *ctx,
     int result;
 
     if (!ctx || !data || !scratch) {
-        return CFGPACK_ERR_DECODE;
+        return (CFGPACK_ERR_DECODE);
     }
     if (decompressed_size > scratch_cap) {
-        return CFGPACK_ERR_BOUNDS;
+        return (CFGPACK_ERR_BOUNDS);
     }
 
     /* LZ4_decompress_safe requires knowing the exact decompressed size */
@@ -31,13 +31,13 @@ cfgpack_err_t cfgpack_pagein_lz4(cfgpack_ctx_t *ctx,
                                  (int)decompressed_size);
 
     if (result < 0) {
-        return CFGPACK_ERR_DECODE;
+        return (CFGPACK_ERR_DECODE);
     }
     if ((size_t)result != decompressed_size) {
-        return CFGPACK_ERR_DECODE;
+        return (CFGPACK_ERR_DECODE);
     }
 
-    return cfgpack_pagein_buf(ctx, scratch, (size_t)result);
+    return (cfgpack_pagein_buf(ctx, scratch, (size_t)result));
 }
 
 #endif /* CFGPACK_LZ4 */
@@ -61,7 +61,7 @@ cfgpack_err_t cfgpack_pagein_heatshrink(cfgpack_ctx_t *ctx,
     HSD_finish_res finish_res;
 
     if (!ctx || !data || !scratch) {
-        return CFGPACK_ERR_DECODE;
+        return (CFGPACK_ERR_DECODE);
     }
 
     heatshrink_decoder_reset(&hs_decoder);
@@ -74,7 +74,7 @@ cfgpack_err_t cfgpack_pagein_heatshrink(cfgpack_ctx_t *ctx,
                                            len - input_consumed,
                                            &output_produced);
         if (sink_res < 0) {
-            return CFGPACK_ERR_DECODE;
+            return (CFGPACK_ERR_DECODE);
         }
         input_consumed += output_produced;
 
@@ -85,12 +85,12 @@ cfgpack_err_t cfgpack_pagein_heatshrink(cfgpack_ctx_t *ctx,
                                                scratch_cap - total_output,
                                                &output_produced);
             if (poll_res < 0) {
-                return CFGPACK_ERR_DECODE;
+                return (CFGPACK_ERR_DECODE);
             }
             total_output += output_produced;
 
             if (total_output > scratch_cap) {
-                return CFGPACK_ERR_BOUNDS;
+                return (CFGPACK_ERR_BOUNDS);
             }
         } while (poll_res == HSDR_POLL_MORE);
     }
@@ -98,7 +98,7 @@ cfgpack_err_t cfgpack_pagein_heatshrink(cfgpack_ctx_t *ctx,
     /* Notify decoder that input is finished */
     finish_res = heatshrink_decoder_finish(&hs_decoder);
     if (finish_res < 0) {
-        return CFGPACK_ERR_DECODE;
+        return (CFGPACK_ERR_DECODE);
     }
 
     /* Continue polling until done */
@@ -107,21 +107,21 @@ cfgpack_err_t cfgpack_pagein_heatshrink(cfgpack_ctx_t *ctx,
                                            scratch_cap - total_output,
                                            &output_produced);
         if (poll_res < 0) {
-            return CFGPACK_ERR_DECODE;
+            return (CFGPACK_ERR_DECODE);
         }
         total_output += output_produced;
 
         if (total_output > scratch_cap) {
-            return CFGPACK_ERR_BOUNDS;
+            return (CFGPACK_ERR_BOUNDS);
         }
 
         finish_res = heatshrink_decoder_finish(&hs_decoder);
         if (finish_res < 0) {
-            return CFGPACK_ERR_DECODE;
+            return (CFGPACK_ERR_DECODE);
         }
     }
 
-    return cfgpack_pagein_buf(ctx, scratch, total_output);
+    return (cfgpack_pagein_buf(ctx, scratch, total_output));
 }
 
 #endif /* CFGPACK_HEATSHRINK */

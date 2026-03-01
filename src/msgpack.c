@@ -13,7 +13,7 @@ void cfgpack_buf_init(cfgpack_buf_t *buf, uint8_t *storage, size_t cap) {
 cfgpack_err_t cfgpack_buf_append(cfgpack_buf_t *buf,
                                  const void *src,
                                  size_t len) {
-    return wbuf_try_append((wbuf_t *)buf, src, len);
+    return (wbuf_try_append((wbuf_t *)buf, src, len));
 }
 
 cfgpack_err_t cfgpack_msgpack_encode_uint64(cfgpack_buf_t *buf, uint64_t v) {
@@ -40,7 +40,7 @@ cfgpack_err_t cfgpack_msgpack_encode_uint64(cfgpack_buf_t *buf, uint64_t v) {
             tmp[n++] = (uint8_t)(v >> (8 * i));
         }
     }
-    return cfgpack_buf_append(buf, tmp, n);
+    return (cfgpack_buf_append(buf, tmp, n));
 }
 
 cfgpack_err_t cfgpack_msgpack_encode_int64(cfgpack_buf_t *buf, int64_t v) {
@@ -48,7 +48,7 @@ cfgpack_err_t cfgpack_msgpack_encode_int64(cfgpack_buf_t *buf, int64_t v) {
     size_t n = 0;
 
     if (v >= 0) {
-        return cfgpack_msgpack_encode_uint64(buf, (uint64_t)v);
+        return (cfgpack_msgpack_encode_uint64(buf, (uint64_t)v));
     }
     if (v >= -32) {
         tmp[n++] = (uint8_t)v; /* negative fixint */
@@ -71,7 +71,7 @@ cfgpack_err_t cfgpack_msgpack_encode_int64(cfgpack_buf_t *buf, int64_t v) {
             tmp[n++] = (uint8_t)(v >> (8 * i));
         }
     }
-    return cfgpack_buf_append(buf, tmp, n);
+    return (cfgpack_buf_append(buf, tmp, n));
 }
 
 cfgpack_err_t cfgpack_msgpack_encode_f32(cfgpack_buf_t *buf, float v) {
@@ -84,7 +84,7 @@ cfgpack_err_t cfgpack_msgpack_encode_f32(cfgpack_buf_t *buf, float v) {
     tmp[2] = (uint8_t)(u >> 16);
     tmp[3] = (uint8_t)(u >> 8);
     tmp[4] = (uint8_t)u;
-    return cfgpack_buf_append(buf, tmp, sizeof(tmp));
+    return (cfgpack_buf_append(buf, tmp, sizeof(tmp)));
 }
 
 cfgpack_err_t cfgpack_msgpack_encode_f64(cfgpack_buf_t *buf, double v) {
@@ -96,7 +96,7 @@ cfgpack_err_t cfgpack_msgpack_encode_f64(cfgpack_buf_t *buf, double v) {
     for (int i = 0; i < 8; ++i) {
         tmp[1 + i] = (uint8_t)(u >> (56 - 8 * i));
     }
-    return cfgpack_buf_append(buf, tmp, sizeof(tmp));
+    return (cfgpack_buf_append(buf, tmp, sizeof(tmp)));
 }
 
 cfgpack_err_t cfgpack_msgpack_encode_str(cfgpack_buf_t *buf,
@@ -115,9 +115,9 @@ cfgpack_err_t cfgpack_msgpack_encode_str(cfgpack_buf_t *buf,
         hdr[hlen++] = (uint8_t)len;
     }
     if (cfgpack_buf_append(buf, hdr, hlen) != CFGPACK_OK) {
-        return CFGPACK_ERR_ENCODE;
+        return (CFGPACK_ERR_ENCODE);
     }
-    return cfgpack_buf_append(buf, s, len);
+    return (cfgpack_buf_append(buf, s, len));
 }
 
 cfgpack_err_t cfgpack_msgpack_encode_map_header(cfgpack_buf_t *buf,
@@ -131,17 +131,17 @@ cfgpack_err_t cfgpack_msgpack_encode_map_header(cfgpack_buf_t *buf,
         tmp[n++] = (uint8_t)(count >> 8);
         tmp[n++] = (uint8_t)count;
     }
-    return cfgpack_buf_append(buf, tmp, n);
+    return (cfgpack_buf_append(buf, tmp, n));
 }
 
 cfgpack_err_t cfgpack_msgpack_encode_uint_key(cfgpack_buf_t *buf, uint64_t v) {
-    return cfgpack_msgpack_encode_uint64(buf, v);
+    return (cfgpack_msgpack_encode_uint64(buf, v));
 }
 
 cfgpack_err_t cfgpack_msgpack_encode_str_key(cfgpack_buf_t *buf,
                                              const char *s,
                                              size_t len) {
-    return cfgpack_msgpack_encode_str(buf, s, len);
+    return (cfgpack_msgpack_encode_str(buf, s, len));
 }
 
 void cfgpack_reader_init(cfgpack_reader_t *r, const uint8_t *data, size_t len) {
@@ -159,142 +159,142 @@ void cfgpack_reader_init(cfgpack_reader_t *r, const uint8_t *data, size_t len) {
  */
 static int read_bytes(cfgpack_reader_t *r, void *dst, size_t n) {
     if (r->pos + n > r->len) {
-        return -1;
+        return (-1);
     }
     memcpy(dst, r->data + r->pos, n);
     r->pos += n;
-    return 0;
+    return (0);
 }
 
 cfgpack_err_t cfgpack_msgpack_decode_map_header(cfgpack_reader_t *r,
                                                 uint32_t *count) {
     uint8_t b;
     if (read_bytes(r, &b, 1)) {
-        return CFGPACK_ERR_DECODE;
+        return (CFGPACK_ERR_DECODE);
     }
     if ((b & 0xf0u) == 0x80u) {
         *count = (uint32_t)(b & 0x0f);
-        return CFGPACK_OK;
+        return (CFGPACK_OK);
     }
     if (b == 0xde) {
         uint8_t bytes[2];
         if (read_bytes(r, bytes, 2)) {
-            return CFGPACK_ERR_DECODE;
+            return (CFGPACK_ERR_DECODE);
         }
         *count = ((uint32_t)bytes[0] << 8) | bytes[1];
-        return CFGPACK_OK;
+        return (CFGPACK_OK);
     }
-    return CFGPACK_ERR_DECODE;
+    return (CFGPACK_ERR_DECODE);
 }
 
 cfgpack_err_t cfgpack_msgpack_decode_uint64(cfgpack_reader_t *r,
                                             uint64_t *out) {
     uint8_t b;
     if (read_bytes(r, &b, 1)) {
-        return CFGPACK_ERR_DECODE;
+        return (CFGPACK_ERR_DECODE);
     }
     if (b <= 0x7f) {
         *out = b;
-        return CFGPACK_OK;
+        return (CFGPACK_OK);
     }
     if (b == 0xcc) {
         uint8_t v;
         if (read_bytes(r, &v, 1)) {
-            return CFGPACK_ERR_DECODE;
+            return (CFGPACK_ERR_DECODE);
         }
         *out = v;
-        return CFGPACK_OK;
+        return (CFGPACK_OK);
     }
     if (b == 0xcd) {
         uint8_t v[2];
         if (read_bytes(r, v, 2)) {
-            return CFGPACK_ERR_DECODE;
+            return (CFGPACK_ERR_DECODE);
         }
         *out = ((uint16_t)v[0] << 8) | v[1];
-        return CFGPACK_OK;
+        return (CFGPACK_OK);
     }
     if (b == 0xce) {
         uint8_t v[4];
         if (read_bytes(r, v, 4)) {
-            return CFGPACK_ERR_DECODE;
+            return (CFGPACK_ERR_DECODE);
         }
         *out = ((uint32_t)v[0] << 24) | ((uint32_t)v[1] << 16) |
                ((uint32_t)v[2] << 8) | v[3];
-        return CFGPACK_OK;
+        return (CFGPACK_OK);
     }
     if (b == 0xcf) {
         uint8_t v[8];
         uint64_t res = 0;
 
         if (read_bytes(r, v, 8)) {
-            return CFGPACK_ERR_DECODE;
+            return (CFGPACK_ERR_DECODE);
         }
         for (int i = 0; i < 8; ++i) {
             res = (res << 8) | v[i];
         }
         *out = res;
-        return CFGPACK_OK;
+        return (CFGPACK_OK);
     }
-    return CFGPACK_ERR_DECODE;
+    return (CFGPACK_ERR_DECODE);
 }
 
 cfgpack_err_t cfgpack_msgpack_decode_int64(cfgpack_reader_t *r, int64_t *out) {
     uint8_t b;
     if (read_bytes(r, &b, 1)) {
-        return CFGPACK_ERR_DECODE;
+        return (CFGPACK_ERR_DECODE);
     }
     if (b <= 0x7f) {
         *out = (int64_t)b;
-        return CFGPACK_OK;
+        return (CFGPACK_OK);
     }
     if (b >= 0xe0) {
         *out = (int8_t)b;
-        return CFGPACK_OK;
+        return (CFGPACK_OK);
     }
     if (b == 0xd0) {
         int8_t v;
         if (read_bytes(r, &v, 1)) {
-            return CFGPACK_ERR_DECODE;
+            return (CFGPACK_ERR_DECODE);
         }
         *out = v;
-        return CFGPACK_OK;
+        return (CFGPACK_OK);
     }
     if (b == 0xd1) {
         int16_t v;
         if (read_bytes(r, &v, 2)) {
-            return CFGPACK_ERR_DECODE;
+            return (CFGPACK_ERR_DECODE);
         }
         v = (int16_t)((uint16_t)(uint8_t)(v >> 8) |
                       ((uint16_t)(uint8_t)v << 8));
         *out = v;
-        return CFGPACK_OK;
+        return (CFGPACK_OK);
     }
     if (b == 0xd2) {
         uint8_t v[4];
         int32_t res;
 
         if (read_bytes(r, v, 4)) {
-            return CFGPACK_ERR_DECODE;
+            return (CFGPACK_ERR_DECODE);
         }
         res = (int32_t)((uint32_t)v[0] << 24 | (uint32_t)v[1] << 16 |
                         (uint32_t)v[2] << 8 | v[3]);
         *out = res;
-        return CFGPACK_OK;
+        return (CFGPACK_OK);
     }
     if (b == 0xd3) {
         uint8_t v[8];
         int64_t res = 0;
 
         if (read_bytes(r, v, 8)) {
-            return CFGPACK_ERR_DECODE;
+            return (CFGPACK_ERR_DECODE);
         }
         for (int i = 0; i < 8; ++i) {
             res = (res << 8) | v[i];
         }
         *out = res;
-        return CFGPACK_OK;
+        return (CFGPACK_OK);
     }
-    return CFGPACK_ERR_DECODE;
+    return (CFGPACK_ERR_DECODE);
 }
 
 cfgpack_err_t cfgpack_msgpack_decode_f32(cfgpack_reader_t *r, float *out) {
@@ -303,18 +303,18 @@ cfgpack_err_t cfgpack_msgpack_decode_f32(cfgpack_reader_t *r, float *out) {
     uint32_t u;
 
     if (read_bytes(r, &b, 1)) {
-        return CFGPACK_ERR_DECODE;
+        return (CFGPACK_ERR_DECODE);
     }
     if (b != 0xca) {
-        return CFGPACK_ERR_DECODE;
+        return (CFGPACK_ERR_DECODE);
     }
     if (read_bytes(r, v, 4)) {
-        return CFGPACK_ERR_DECODE;
+        return (CFGPACK_ERR_DECODE);
     }
     u = ((uint32_t)v[0] << 24) | ((uint32_t)v[1] << 16) |
         ((uint32_t)v[2] << 8) | v[3];
     memcpy(out, &u, sizeof(u));
-    return CFGPACK_OK;
+    return (CFGPACK_OK);
 }
 
 cfgpack_err_t cfgpack_msgpack_decode_f64(cfgpack_reader_t *r, double *out) {
@@ -323,19 +323,19 @@ cfgpack_err_t cfgpack_msgpack_decode_f64(cfgpack_reader_t *r, double *out) {
     uint64_t u = 0;
 
     if (read_bytes(r, &b, 1)) {
-        return CFGPACK_ERR_DECODE;
+        return (CFGPACK_ERR_DECODE);
     }
     if (b != 0xcb) {
-        return CFGPACK_ERR_DECODE;
+        return (CFGPACK_ERR_DECODE);
     }
     if (read_bytes(r, v, 8)) {
-        return CFGPACK_ERR_DECODE;
+        return (CFGPACK_ERR_DECODE);
     }
     for (int i = 0; i < 8; ++i) {
         u = (u << 8) | v[i];
     }
     memcpy(out, &u, sizeof(u));
-    return CFGPACK_OK;
+    return (CFGPACK_OK);
 }
 
 cfgpack_err_t cfgpack_msgpack_decode_str(cfgpack_reader_t *r,
@@ -343,31 +343,31 @@ cfgpack_err_t cfgpack_msgpack_decode_str(cfgpack_reader_t *r,
                                          uint32_t *len) {
     uint8_t b;
     if (read_bytes(r, &b, 1)) {
-        return CFGPACK_ERR_DECODE;
+        return (CFGPACK_ERR_DECODE);
     }
     if ((b & 0xe0u) == 0xa0u) {
         *len = (uint32_t)(b & 0x1f);
     } else if (b == 0xd9) {
         uint8_t l;
         if (read_bytes(r, &l, 1)) {
-            return CFGPACK_ERR_DECODE;
+            return (CFGPACK_ERR_DECODE);
         }
         *len = l;
     } else if (b == 0xda) {
         uint8_t v[2];
         if (read_bytes(r, v, 2)) {
-            return CFGPACK_ERR_DECODE;
+            return (CFGPACK_ERR_DECODE);
         }
         *len = ((uint32_t)v[0] << 8) | v[1];
     } else {
-        return CFGPACK_ERR_DECODE;
+        return (CFGPACK_ERR_DECODE);
     }
     if (r->pos + *len > r->len) {
-        return CFGPACK_ERR_DECODE;
+        return (CFGPACK_ERR_DECODE);
     }
     *ptr = r->data + r->pos;
     r->pos += *len;
-    return CFGPACK_OK;
+    return (CFGPACK_OK);
 }
 
 cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
@@ -391,7 +391,7 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
         uint8_t b;
 
         if (r->pos >= r->len) {
-            return CFGPACK_ERR_DECODE;
+            return (CFGPACK_ERR_DECODE);
         }
         b = r->data[r->pos++];
 
@@ -404,7 +404,7 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
         if ((b & 0xe0) == 0xa0) {
             uint32_t len = b & 0x1f;
             if (r->pos + len > r->len) {
-                return CFGPACK_ERR_DECODE;
+                return (CFGPACK_ERR_DECODE);
             }
             r->pos += len;
             goto value_done;
@@ -417,7 +417,7 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
                 goto value_done;
             }
             if (depth + 1 >= CFGPACK_SKIP_MAX_DEPTH) {
-                return CFGPACK_ERR_DECODE;
+                return (CFGPACK_ERR_DECODE);
             }
             remaining[depth + 1] = count;
             depth++;
@@ -431,7 +431,7 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
                 goto value_done;
             }
             if (depth + 1 >= CFGPACK_SKIP_MAX_DEPTH) {
-                return CFGPACK_ERR_DECODE;
+                return (CFGPACK_ERR_DECODE);
             }
             remaining[depth + 1] = count;
             depth++;
@@ -451,11 +451,11 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
             uint8_t len;
 
             if (r->pos >= r->len) {
-                return CFGPACK_ERR_DECODE;
+                return (CFGPACK_ERR_DECODE);
             }
             len = r->data[r->pos++];
             if (r->pos + len > r->len) {
-                return CFGPACK_ERR_DECODE;
+                return (CFGPACK_ERR_DECODE);
             }
             r->pos += len;
             goto value_done;
@@ -467,12 +467,12 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
             uint32_t len;
 
             if (r->pos + 2 > r->len) {
-                return CFGPACK_ERR_DECODE;
+                return (CFGPACK_ERR_DECODE);
             }
             len = ((uint32_t)r->data[r->pos] << 8) | r->data[r->pos + 1];
             r->pos += 2;
             if (r->pos + len > r->len) {
-                return CFGPACK_ERR_DECODE;
+                return (CFGPACK_ERR_DECODE);
             }
             r->pos += len;
             goto value_done;
@@ -484,14 +484,14 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
             uint32_t len;
 
             if (r->pos + 4 > r->len) {
-                return CFGPACK_ERR_DECODE;
+                return (CFGPACK_ERR_DECODE);
             }
             len = ((uint32_t)r->data[r->pos] << 24) |
                   ((uint32_t)r->data[r->pos + 1] << 16) |
                   ((uint32_t)r->data[r->pos + 2] << 8) | r->data[r->pos + 3];
             r->pos += 4;
             if (r->pos + len > r->len) {
-                return CFGPACK_ERR_DECODE;
+                return (CFGPACK_ERR_DECODE);
             }
             r->pos += len;
             goto value_done;
@@ -502,7 +502,7 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
         case 0xce:
         case 0xd2:
             if (r->pos + 4 > r->len) {
-                return CFGPACK_ERR_DECODE;
+                return (CFGPACK_ERR_DECODE);
             }
             r->pos += 4;
             goto value_done;
@@ -512,7 +512,7 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
         case 0xcf:
         case 0xd3:
             if (r->pos + 8 > r->len) {
-                return CFGPACK_ERR_DECODE;
+                return (CFGPACK_ERR_DECODE);
             }
             r->pos += 8;
             goto value_done;
@@ -521,7 +521,7 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
         case 0xcc:
         case 0xd0:
             if (r->pos + 1 > r->len) {
-                return CFGPACK_ERR_DECODE;
+                return (CFGPACK_ERR_DECODE);
             }
             r->pos += 1;
             goto value_done;
@@ -530,7 +530,7 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
         case 0xcd:
         case 0xd1:
             if (r->pos + 2 > r->len) {
-                return CFGPACK_ERR_DECODE;
+                return (CFGPACK_ERR_DECODE);
             }
             r->pos += 2;
             goto value_done;
@@ -540,7 +540,7 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
             uint32_t count;
 
             if (r->pos + 2 > r->len) {
-                return CFGPACK_ERR_DECODE;
+                return (CFGPACK_ERR_DECODE);
             }
             count = ((uint32_t)r->data[r->pos] << 8) | r->data[r->pos + 1];
             r->pos += 2;
@@ -548,7 +548,7 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
                 goto value_done;
             }
             if (depth + 1 >= CFGPACK_SKIP_MAX_DEPTH) {
-                return CFGPACK_ERR_DECODE;
+                return (CFGPACK_ERR_DECODE);
             }
             remaining[depth + 1] = count;
             depth++;
@@ -560,7 +560,7 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
             uint32_t count;
 
             if (r->pos + 4 > r->len) {
-                return CFGPACK_ERR_DECODE;
+                return (CFGPACK_ERR_DECODE);
             }
             count = ((uint32_t)r->data[r->pos] << 24) |
                     ((uint32_t)r->data[r->pos + 1] << 16) |
@@ -570,7 +570,7 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
                 goto value_done;
             }
             if (depth + 1 >= CFGPACK_SKIP_MAX_DEPTH) {
-                return CFGPACK_ERR_DECODE;
+                return (CFGPACK_ERR_DECODE);
             }
             remaining[depth + 1] = count;
             depth++;
@@ -582,7 +582,7 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
             uint32_t count;
 
             if (r->pos + 2 > r->len) {
-                return CFGPACK_ERR_DECODE;
+                return (CFGPACK_ERR_DECODE);
             }
             count = ((uint32_t)r->data[r->pos] << 8) | r->data[r->pos + 1];
             r->pos += 2;
@@ -590,7 +590,7 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
                 goto value_done;
             }
             if (depth + 1 >= CFGPACK_SKIP_MAX_DEPTH) {
-                return CFGPACK_ERR_DECODE;
+                return (CFGPACK_ERR_DECODE);
             }
             remaining[depth + 1] = count * 2;
             depth++;
@@ -602,7 +602,7 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
             uint32_t count;
 
             if (r->pos + 4 > r->len) {
-                return CFGPACK_ERR_DECODE;
+                return (CFGPACK_ERR_DECODE);
             }
             count = ((uint32_t)r->data[r->pos] << 24) |
                     ((uint32_t)r->data[r->pos + 1] << 16) |
@@ -612,10 +612,10 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
                 goto value_done;
             }
             if (count > UINT32_MAX / 2) {
-                return CFGPACK_ERR_DECODE;
+                return (CFGPACK_ERR_DECODE);
             }
             if (depth + 1 >= CFGPACK_SKIP_MAX_DEPTH) {
-                return CFGPACK_ERR_DECODE;
+                return (CFGPACK_ERR_DECODE);
             }
             remaining[depth + 1] = count * 2;
             depth++;
@@ -639,5 +639,5 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
         }
     } while (depth > 0 || remaining[0] > 0);
 
-    return CFGPACK_OK;
+    return (CFGPACK_OK);
 }
