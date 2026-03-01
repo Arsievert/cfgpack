@@ -14,6 +14,16 @@ A MessagePack-based configuration library for embedded systems.
 - **Schema versioning**: Embeds schema name in serialized blobs for version detection.
 - **Remapping**: Migrates config between schema versions with index remapping, type widening, and automatic default restoration for new entries.
 
+## Setup
+
+After cloning, run the one-time setup to install git hooks and verify dependencies:
+
+```bash
+./scripts/setup.sh
+```
+
+This checks for required tools (`clang`, `clang-format`, `make`, `ar`), installs the pre-commit hook, and runs a test build to confirm everything works.
+
 ## Documentation
 
 - [API Reference](docs/source/api-reference.md) — Complete API documentation (errors, values, schema, runtime, typed functions)
@@ -71,6 +81,7 @@ vehicle 1
 ## Layout
 
 - `include/cfgpack/` — public headers
+  - `cfgpack.h` — umbrella header; include just this to get all public APIs.
   - `config.h` — build configuration (`CFGPACK_EMBEDDED`/`CFGPACK_HOSTED` modes).
   - `error.h` — error codes enum.
   - `value.h` — value types and limits (`CFGPACK_STR_MAX`, `CFGPACK_FSTR_MAX`).
@@ -79,7 +90,7 @@ vehicle 1
   - `api.h` — main cfgpack runtime API (set/get/pagein/pageout/print/version/size).
   - `decompress.h` — optional LZ4/heatshrink decompression support.
   - `io_file.h` — optional FILE*-based convenience wrappers for desktop/POSIX systems.
-- `src/` — library implementation (`core.c`, `io.c`, `msgpack.c`, `schema_parser.c`, `decompress.c`).
+- `src/` — library implementation (`core.c`, `io.c`, `io_file.c`, `msgpack.c`, `schema_parser.c`, `tokens.c`, `wbuf.c`, `decompress.c`).
 - `tests/` — C test programs plus sample data under `tests/data/`.
 - `tools/` — CLI tools source (`cfgpack-compress.c` for LZ4/heatshrink compression, `cfgpack-schema-pack.c` for converting schemas to msgpack binary).
 - `examples/` — complete usage examples (`allocate-once/`, `datalogger/`, `fleet_gateway/`, `low_memory/`, `sensor_hub/`).

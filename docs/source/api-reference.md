@@ -19,7 +19,8 @@ typedef enum {
     CFGPACK_ERR_IO = -8,
     CFGPACK_ERR_ENCODE = -9,
     CFGPACK_ERR_DECODE = -10,
-    CFGPACK_ERR_RESERVED_INDEX = -11
+    CFGPACK_ERR_RESERVED_INDEX = -11,
+    CFGPACK_ERR_ARGS = -12
 } cfgpack_err_t;
 ```
 
@@ -37,6 +38,7 @@ typedef enum {
 | `CFGPACK_ERR_ENCODE` | Encoding failure or output buffer too small. Also returned as a defense-in-depth check if a string value's offset/length exceeds the string pool capacity. |
 | `CFGPACK_ERR_DECODE` | Decoding failure or malformed msgpack input. |
 | `CFGPACK_ERR_RESERVED_INDEX` | Attempt to use reserved index 0 (reserved for schema name). |
+| `CFGPACK_ERR_ARGS` | Missing or bad arguments (NULL pointer, invalid option). |
 
 ## Values
 
@@ -285,6 +287,12 @@ Use the `cfgpack-schema-pack` CLI tool to convert `.map` or JSON schemas to msgp
 ```c
 #include "cfgpack/api.h"
 
+/* Remap table entry for migrating config between schema versions */
+typedef struct {
+    uint16_t old_index; /* Index in the old schema */
+    uint16_t new_index; /* Corresponding index in the new schema */
+} cfgpack_remap_entry_t;
+
 /* Initialize runtime context. The values and string pool should already
  * contain defaults from schema parsing. Presence bitmap is embedded in
  * cfgpack_ctx_t (sized by CFGPACK_MAX_ENTRIES, default 128). */
@@ -306,9 +314,38 @@ cfgpack_err_t cfgpack_pagein_buf(cfgpack_ctx_t *ctx, const uint8_t *data, size_t
 cfgpack_err_t cfgpack_peek_name(const uint8_t *data, size_t len, char *out_name, size_t out_cap);
 cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx, const uint8_t *data, size_t len,
                                     const cfgpack_remap_entry_t *remap, size_t remap_count);
+
+/* Print a single present value to stdout (no-op in CFGPACK_EMBEDDED mode) */
+cfgpack_err_t cfgpack_print(const cfgpack_ctx_t *ctx, uint16_t index);
+
+/* Print all present values to stdout (no-op in CFGPACK_EMBEDDED mode) */
+cfgpack_err_t cfgpack_print_all(const cfgpack_ctx_t *ctx);
+
+/* Return schema version */
+uint32_t cfgpack_get_version(const cfgpack_ctx_t *ctx);
+
+/* Return count of present values */
+size_t cfgpack_get_size(const cfgpack_ctx_t *ctx);
 ```
 
 After decoding all entries from the old data, `cfgpack_pagein_remap()` restores presence for any new-schema entries that have `has_default` set but were not in the incoming payload. This ensures new entries with defaults are immediately accessible after migration without explicit code to set them. Entries without defaults that were not in the old data remain absent.
+
+### Presence Bitmap
+
+The context embeds an inline bitmap (sized by `CFGPACK_MAX_ENTRIES`, default 128) to track which entries have been set. Three inline helper functions are provided in `api.h`:
+
+```c
+/* Mark entry index as present */
+static inline void cfgpack_presence_set(cfgpack_ctx_t *ctx, size_t idx);
+
+/* Test presence bit for entry index (returns 1 if present, 0 otherwise) */
+static inline int cfgpack_presence_get(const cfgpack_ctx_t *ctx, size_t idx);
+
+/* Clear presence bit for entry index */
+static inline void cfgpack_presence_clear(cfgpack_ctx_t *ctx, size_t idx);
+```
+
+These operate directly on `ctx->present[]` and perform no bounds checking. The bitmap is automatically managed by `cfgpack_init()`, `cfgpack_set()`, `cfgpack_pagein_buf()`, and `cfgpack_pagein_remap()`.
 
 ## Typed Convenience Functions
 

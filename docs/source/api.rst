@@ -3,6 +3,12 @@ API Reference
 
 This section documents the CFGPack C API, auto-generated from source code comments.
 
+Build Configuration
+-------------------
+
+.. doxygenfile:: config.h
+   :project: CFGPack
+
 Error Codes
 -----------
 
@@ -25,6 +31,12 @@ Runtime API
 -----------
 
 .. doxygenfile:: api.h
+   :project: CFGPack
+
+File I/O Wrappers
+-----------------
+
+.. doxygenfile:: io_file.h
    :project: CFGPack
 
 Decompression

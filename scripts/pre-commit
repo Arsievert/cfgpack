@@ -1,0 +1,32 @@
+#!/bin/bash
+#
+# Pre-commit hook: format check, build + test.
+# Installed by: ./scripts/setup.sh
+#
+
+set -e
+
+# Resolve root directory (hook lives in .git/hooks/ via symlink to scripts/)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Handle both direct execution from scripts/ and symlink from .git/hooks/
+if [ -f "$SCRIPT_DIR/run-tests.sh" ]; then
+    ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+else
+    ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+fi
+
+# Colors
+RED='\033[31m'
+GREEN='\033[32m'
+RESET='\033[0m'
+
+# ── Stage 1: Format check ────────────────────────────────────────────────────
+printf "${GREEN}[pre-commit]${RESET} Checking formatting...\n"
+make -C "$ROOT_DIR" format-check
+printf "${GREEN}[pre-commit]${RESET} Formatting OK\n"
+
+# ── Stage 2: Build and test ──────────────────────────────────────────────────
+printf "${GREEN}[pre-commit]${RESET} Building and running tests...\n"
+make -C "$ROOT_DIR" tests
+"$ROOT_DIR/scripts/run-tests.sh"
+printf "${GREEN}[pre-commit]${RESET} All checks passed\n"
