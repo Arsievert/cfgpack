@@ -74,21 +74,26 @@ void wbuf_put_double(wbuf_t *w, double val) {
     }
 #else
     /* Minimal formatter: sign, integer part, decimal point, up to 9 fractional digits */
+    uint64_t ipart;
+    double frac;
+    uint64_t frac_int;
+    char digits[9];
+    int ndigits;
+
     if (val < 0) {
         wbuf_putc(w, '-');
         val = -val;
     }
-    uint64_t ipart = (uint64_t)val;
+    ipart = (uint64_t)val;
     wbuf_put_uint(w, ipart);
 
-    double frac = val - (double)ipart;
+    frac = val - (double)ipart;
     if (frac > 1e-10) { /* Skip if essentially zero */
         wbuf_putc(w, '.');
         /* Multiply by 10^9 and round to get all digits at once - avoids accumulated error */
-        uint64_t frac_int = (uint64_t)(frac * 1000000000.0 + 0.5);
+        frac_int = (uint64_t)(frac * 1000000000.0 + 0.5);
         /* Extract up to 9 digits */
-        char digits[9];
-        int ndigits = 9;
+        ndigits = 9;
         for (int i = 8; i >= 0; i--) {
             digits[i] = '0' + (frac_int % 10);
             frac_int /= 10;

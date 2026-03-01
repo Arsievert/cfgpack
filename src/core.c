@@ -67,15 +67,18 @@ static size_t entry_offset(const cfgpack_schema_t *schema,
  */
 static int get_str_slot(const cfgpack_schema_t *schema, size_t entry_off) {
     int slot = 0;
+
     for (size_t i = 0; i < entry_off; ++i) {
         cfgpack_type_t t = schema->entries[i].type;
         if (t == CFGPACK_TYPE_STR || t == CFGPACK_TYPE_FSTR) {
             slot++;
         }
     }
-    cfgpack_type_t t = schema->entries[entry_off].type;
-    if (t != CFGPACK_TYPE_STR && t != CFGPACK_TYPE_FSTR) {
-        return -1;
+    {
+        cfgpack_type_t t = schema->entries[entry_off].type;
+        if (t != CFGPACK_TYPE_STR && t != CFGPACK_TYPE_FSTR) {
+            return -1;
+        }
     }
     return slot;
 }
@@ -88,6 +91,9 @@ cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx,
                            size_t str_pool_cap,
                            uint16_t *str_offsets,
                            size_t str_offsets_count) {
+    size_t str_slot = 0;
+    size_t pool_offset = 0;
+
     if (schema->entry_count > CFGPACK_MAX_ENTRIES) {
         return CFGPACK_ERR_BOUNDS;
     }
@@ -97,8 +103,6 @@ cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx,
     }
 
     /* Compute string slot offsets and verify pool capacity */
-    size_t str_slot = 0;
-    size_t pool_offset = 0;
     for (size_t i = 0; i < schema->entry_count; ++i) {
         cfgpack_type_t t = schema->entries[i].type;
         if (t == CFGPACK_TYPE_STR) {
@@ -251,6 +255,9 @@ cfgpack_err_t cfgpack_set_str(cfgpack_ctx_t *ctx,
                               const char *str) {
     const cfgpack_entry_t *entry;
     size_t off, len;
+    int slot;
+    uint16_t pool_off;
+    char *dst;
 
     if (index == 0) {
         return CFGPACK_ERR_RESERVED_INDEX;
@@ -270,13 +277,13 @@ cfgpack_err_t cfgpack_set_str(cfgpack_ctx_t *ctx,
     }
 
     off = entry_offset(ctx->schema, entry);
-    int slot = get_str_slot(ctx->schema, off);
+    slot = get_str_slot(ctx->schema, off);
     if (slot < 0 || (size_t)slot >= ctx->str_offsets_count) {
         return CFGPACK_ERR_BOUNDS;
     }
 
-    uint16_t pool_off = ctx->str_offsets[slot];
-    char *dst = ctx->str_pool + pool_off;
+    pool_off = ctx->str_offsets[slot];
+    dst = ctx->str_pool + pool_off;
     memcpy(dst, str, len);
     dst[len] = '\0';
 
@@ -293,6 +300,9 @@ cfgpack_err_t cfgpack_set_fstr(cfgpack_ctx_t *ctx,
                                const char *str) {
     const cfgpack_entry_t *entry;
     size_t off, len;
+    int slot;
+    uint16_t pool_off;
+    char *dst;
 
     if (index == 0) {
         return CFGPACK_ERR_RESERVED_INDEX;
@@ -312,13 +322,13 @@ cfgpack_err_t cfgpack_set_fstr(cfgpack_ctx_t *ctx,
     }
 
     off = entry_offset(ctx->schema, entry);
-    int slot = get_str_slot(ctx->schema, off);
+    slot = get_str_slot(ctx->schema, off);
     if (slot < 0 || (size_t)slot >= ctx->str_offsets_count) {
         return CFGPACK_ERR_BOUNDS;
     }
 
-    uint16_t pool_off = ctx->str_offsets[slot];
-    char *dst = ctx->str_pool + pool_off;
+    pool_off = ctx->str_offsets[slot];
+    dst = ctx->str_pool + pool_off;
     memcpy(dst, str, len);
     dst[len] = '\0';
 
@@ -492,10 +502,10 @@ cfgpack_err_t cfgpack_print(const cfgpack_ctx_t *ctx, uint16_t index) {
 
 cfgpack_err_t cfgpack_print_all(const cfgpack_ctx_t *ctx) {
     for (size_t i = 0; i < ctx->schema->entry_count; ++i) {
+        const cfgpack_entry_t *e = &ctx->schema->entries[i];
         if (!cfgpack_presence_get(ctx, i)) {
             continue;
         }
-        const cfgpack_entry_t *e = &ctx->schema->entries[i];
         printf("[%u] %s = ", e->index, e->name);
         print_value(ctx, i);
         printf("\n");

@@ -43,11 +43,12 @@ cfgpack_err_t cfgpack_msgpack_encode_uint64(cfgpack_buf_t *buf, uint64_t v) {
 }
 
 cfgpack_err_t cfgpack_msgpack_encode_int64(cfgpack_buf_t *buf, int64_t v) {
+    uint8_t tmp[9];
+    size_t n = 0;
+
     if (v >= 0) {
         return cfgpack_msgpack_encode_uint64(buf, (uint64_t)v);
     }
-    uint8_t tmp[9];
-    size_t n = 0;
     if (v >= -32) {
         tmp[n++] = (uint8_t)v; /* negative fixint */
     } else if (v >= -128) {
@@ -74,16 +75,22 @@ cfgpack_err_t cfgpack_msgpack_encode_int64(cfgpack_buf_t *buf, int64_t v) {
 
 cfgpack_err_t cfgpack_msgpack_encode_f32(cfgpack_buf_t *buf, float v) {
     uint32_t u;
+    uint8_t tmp[5];
+
     memcpy(&u, &v, sizeof(u));
-    uint8_t tmp[5] = {0xca, (uint8_t)(u >> 24), (uint8_t)(u >> 16),
-                      (uint8_t)(u >> 8), (uint8_t)u};
+    tmp[0] = 0xca;
+    tmp[1] = (uint8_t)(u >> 24);
+    tmp[2] = (uint8_t)(u >> 16);
+    tmp[3] = (uint8_t)(u >> 8);
+    tmp[4] = (uint8_t)u;
     return cfgpack_buf_append(buf, tmp, sizeof(tmp));
 }
 
 cfgpack_err_t cfgpack_msgpack_encode_f64(cfgpack_buf_t *buf, double v) {
     uint64_t u;
-    memcpy(&u, &v, sizeof(u));
     uint8_t tmp[9];
+
+    memcpy(&u, &v, sizeof(u));
     tmp[0] = 0xcb;
     for (int i = 0; i < 8; ++i) {
         tmp[1 + i] = (uint8_t)(u >> (56 - 8 * i));
@@ -216,10 +223,11 @@ cfgpack_err_t cfgpack_msgpack_decode_uint64(cfgpack_reader_t *r,
     }
     if (b == 0xcf) {
         uint8_t v[8];
+        uint64_t res = 0;
+
         if (read_bytes(r, v, 8)) {
             return CFGPACK_ERR_DECODE;
         }
-        uint64_t res = 0;
         for (int i = 0; i < 8; ++i) {
             res = (res << 8) | v[i];
         }
@@ -262,20 +270,23 @@ cfgpack_err_t cfgpack_msgpack_decode_int64(cfgpack_reader_t *r, int64_t *out) {
     }
     if (b == 0xd2) {
         uint8_t v[4];
+        int32_t res;
+
         if (read_bytes(r, v, 4)) {
             return CFGPACK_ERR_DECODE;
         }
-        int32_t res = (int32_t)((uint32_t)v[0] << 24 | (uint32_t)v[1] << 16 |
-                                (uint32_t)v[2] << 8 | v[3]);
+        res = (int32_t)((uint32_t)v[0] << 24 | (uint32_t)v[1] << 16 |
+                        (uint32_t)v[2] << 8 | v[3]);
         *out = res;
         return CFGPACK_OK;
     }
     if (b == 0xd3) {
         uint8_t v[8];
+        int64_t res = 0;
+
         if (read_bytes(r, v, 8)) {
             return CFGPACK_ERR_DECODE;
         }
-        int64_t res = 0;
         for (int i = 0; i < 8; ++i) {
             res = (res << 8) | v[i];
         }
@@ -288,6 +299,8 @@ cfgpack_err_t cfgpack_msgpack_decode_int64(cfgpack_reader_t *r, int64_t *out) {
 cfgpack_err_t cfgpack_msgpack_decode_f32(cfgpack_reader_t *r, float *out) {
     uint8_t b;
     uint8_t v[4];
+    uint32_t u;
+
     if (read_bytes(r, &b, 1)) {
         return CFGPACK_ERR_DECODE;
     }
@@ -297,8 +310,8 @@ cfgpack_err_t cfgpack_msgpack_decode_f32(cfgpack_reader_t *r, float *out) {
     if (read_bytes(r, v, 4)) {
         return CFGPACK_ERR_DECODE;
     }
-    uint32_t u = ((uint32_t)v[0] << 24) | ((uint32_t)v[1] << 16) |
-                 ((uint32_t)v[2] << 8) | v[3];
+    u = ((uint32_t)v[0] << 24) | ((uint32_t)v[1] << 16) |
+        ((uint32_t)v[2] << 8) | v[3];
     memcpy(out, &u, sizeof(u));
     return CFGPACK_OK;
 }
@@ -306,6 +319,8 @@ cfgpack_err_t cfgpack_msgpack_decode_f32(cfgpack_reader_t *r, float *out) {
 cfgpack_err_t cfgpack_msgpack_decode_f64(cfgpack_reader_t *r, double *out) {
     uint8_t b;
     uint8_t v[8];
+    uint64_t u = 0;
+
     if (read_bytes(r, &b, 1)) {
         return CFGPACK_ERR_DECODE;
     }
@@ -315,7 +330,6 @@ cfgpack_err_t cfgpack_msgpack_decode_f64(cfgpack_reader_t *r, double *out) {
     if (read_bytes(r, v, 8)) {
         return CFGPACK_ERR_DECODE;
     }
-    uint64_t u = 0;
     for (int i = 0; i < 8; ++i) {
         u = (u << 8) | v[i];
     }
@@ -373,10 +387,12 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
     remaining[0] = 1; /* skip exactly one top-level value */
 
     do {
+        uint8_t b;
+
         if (r->pos >= r->len) {
             return CFGPACK_ERR_DECODE;
         }
-        uint8_t b = r->data[r->pos++];
+        b = r->data[r->pos++];
 
         /* Positive fixint (0x00-0x7f) and negative fixint (0xe0-0xff) */
         if (b <= 0x7f || b >= 0xe0) {
@@ -431,10 +447,12 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
         /* bin 8, str 8 */
         case 0xc4:
         case 0xd9: {
+            uint8_t len;
+
             if (r->pos >= r->len) {
                 return CFGPACK_ERR_DECODE;
             }
-            uint8_t len = r->data[r->pos++];
+            len = r->data[r->pos++];
             if (r->pos + len > r->len) {
                 return CFGPACK_ERR_DECODE;
             }
@@ -445,11 +463,12 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
         /* bin 16, str 16 */
         case 0xc5:
         case 0xda: {
+            uint32_t len;
+
             if (r->pos + 2 > r->len) {
                 return CFGPACK_ERR_DECODE;
             }
-            uint32_t len = ((uint32_t)r->data[r->pos] << 8) |
-                           r->data[r->pos + 1];
+            len = ((uint32_t)r->data[r->pos] << 8) | r->data[r->pos + 1];
             r->pos += 2;
             if (r->pos + len > r->len) {
                 return CFGPACK_ERR_DECODE;
@@ -461,13 +480,14 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
         /* bin 32, str 32 */
         case 0xc6:
         case 0xdb: {
+            uint32_t len;
+
             if (r->pos + 4 > r->len) {
                 return CFGPACK_ERR_DECODE;
             }
-            uint32_t len = ((uint32_t)r->data[r->pos] << 24) |
-                           ((uint32_t)r->data[r->pos + 1] << 16) |
-                           ((uint32_t)r->data[r->pos + 2] << 8) |
-                           r->data[r->pos + 3];
+            len = ((uint32_t)r->data[r->pos] << 24) |
+                  ((uint32_t)r->data[r->pos + 1] << 16) |
+                  ((uint32_t)r->data[r->pos + 2] << 8) | r->data[r->pos + 3];
             r->pos += 4;
             if (r->pos + len > r->len) {
                 return CFGPACK_ERR_DECODE;
@@ -516,11 +536,12 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
 
         /* array 16 */
         case 0xdc: {
+            uint32_t count;
+
             if (r->pos + 2 > r->len) {
                 return CFGPACK_ERR_DECODE;
             }
-            uint32_t count = ((uint32_t)r->data[r->pos] << 8) |
-                             r->data[r->pos + 1];
+            count = ((uint32_t)r->data[r->pos] << 8) | r->data[r->pos + 1];
             r->pos += 2;
             if (count == 0) {
                 goto value_done;
@@ -535,13 +556,14 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
 
         /* array 32 */
         case 0xdd: {
+            uint32_t count;
+
             if (r->pos + 4 > r->len) {
                 return CFGPACK_ERR_DECODE;
             }
-            uint32_t count = ((uint32_t)r->data[r->pos] << 24) |
-                             ((uint32_t)r->data[r->pos + 1] << 16) |
-                             ((uint32_t)r->data[r->pos + 2] << 8) |
-                             r->data[r->pos + 3];
+            count = ((uint32_t)r->data[r->pos] << 24) |
+                    ((uint32_t)r->data[r->pos + 1] << 16) |
+                    ((uint32_t)r->data[r->pos + 2] << 8) | r->data[r->pos + 3];
             r->pos += 4;
             if (count == 0) {
                 goto value_done;
@@ -556,11 +578,12 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
 
         /* map 16 */
         case 0xde: {
+            uint32_t count;
+
             if (r->pos + 2 > r->len) {
                 return CFGPACK_ERR_DECODE;
             }
-            uint32_t count = ((uint32_t)r->data[r->pos] << 8) |
-                             r->data[r->pos + 1];
+            count = ((uint32_t)r->data[r->pos] << 8) | r->data[r->pos + 1];
             r->pos += 2;
             if (count == 0) {
                 goto value_done;
@@ -575,13 +598,14 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
 
         /* map 32 */
         case 0xdf: {
+            uint32_t count;
+
             if (r->pos + 4 > r->len) {
                 return CFGPACK_ERR_DECODE;
             }
-            uint32_t count = ((uint32_t)r->data[r->pos] << 24) |
-                             ((uint32_t)r->data[r->pos + 1] << 16) |
-                             ((uint32_t)r->data[r->pos + 2] << 8) |
-                             r->data[r->pos + 3];
+            count = ((uint32_t)r->data[r->pos] << 24) |
+                    ((uint32_t)r->data[r->pos + 1] << 16) |
+                    ((uint32_t)r->data[r->pos + 2] << 8) | r->data[r->pos + 3];
             r->pos += 4;
             if (count == 0) {
                 goto value_done;

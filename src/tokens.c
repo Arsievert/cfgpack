@@ -34,7 +34,7 @@ int tokens_create(tokens_t *tokens, uint16_t n, char **provided) {
  * @return 1 if delimiter, 0 otherwise.
  */
 static int _is_delimeter(char s, const char *d) {
-    int len;
+    size_t len;
 
     if (!d) {
         return (0);
@@ -42,7 +42,7 @@ static int _is_delimeter(char s, const char *d) {
 
     len = strlen(d);
 
-    for (int i = 0; i < len; i++) {
+    for (size_t i = 0; i < len; i++) {
         if (d[i] == s) {
             return (1);
         }
@@ -57,8 +57,8 @@ int tokens_find(tokens_t *tokens,
                 const char *delimeters,
                 uint16_t n_tokens,
                 size_t *stop_offset) {
-    size_t len;
     bool new_token;
+    size_t len;
 
     if ((!input) || (!delimeters) || (!n_tokens) || (!tokens->index)) {
         return (-1);
@@ -69,7 +69,6 @@ int tokens_find(tokens_t *tokens,
     }
 
     tokens->used = 0;
-
     new_token = true;
 
     /* Use the length of the string before mutilation. */

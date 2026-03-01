@@ -61,13 +61,16 @@ static void line_iter_init(line_iter_t *it, const char *data, size_t len) {
 /* Returns pointer to line start, sets *line_len, advances pos.
  * Returns NULL when no more lines. Line does NOT include newline. */
 static const char *line_iter_next(line_iter_t *it, size_t *line_len) {
+    const char *start;
+    size_t remaining;
+    size_t i = 0;
+
     if (it->pos >= it->len) {
         return NULL;
     }
 
-    const char *start = it->data + it->pos;
-    size_t remaining = it->len - it->pos;
-    size_t i = 0;
+    start = it->data + it->pos;
+    remaining = it->len - it->pos;
 
     /* Find end of line (newline or end of buffer) */
     while (i < remaining && start[i] != '\n' && start[i] != '\r') {
@@ -96,11 +99,13 @@ static const char *line_iter_next(line_iter_t *it, size_t *line_len) {
  * @brief Populate a parse error structure.
  */
 static void set_err(cfgpack_parse_error_t *err, size_t line, const char *msg) {
+    size_t msg_len;
+
     if (!err) {
         return;
     }
     err->line = line;
-    size_t msg_len = strlen(msg);
+    msg_len = strlen(msg);
     if (msg_len >= sizeof(err->message)) {
         msg_len = sizeof(err->message) - 1;
     }
@@ -263,15 +268,18 @@ static size_t compute_str_offsets(const cfgpack_entry_t *entries,
  */
 static int get_str_slot(const cfgpack_entry_t *entries, size_t entry_off) {
     int slot = 0;
+
     for (size_t i = 0; i < entry_off; ++i) {
         cfgpack_type_t t = entries[i].type;
         if (t == CFGPACK_TYPE_STR || t == CFGPACK_TYPE_FSTR) {
             slot++;
         }
     }
-    cfgpack_type_t t = entries[entry_off].type;
-    if (t != CFGPACK_TYPE_STR && t != CFGPACK_TYPE_FSTR) {
-        return -1;
+    {
+        cfgpack_type_t t = entries[entry_off].type;
+        if (t != CFGPACK_TYPE_STR && t != CFGPACK_TYPE_FSTR) {
+            return -1;
+        }
     }
     return slot;
 }
@@ -608,13 +616,14 @@ static void fat_str_to_pool(const cfgpack_fat_value_t *fat,
  */
 static cfgpack_err_t schema_finalize(const cfgpack_parse_opts_t *opts,
                                      size_t count) {
+    size_t pool_needed;
+
     sort_entries(opts->entries, opts->values, count);
     opts->out_schema->entries = opts->entries;
     opts->out_schema->entry_count = count;
 
-    size_t pool_needed = compute_str_offsets(opts->entries, count,
-                                             opts->str_offsets,
-                                             opts->str_offsets_count);
+    pool_needed = compute_str_offsets(opts->entries, count, opts->str_offsets,
+                                      opts->str_offsets_count);
     if (pool_needed > opts->str_pool_cap) {
         set_err(opts->err, 0, "string pool too small");
         return CFGPACK_ERR_BOUNDS;
@@ -652,6 +661,7 @@ static cfgpack_err_t parse_schema_map_impl(const char *data,
     cfgpack_value_t *values = NULL;
     char *str_pool = NULL;
     uint16_t *str_offsets = NULL;
+    cfgpack_err_t frc;
 
     if (!measuring) {
         out_schema = opts->out_schema;
@@ -669,20 +679,29 @@ static cfgpack_err_t parse_schema_map_impl(const char *data,
 
     line_iter_t iter;
     char line_buf[MAX_LINE_LEN];
+    const char *line;
+    size_t line_len;
     size_t line_no = 0;
     int header_read = 0;
     size_t count = 0;
 
     line_iter_init(&iter, data, data_len);
 
-    const char *line;
-    size_t line_len;
-
     /* ── Phase 1: Parse/measure entries ────────────────────────────────── */
     while ((line = line_iter_next(&iter, &line_len)) != NULL) {
         char *slots[4];
         tokens_t tok;
         size_t stop_offset = 0;
+        unsigned long idx_ul;
+        cfgpack_type_t type;
+        cfgpack_err_t trc;
+        char default_tok[MAX_LINE_LEN];
+        const char *remainder;
+        const char *def_str;
+        cfgpack_fat_value_t fat_default;
+        uint8_t has_def;
+        cfgpack_err_t drc;
+        size_t name_len;
 
         line_no++;
 
@@ -702,6 +721,9 @@ static cfgpack_err_t parse_schema_map_impl(const char *data,
         }
 
         if (!header_read) {
+            char *endp = NULL;
+            unsigned long ver;
+
             tokens_find(&tok, line_buf, " \t\r\n", 2, NULL);
             if (tok.used != 2) {
                 set_err(err, line_no, "invalid header");
@@ -721,8 +743,7 @@ static cfgpack_err_t parse_schema_map_impl(const char *data,
                     return CFGPACK_ERR_BOUNDS;
                 }
             }
-            char *endp = NULL;
-            unsigned long ver = strtoul(tok.index[1], &endp, 10);
+            ver = strtoul(tok.index[1], &endp, 10);
             if (tok.index[1][0] == '\0' || (endp && *endp != '\0')) {
                 set_err(err, line_no, "invalid header");
                 tokens_destroy(&tok);
@@ -734,7 +755,7 @@ static cfgpack_err_t parse_schema_map_impl(const char *data,
                 return CFGPACK_ERR_BOUNDS;
             }
             if (!measuring) {
-                size_t name_len = strlen(tok.index[0]);
+                name_len = strlen(tok.index[0]);
                 memcpy(out_schema->map_name, tok.index[0], name_len + 1);
                 out_schema->version = (uint32_t)ver;
             }
@@ -758,7 +779,7 @@ static cfgpack_err_t parse_schema_map_impl(const char *data,
             return CFGPACK_ERR_BOUNDS;
         }
 
-        unsigned long idx_ul = strtoul(tok.index[0], NULL, 10);
+        idx_ul = strtoul(tok.index[0], NULL, 10);
         if (idx_ul > 65535ul) {
             set_err(err, line_no, "index out of range");
             tokens_destroy(&tok);
@@ -769,8 +790,7 @@ static cfgpack_err_t parse_schema_map_impl(const char *data,
             tokens_destroy(&tok);
             return CFGPACK_ERR_RESERVED_INDEX;
         }
-        cfgpack_type_t type;
-        cfgpack_err_t trc = parse_type(tok.index[2], &type);
+        trc = parse_type(tok.index[2], &type);
         if (trc != CFGPACK_OK) {
             set_err(err, line_no, "invalid type");
             tokens_destroy(&tok);
@@ -789,10 +809,9 @@ static cfgpack_err_t parse_schema_map_impl(const char *data,
         }
 
         /* Extract default value from remainder of line */
-        char default_tok[MAX_LINE_LEN];
-        const char *remainder = line_buf + stop_offset;
-        const char *def_str = extract_default_token(remainder, default_tok,
-                                                    sizeof(default_tok));
+        remainder = line_buf + stop_offset;
+        def_str = extract_default_token(remainder, default_tok,
+                                        sizeof(default_tok));
         if (!def_str || def_str[0] == '\0') {
             set_err(err, line_no, "missing default value");
             tokens_destroy(&tok);
@@ -800,10 +819,8 @@ static cfgpack_err_t parse_schema_map_impl(const char *data,
         }
 
         /* Parse default into stack-local fat value */
-        cfgpack_fat_value_t fat_default;
-        uint8_t has_def = 0;
-        cfgpack_err_t drc = parse_default(def_str, type, &fat_default,
-                                          &has_def);
+        has_def = 0;
+        drc = parse_default(def_str, type, &fat_default, &has_def);
         if (drc != CFGPACK_OK) {
             set_err(err, line_no, "invalid default value");
             tokens_destroy(&tok);
@@ -818,7 +835,7 @@ static cfgpack_err_t parse_schema_map_impl(const char *data,
             }
         } else {
             entries[count].index = (uint16_t)idx_ul;
-            size_t name_len = strlen(tok.index[1]);
+            name_len = strlen(tok.index[1]);
             memcpy(entries[count].name, tok.index[1], name_len + 1);
             entries[count].type = type;
             entries[count].has_default = has_def;
@@ -854,7 +871,7 @@ static cfgpack_err_t parse_schema_map_impl(const char *data,
     /* ── Parse mode: finalize and extract string defaults ──────────────── */
 
     /* Sort entries, assign schema, set up string pool */
-    cfgpack_err_t frc = schema_finalize(opts, count);
+    frc = schema_finalize(opts, count);
     if (frc != CFGPACK_OK) {
         return frc;
     }
@@ -868,6 +885,14 @@ static cfgpack_err_t parse_schema_map_impl(const char *data,
         char *slots[4];
         tokens_t tok;
         size_t stop_offset = 0;
+        unsigned long idx_ul;
+        cfgpack_type_t type;
+        char default_tok[MAX_LINE_LEN];
+        const char *remainder;
+        const char *def_str;
+        cfgpack_fat_value_t fat_default;
+        uint8_t has_def;
+        int pos;
 
         line_no++;
         if (is_blank_or_comment_n(line, line_len)) {
@@ -896,8 +921,7 @@ static cfgpack_err_t parse_schema_map_impl(const char *data,
             continue;
         }
 
-        unsigned long idx_ul = strtoul(tok.index[0], NULL, 10);
-        cfgpack_type_t type;
+        idx_ul = strtoul(tok.index[0], NULL, 10);
         parse_type(tok.index[2], &type);
 
         /* Only process string entries with defaults */
@@ -906,23 +930,21 @@ static cfgpack_err_t parse_schema_map_impl(const char *data,
             continue;
         }
 
-        char default_tok[MAX_LINE_LEN];
-        const char *remainder = line_buf + stop_offset;
-        const char *def_str = extract_default_token(remainder, default_tok,
-                                                    sizeof(default_tok));
+        remainder = line_buf + stop_offset;
+        def_str = extract_default_token(remainder, default_tok,
+                                        sizeof(default_tok));
         if (!def_str || strcmp(def_str, "NIL") == 0) {
             tokens_destroy(&tok);
             continue;
         }
 
         /* Parse string default into stack-local fat value */
-        cfgpack_fat_value_t fat_default;
-        uint8_t has_def = 0;
+        has_def = 0;
         parse_default(def_str, type, &fat_default, &has_def);
 
         if (has_def) {
             /* Find this entry's position in the sorted array */
-            int pos = find_entry_pos(entries, count, (uint16_t)idx_ul);
+            pos = find_entry_pos(entries, count, (uint16_t)idx_ul);
             if (pos >= 0) {
                 fat_str_to_pool(&fat_default, (size_t)pos, values, entries,
                                 str_pool, str_offsets);
@@ -1342,6 +1364,7 @@ static cfgpack_err_t parse_schema_json_impl(const char *data,
     cfgpack_value_t *values = NULL;
     char *str_pool = NULL;
     uint16_t *str_offsets = NULL;
+    cfgpack_err_t frc;
 
     if (!measuring) {
         out_schema = opts->out_schema;
@@ -1360,6 +1383,7 @@ static cfgpack_err_t parse_schema_json_impl(const char *data,
     json_parser_t parser = {data, data_len, 0, 1};
     json_parser_t *p = &parser;
     size_t count = 0;
+    int got_name = 0, got_version = 0, got_entries = 0;
 
     /* Expect top-level object */
     if (!json_expect(p, '{')) {
@@ -1368,7 +1392,6 @@ static cfgpack_err_t parse_schema_json_impl(const char *data,
     }
 
     /* Parse top-level keys: name, version, entries */
-    int got_name = 0, got_version = 0, got_entries = 0;
 
     while (json_peek(p) != '}' && json_peek(p) != '\0') {
         char key[32];
@@ -1417,6 +1440,18 @@ static cfgpack_err_t parse_schema_json_impl(const char *data,
             }
 
             while (json_peek(p) != ']' && json_peek(p) != '\0') {
+                cfgpack_entry_t *e;
+                int got_index, got_ename, got_type, got_default;
+                cfgpack_type_t entry_type;
+                int default_is_null;
+                int default_is_string;
+                int default_is_number;
+                char default_str[CFGPACK_STR_MAX + 1];
+                size_t default_str_len;
+                int64_t default_ival;
+                double default_fval;
+                int default_is_float;
+
                 if (!measuring && count >= max_entries) {
                     set_err(err, p->line, "too many entries");
                     return CFGPACK_ERR_BOUNDS;
@@ -1427,24 +1462,26 @@ static cfgpack_err_t parse_schema_json_impl(const char *data,
                     return CFGPACK_ERR_PARSE;
                 }
 
-                cfgpack_entry_t *e = NULL;
+                e = NULL;
                 if (!measuring) {
                     e = &entries[count];
                     memset(e, 0, sizeof(*e));
                 }
 
-                int got_index = 0, got_ename = 0, got_type = 0, got_default = 0;
-                cfgpack_type_t entry_type = CFGPACK_TYPE_U8;
+                got_index = 0;
+                got_ename = 0;
+                got_type = 0;
+                got_default = 0;
+                entry_type = CFGPACK_TYPE_U8;
 
                 /* Temporary storage for default value */
-                int default_is_null = 0;
-                int default_is_string = 0;
-                int default_is_number = 0;
-                char default_str[CFGPACK_STR_MAX + 1];
-                size_t default_str_len = 0;
-                int64_t default_ival = 0;
-                double default_fval = 0;
-                int default_is_float = 0;
+                default_is_null = 0;
+                default_is_string = 0;
+                default_is_number = 0;
+                default_str_len = 0;
+                default_ival = 0;
+                default_fval = 0;
+                default_is_float = 0;
 
                 while (json_peek(p) != '}' && json_peek(p) != '\0') {
                     char ekey[32];
@@ -1671,7 +1708,12 @@ static cfgpack_err_t parse_schema_json_impl(const char *data,
     /* ── Parse mode: finalize and extract string defaults ──────────────── */
 
     /* Sort entries, assign schema, set up string pool */
-    cfgpack_err_t frc = schema_finalize(opts, count);
+    frc = schema_finalize(opts, count);
+    if (frc != CFGPACK_OK) {
+        return frc;
+    }
+
+    /* ── Phase 2: Re-parse JSON to extract string/fstr defaults ────────── */
     if (frc != CFGPACK_OK) {
         return frc;
     }
@@ -1701,16 +1743,22 @@ static cfgpack_err_t parse_schema_json_impl(const char *data,
                 }
 
                 while (json_peek(jp) != ']' && json_peek(jp) != '\0') {
+                    uint16_t entry_index;
+                    cfgpack_type_t entry_type;
+                    int has_string_default;
+                    char str_data[CFGPACK_STR_MAX + 1];
+                    size_t str_len;
+                    int entry_has_default;
+
                     if (!json_expect(jp, '{')) {
                         break;
                     }
 
-                    uint16_t entry_index = 0;
-                    cfgpack_type_t entry_type = CFGPACK_TYPE_U8;
-                    int has_string_default = 0;
-                    char str_data[CFGPACK_STR_MAX + 1];
-                    size_t str_len = 0;
-                    int entry_has_default = 0;
+                    entry_index = 0;
+                    entry_type = CFGPACK_TYPE_U8;
+                    has_string_default = 0;
+                    str_len = 0;
+                    entry_has_default = 0;
 
                     while (json_peek(jp) != '}' && json_peek(jp) != '\0') {
                         char ekey[32];
@@ -1866,10 +1914,12 @@ static cfgpack_err_t mp_encode_array_header(cfgpack_buf_t *buf,
  */
 static cfgpack_err_t mp_decode_array_header(cfgpack_reader_t *r,
                                             uint32_t *count) {
+    uint8_t b;
+
     if (r->pos >= r->len) {
         return CFGPACK_ERR_DECODE;
     }
-    uint8_t b = r->data[r->pos];
+    b = r->data[r->pos];
     if ((b & 0xF0) == 0x90) {
         *count = b & 0x0F;
         r->pos++;
@@ -1927,6 +1977,18 @@ static cfgpack_err_t parse_schema_msgpack_impl(
     cfgpack_value_t *values = NULL;
     char *str_pool = NULL;
     uint16_t *str_offsets = NULL;
+    cfgpack_err_t frc;
+
+    /* Measure-mode locals */
+    size_t str_count = 0;
+    size_t fstr_count = 0;
+
+    cfgpack_reader_t reader;
+    cfgpack_reader_t *r;
+    cfgpack_err_t rc;
+    size_t count = 0;
+    uint32_t top_count;
+    int got_name = 0, got_version = 0, got_entries = 0;
 
     if (!measuring) {
         out_schema = opts->out_schema;
@@ -1938,25 +2000,15 @@ static cfgpack_err_t parse_schema_msgpack_impl(
         memset(values, 0, max_entries * sizeof(cfgpack_value_t));
     }
 
-    /* Measure-mode locals */
-    size_t str_count = 0;
-    size_t fstr_count = 0;
-
-    cfgpack_reader_t reader;
     cfgpack_reader_init(&reader, data, data_len);
-    cfgpack_reader_t *r = &reader;
-    cfgpack_err_t rc;
-    size_t count = 0;
+    r = &reader;
 
     /* Top-level map */
-    uint32_t top_count;
     rc = cfgpack_msgpack_decode_map_header(r, &top_count);
     if (rc != CFGPACK_OK) {
         set_err(err, 0, "invalid msgpack: expected top-level map");
         return CFGPACK_ERR_DECODE;
     }
-
-    int got_name = 0, got_version = 0, got_entries = 0;
 
     /* ── Phase 1: Decode/measure entries ───────────────────────────────── */
     for (uint32_t ti = 0; ti < top_count; ++ti) {
@@ -2194,7 +2246,7 @@ static cfgpack_err_t parse_schema_msgpack_impl(
     }
 
     /* Sort entries, assign schema, set up string pool */
-    cfgpack_err_t frc = schema_finalize(opts, count);
+    frc = schema_finalize(opts, count);
     if (frc != CFGPACK_OK) {
         return frc;
     }
@@ -2230,26 +2282,43 @@ static cfgpack_err_t parse_schema_msgpack_impl(
 
                 for (uint32_t ei = 0; ei < arr_count; ++ei) {
                     uint32_t ecount;
+                    uint16_t entry_index;
+                    cfgpack_type_t entry_type;
+                    int entry_has_default;
+                    int has_string_default;
+                    cfgpack_fat_value_t fat;
+                    uint64_t def_u64;
+                    int64_t def_i64;
+                    float def_f32;
+                    double def_f64;
+                    int def_is_uint, def_is_int;
+                    int def_is_f32, def_is_f64;
+                    int pos;
+                    int type_is_str;
+                    int val_is_str;
+                    int val_is_num;
+
                     rc = cfgpack_msgpack_decode_map_header(rp, &ecount);
                     if (rc != CFGPACK_OK) {
                         set_err(err, 0, "phase2 decode error");
                         return CFGPACK_ERR_DECODE;
                     }
 
-                    uint16_t entry_index = 0;
-                    cfgpack_type_t entry_type = CFGPACK_TYPE_U8;
-                    int entry_has_default = 0;
-                    int has_string_default = 0;
-                    cfgpack_fat_value_t fat;
+                    entry_index = 0;
+                    entry_type = CFGPACK_TYPE_U8;
+                    entry_has_default = 0;
+                    has_string_default = 0;
                     memset(&fat, 0, sizeof(fat));
 
                     /* Numeric default temporaries */
-                    uint64_t def_u64 = 0;
-                    int64_t def_i64 = 0;
-                    float def_f32 = 0;
-                    double def_f64 = 0;
-                    int def_is_uint = 0, def_is_int = 0;
-                    int def_is_f32 = 0, def_is_f64 = 0;
+                    def_u64 = 0;
+                    def_i64 = 0;
+                    def_f32 = 0;
+                    def_f64 = 0;
+                    def_is_uint = 0;
+                    def_is_int = 0;
+                    def_is_f32 = 0;
+                    def_is_f64 = 0;
 
                     for (uint32_t ek = 0; ek < ecount; ++ek) {
                         uint64_t ekey;
@@ -2294,8 +2363,10 @@ static cfgpack_err_t parse_schema_msgpack_impl(
                                 set_err(err, 0, "truncated default value");
                                 return CFGPACK_ERR_DECODE;
                             } else {
+                                uint8_t vb;
+
                                 entry_has_default = 1;
-                                uint8_t vb = rp->data[rp->pos];
+                                vb = rp->data[rp->pos];
                                 if (vb == 0xCA) {
                                     rc = cfgpack_msgpack_decode_f32(rp,
                                                                     &def_f32);
@@ -2370,7 +2441,7 @@ static cfgpack_err_t parse_schema_msgpack_impl(
                         }
                     }
 
-                    int pos = find_entry_pos(entries, count, entry_index);
+                    pos = find_entry_pos(entries, count, entry_index);
                     if (pos < 0 || !entry_has_default) {
                         continue;
                     }
@@ -2379,11 +2450,11 @@ static cfgpack_err_t parse_schema_msgpack_impl(
                      * default.  A mismatch (e.g. float wire value for a
                      * string-type entry) would store bits through the wrong
                      * union member, leading to OOB reads later in pageout. */
-                    int type_is_str = (entry_type == CFGPACK_TYPE_STR ||
-                                       entry_type == CFGPACK_TYPE_FSTR);
-                    int val_is_str = has_string_default;
-                    int val_is_num = (def_is_uint || def_is_int || def_is_f32 ||
-                                      def_is_f64);
+                    type_is_str = (entry_type == CFGPACK_TYPE_STR ||
+                                   entry_type == CFGPACK_TYPE_FSTR);
+                    val_is_str = has_string_default;
+                    val_is_num = (def_is_uint || def_is_int || def_is_f32 ||
+                                  def_is_f64);
 
                     if (type_is_str && val_is_num) {
                         set_err(err, 0,

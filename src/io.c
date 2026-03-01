@@ -11,15 +11,19 @@
  */
 static int get_str_slot(const cfgpack_schema_t *schema, size_t entry_off) {
     int slot = 0;
+
     for (size_t i = 0; i < entry_off; ++i) {
         cfgpack_type_t t = schema->entries[i].type;
         if (t == CFGPACK_TYPE_STR || t == CFGPACK_TYPE_FSTR) {
             slot++;
         }
     }
-    cfgpack_type_t t = schema->entries[entry_off].type;
-    if (t != CFGPACK_TYPE_STR && t != CFGPACK_TYPE_FSTR) {
-        return -1;
+    {
+        cfgpack_type_t t;
+        t = schema->entries[entry_off].type;
+        if (t != CFGPACK_TYPE_STR && t != CFGPACK_TYPE_FSTR) {
+            return -1;
+        }
     }
     return slot;
 }
@@ -48,17 +52,19 @@ static cfgpack_err_t encode_value(cfgpack_buf_t *buf,
     case CFGPACK_TYPE_F32: return cfgpack_msgpack_encode_f32(buf, v->v.f32);
     case CFGPACK_TYPE_F64: return cfgpack_msgpack_encode_f64(buf, v->v.f64);
     case CFGPACK_TYPE_STR: {
+        const char *str;
         if ((size_t)v->v.str.offset + v->v.str.len > ctx->str_pool_cap) {
             return CFGPACK_ERR_ENCODE;
         }
-        const char *str = ctx->str_pool + v->v.str.offset;
+        str = ctx->str_pool + v->v.str.offset;
         return cfgpack_msgpack_encode_str(buf, str, v->v.str.len);
     }
     case CFGPACK_TYPE_FSTR: {
+        const char *str;
         if ((size_t)v->v.fstr.offset + v->v.fstr.len > ctx->str_pool_cap) {
             return CFGPACK_ERR_ENCODE;
         }
-        const char *str = ctx->str_pool + v->v.fstr.offset;
+        str = ctx->str_pool + v->v.fstr.offset;
         return cfgpack_msgpack_encode_str(buf, str, v->v.fstr.len);
     }
     }
@@ -103,10 +109,10 @@ cfgpack_err_t cfgpack_pageout(const cfgpack_ctx_t *ctx,
     }
 
     for (size_t i = 0; i < ctx->schema->entry_count; ++i) {
+        const cfgpack_entry_t *e = &ctx->schema->entries[i];
         if (!cfgpack_presence_get(ctx, i)) {
             continue;
         }
-        const cfgpack_entry_t *e = &ctx->schema->entries[i];
         if (cfgpack_msgpack_encode_uint_key(&buf, e->index) != CFGPACK_OK) {
             return CFGPACK_ERR_ENCODE;
         }
@@ -202,6 +208,10 @@ static cfgpack_err_t decode_value(cfgpack_reader_t *r,
     case CFGPACK_TYPE_STR: {
         const uint8_t *ptr;
         uint32_t len;
+        int slot;
+        uint16_t pool_off;
+        char *dst;
+
         if (cfgpack_msgpack_decode_str(r, &ptr, &len) != CFGPACK_OK) {
             return CFGPACK_ERR_DECODE;
         }
@@ -210,13 +220,13 @@ static cfgpack_err_t decode_value(cfgpack_reader_t *r,
         }
 
         /* Get string slot and write to pool */
-        int slot = get_str_slot(ctx->schema, entry_off);
+        slot = get_str_slot(ctx->schema, entry_off);
         if (slot < 0 || (size_t)slot >= ctx->str_offsets_count) {
             return CFGPACK_ERR_BOUNDS;
         }
 
-        uint16_t pool_off = ctx->str_offsets[slot];
-        char *dst = ctx->str_pool + pool_off;
+        pool_off = ctx->str_offsets[slot];
+        dst = ctx->str_pool + pool_off;
         memcpy(dst, ptr, len);
         dst[len] = '\0';
 
@@ -227,6 +237,10 @@ static cfgpack_err_t decode_value(cfgpack_reader_t *r,
     case CFGPACK_TYPE_FSTR: {
         const uint8_t *ptr;
         uint32_t len;
+        int slot;
+        uint16_t pool_off;
+        char *dst;
+
         if (cfgpack_msgpack_decode_str(r, &ptr, &len) != CFGPACK_OK) {
             return CFGPACK_ERR_DECODE;
         }
@@ -235,13 +249,13 @@ static cfgpack_err_t decode_value(cfgpack_reader_t *r,
         }
 
         /* Get string slot and write to pool */
-        int slot = get_str_slot(ctx->schema, entry_off);
+        slot = get_str_slot(ctx->schema, entry_off);
         if (slot < 0 || (size_t)slot >= ctx->str_offsets_count) {
             return CFGPACK_ERR_BOUNDS;
         }
 
-        uint16_t pool_off = ctx->str_offsets[slot];
-        char *dst = ctx->str_pool + pool_off;
+        pool_off = ctx->str_offsets[slot];
+        dst = ctx->str_pool + pool_off;
         memcpy(dst, ptr, len);
         dst[len] = '\0';
 
@@ -340,12 +354,16 @@ static cfgpack_err_t decode_value_with_coercion(cfgpack_reader_t *r,
                                                 size_t entry_off,
                                                 cfgpack_type_t schema_type,
                                                 cfgpack_value_t *out) {
+    uint8_t b;
+    cfgpack_type_t wire_type;
+    int wire_is_unsigned;
+    int schema_is_signed;
+
     if (r->pos >= r->len) {
         return CFGPACK_ERR_DECODE;
     }
 
-    uint8_t b = r->data[r->pos];
-    cfgpack_type_t wire_type;
+    b = r->data[r->pos];
 
     /* Detect wire type from format byte (don't consume yet) */
     if (b <= 0x7f) {
@@ -408,14 +426,14 @@ static cfgpack_err_t decode_value_with_coercion(cfgpack_reader_t *r,
      *   - unsigned wire -> signed schema (decode_int64 can't parse 0xcc-0xcf)
      *   - f32 wire -> f64 schema (decode_f64 can't parse 0xca)
      */
-    int wire_is_unsigned = (wire_type == CFGPACK_TYPE_U8 ||
-                            wire_type == CFGPACK_TYPE_U16 ||
-                            wire_type == CFGPACK_TYPE_U32 ||
-                            wire_type == CFGPACK_TYPE_U64);
-    int schema_is_signed = (schema_type == CFGPACK_TYPE_I8 ||
-                            schema_type == CFGPACK_TYPE_I16 ||
-                            schema_type == CFGPACK_TYPE_I32 ||
-                            schema_type == CFGPACK_TYPE_I64);
+    wire_is_unsigned = (wire_type == CFGPACK_TYPE_U8 ||
+                        wire_type == CFGPACK_TYPE_U16 ||
+                        wire_type == CFGPACK_TYPE_U32 ||
+                        wire_type == CFGPACK_TYPE_U64);
+    schema_is_signed = (schema_type == CFGPACK_TYPE_I8 ||
+                        schema_type == CFGPACK_TYPE_I16 ||
+                        schema_type == CFGPACK_TYPE_I32 ||
+                        schema_type == CFGPACK_TYPE_I64);
 
     if (wire_is_unsigned && schema_is_signed) {
         /* Decode as uint64, then convert to int64 */
@@ -471,6 +489,11 @@ cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx,
 
     for (uint32_t i = 0; i < map_count; ++i) {
         uint64_t key;
+        uint16_t target_index;
+        const cfgpack_entry_t *entry;
+        size_t idx;
+        cfgpack_err_t err;
+
         if (cfgpack_msgpack_decode_uint64(&r, &key) != CFGPACK_OK) {
             return CFGPACK_ERR_DECODE;
         }
@@ -484,7 +507,7 @@ cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx,
         }
 
         /* Apply remap if provided */
-        uint16_t target_index = (uint16_t)key;
+        target_index = (uint16_t)key;
         if (remap != NULL) {
             for (size_t ri = 0; ri < remap_count; ++ri) {
                 if (remap[ri].old_index == (uint16_t)key) {
@@ -495,8 +518,8 @@ cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx,
         }
 
         /* Find matching entry in schema */
-        const cfgpack_entry_t *entry = NULL;
-        size_t idx = 0;
+        entry = NULL;
+        idx = 0;
         for (size_t j = 0; j < ctx->schema->entry_count; ++j) {
             if (ctx->schema->entries[j].index == target_index) {
                 entry = &ctx->schema->entries[j];
@@ -514,9 +537,8 @@ cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx,
         }
 
         /* Decode value with type coercion support */
-        cfgpack_err_t err = decode_value_with_coercion(&r, ctx, idx,
-                                                       entry->type,
-                                                       &ctx->values[idx]);
+        err = decode_value_with_coercion(&r, ctx, idx, entry->type,
+                                         &ctx->values[idx]);
         if (err != CFGPACK_OK) {
             return err;
         }
