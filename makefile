@@ -5,7 +5,7 @@ CLANG_FORMAT ?= clang-format
 
 # --- Flags --------------------------------------------------------------------
 CPPFLAGS      := -Iinclude -Iinclude/cfgpack -Ithird_party/lz4 -Ithird_party/heatshrink
-CFLAGS        := -Wall -Wextra -std=c99 -DCFGPACK_LZ4 -DCFGPACK_HEATSHRINK
+CFLAGS        := -Wall -Wextra -std=c99 -Os -DCFGPACK_LZ4 -DCFGPACK_HEATSHRINK
 CFLAGS_HOSTED := $(CFLAGS) -DCFGPACK_HOSTED
 LDFLAGS       :=
 LDLIBS        :=
