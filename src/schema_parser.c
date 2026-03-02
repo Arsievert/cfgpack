@@ -1188,7 +1188,6 @@ cfgpack_err_t cfgpack_schema_write_json(const cfgpack_ctx_t *ctx,
         return (CFGPACK_ERR_BOUNDS);
     }
 
-    (void)err;
     return (CFGPACK_OK);
 }
 
