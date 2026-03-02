@@ -12,8 +12,8 @@
  */
 static const cfgpack_entry_t *find_entry(const cfgpack_schema_t *schema,
                                          uint16_t index) {
-    size_t lo = 0;
     size_t hi = schema->entry_count;
+    size_t lo = 0;
 
     while (lo < hi) {
         size_t mid = lo + (hi - lo) / 2;
@@ -91,8 +91,8 @@ cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx,
                            size_t str_pool_cap,
                            uint16_t *str_offsets,
                            size_t str_offsets_count) {
-    size_t str_slot = 0;
     size_t pool_offset = 0;
+    size_t str_slot = 0;
 
     if (schema->entry_count > CFGPACK_MAX_ENTRIES) {
         return (CFGPACK_ERR_BOUNDS);
@@ -254,10 +254,11 @@ cfgpack_err_t cfgpack_set_str(cfgpack_ctx_t *ctx,
                               uint16_t index,
                               const char *str) {
     const cfgpack_entry_t *entry;
-    size_t off, len;
-    int slot;
     uint16_t pool_off;
+    size_t off;
+    size_t len;
     char *dst;
+    int slot;
 
     if (index == 0) {
         return (CFGPACK_ERR_RESERVED_INDEX);
@@ -299,10 +300,11 @@ cfgpack_err_t cfgpack_set_fstr(cfgpack_ctx_t *ctx,
                                uint16_t index,
                                const char *str) {
     const cfgpack_entry_t *entry;
-    size_t off, len;
-    int slot;
     uint16_t pool_off;
+    size_t off;
+    size_t len;
     char *dst;
+    int slot;
 
     if (index == 0) {
         return (CFGPACK_ERR_RESERVED_INDEX);

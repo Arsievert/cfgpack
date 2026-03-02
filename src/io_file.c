@@ -124,8 +124,10 @@ cfgpack_err_t cfgpack_schema_measure_file(const char *path,
                                           char *scratch,
                                           size_t scratch_cap,
                                           cfgpack_parse_error_t *err) {
+    cfgpack_err_t rc;
     size_t len = 0;
-    cfgpack_err_t rc = read_file(path, scratch, scratch_cap, &len);
+
+    rc = read_file(path, scratch, scratch_cap, &len);
     if (rc != CFGPACK_OK) {
         if (err) {
             err->line = 0;
@@ -141,8 +143,10 @@ cfgpack_err_t cfgpack_schema_measure_json_file(const char *path,
                                                char *scratch,
                                                size_t scratch_cap,
                                                cfgpack_parse_error_t *err) {
+    cfgpack_err_t rc;
     size_t len = 0;
-    cfgpack_err_t rc = read_file(path, scratch, scratch_cap, &len);
+
+    rc = read_file(path, scratch, scratch_cap, &len);
     if (rc != CFGPACK_OK) {
         if (err) {
             err->line = 0;
@@ -157,8 +161,10 @@ cfgpack_err_t cfgpack_parse_schema_file(const char *path,
                                         const cfgpack_parse_opts_t *opts,
                                         char *scratch,
                                         size_t scratch_cap) {
+    cfgpack_err_t rc;
     size_t len = 0;
-    cfgpack_err_t rc = read_file(path, scratch, scratch_cap, &len);
+
+    rc = read_file(path, scratch, scratch_cap, &len);
     if (rc != CFGPACK_OK) {
         if (opts->err) {
             opts->err->line = 0;
@@ -174,8 +180,10 @@ cfgpack_err_t cfgpack_schema_parse_json_file(const char *path,
                                              const cfgpack_parse_opts_t *opts,
                                              char *scratch,
                                              size_t scratch_cap) {
+    cfgpack_err_t rc;
     size_t len = 0;
-    cfgpack_err_t rc = read_file(path, scratch, scratch_cap, &len);
+
+    rc = read_file(path, scratch, scratch_cap, &len);
     if (rc != CFGPACK_OK) {
         if (opts->err) {
             opts->err->line = 0;
@@ -193,8 +201,9 @@ cfgpack_err_t cfgpack_schema_write_json_file(const cfgpack_ctx_t *ctx,
                                              size_t scratch_cap,
                                              cfgpack_parse_error_t *err) {
     size_t out_len = 0;
-    cfgpack_err_t rc = cfgpack_schema_write_json(ctx, scratch, scratch_cap,
-                                                 &out_len, err);
+    cfgpack_err_t rc;
+
+    rc = cfgpack_schema_write_json(ctx, scratch, scratch_cap, &out_len, err);
     if (rc != CFGPACK_OK) {
         return (rc);
     }
@@ -215,8 +224,10 @@ cfgpack_err_t cfgpack_pageout_file(const cfgpack_ctx_t *ctx,
                                    const char *path,
                                    uint8_t *scratch,
                                    size_t scratch_cap) {
+    cfgpack_err_t rc;
     size_t len = 0;
-    cfgpack_err_t rc = cfgpack_pageout(ctx, scratch, scratch_cap, &len);
+
+    rc = cfgpack_pageout(ctx, scratch, scratch_cap, &len);
     if (rc != CFGPACK_OK) {
         return (rc);
     }
@@ -228,8 +239,10 @@ cfgpack_err_t cfgpack_pagein_file(cfgpack_ctx_t *ctx,
                                   const char *path,
                                   uint8_t *scratch,
                                   size_t scratch_cap) {
+    cfgpack_err_t rc;
     size_t len = 0;
-    cfgpack_err_t rc = read_file_binary(path, scratch, scratch_cap, &len);
+
+    rc = read_file_binary(path, scratch, scratch_cap, &len);
     if (rc != CFGPACK_OK) {
         return (rc);
     }

@@ -53,12 +53,12 @@ cfgpack_err_t cfgpack_pagein_heatshrink(cfgpack_ctx_t *ctx,
                                         size_t len,
                                         uint8_t *scratch,
                                         size_t scratch_cap) {
-    size_t input_consumed = 0;
     size_t output_produced = 0;
+    size_t input_consumed = 0;
+    HSD_finish_res finish_res;
     size_t total_output = 0;
     HSD_sink_res sink_res;
     HSD_poll_res poll_res;
-    HSD_finish_res finish_res;
 
     if (!ctx || !data || !scratch) {
         return (CFGPACK_ERR_DECODE);

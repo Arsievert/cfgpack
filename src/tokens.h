@@ -18,9 +18,9 @@
  * @brief In-place string tokenizer state.
  */
 typedef struct tokens_struct {
+    char **index;  /**< @brief Array of pointers to each token start. */
     uint16_t max;  /**< @brief Maximum number of token slots available. */
     uint16_t used; /**< @brief Current number of tokens found. */
-    char **index;  /**< @brief Array of pointers to each token start. */
     bool owns;     /**< @brief Whether @c index was allocated internally. */
 } tokens_t;
 

@@ -242,8 +242,8 @@ static size_t compute_str_offsets(const cfgpack_entry_t *entries,
                                   size_t count,
                                   uint16_t *str_offsets,
                                   size_t str_offsets_count) {
-    size_t slot = 0;
     size_t pool_offset = 0;
+    size_t slot = 0;
     for (size_t i = 0; i < count; ++i) {
         cfgpack_type_t t = entries[i].type;
         if (t == CFGPACK_TYPE_STR) {
@@ -290,8 +290,8 @@ static int get_str_slot(const cfgpack_entry_t *entries, size_t entry_off) {
 static int find_entry_pos(const cfgpack_entry_t *entries,
                           size_t count,
                           uint16_t index) {
-    size_t lo = 0;
     size_t hi = count;
+    size_t lo = 0;
     while (lo < hi) {
         size_t mid = lo + (hi - lo) / 2;
         if (entries[mid].index == index) {
@@ -380,8 +380,8 @@ static cfgpack_err_t parse_uint(const char *tok,
                                 cfgpack_fat_value_t *out,
                                 cfgpack_type_t type) {
     char *endp = NULL;
-    uint64_t val;
     uint64_t max_val;
+    uint64_t val;
 
     errno = 0;
     val = strtoull(tok, &endp, 0); /* base 0 handles 0x prefix */
@@ -413,8 +413,9 @@ static cfgpack_err_t parse_int(const char *tok,
                                cfgpack_fat_value_t *out,
                                cfgpack_type_t type) {
     char *endp = NULL;
+    int64_t min_val;
+    int64_t max_val;
     int64_t val;
-    int64_t min_val, max_val;
 
     errno = 0;
     val = strtoll(tok, &endp, 0);
@@ -763,15 +764,15 @@ static cfgpack_err_t map_parse_entry(parse_ctx_t *ctx,
                                      char *line_buf,
                                      size_t stop_offset,
                                      size_t line_no) {
-    unsigned long idx_ul;
-    cfgpack_type_t type;
-    cfgpack_err_t trc;
+    cfgpack_fat_value_t fat_default;
     char default_tok[MAX_LINE_LEN];
     const char *remainder;
+    unsigned long idx_ul;
     const char *def_str;
-    cfgpack_fat_value_t fat_default;
-    uint8_t has_def;
+    cfgpack_type_t type;
     cfgpack_err_t drc;
+    cfgpack_err_t trc;
+    uint8_t has_def;
     size_t name_len;
 
     if (!ctx->measuring && ctx->count >= ctx->max_entries) {
@@ -850,25 +851,25 @@ static cfgpack_err_t map_parse_entry(parse_ctx_t *ctx,
  *        into the string pool at sorted positions.
  */
 static void map_phase2(parse_ctx_t *ctx, const char *data, size_t data_len) {
-    line_iter_t iter;
     char line_buf[MAX_LINE_LEN];
-    const char *line;
-    size_t line_len;
     int header_read = 0;
+    const char *line;
+    line_iter_t iter;
+    size_t line_len;
 
     line_iter_init(&iter, data, data_len);
 
     while ((line = line_iter_next(&iter, &line_len)) != NULL) {
+        cfgpack_fat_value_t fat_default;
+        char default_tok[MAX_LINE_LEN];
+        unsigned long idx_ul;
+        const char *remainder;
+        size_t stop_offset = 0;
+        const char *def_str;
+        cfgpack_type_t type;
+        uint8_t has_def;
         char *slots[4];
         tokens_t tok;
-        size_t stop_offset = 0;
-        unsigned long idx_ul;
-        cfgpack_type_t type;
-        char default_tok[MAX_LINE_LEN];
-        const char *remainder;
-        const char *def_str;
-        cfgpack_fat_value_t fat_default;
-        uint8_t has_def;
         int pos;
         if (is_blank_or_comment_n(line, line_len)) {
             continue;
@@ -947,14 +948,14 @@ static cfgpack_err_t parse_schema_map_impl(const char *data,
                                            const cfgpack_parse_opts_t *opts,
                                            cfgpack_schema_measure_t *measure,
                                            cfgpack_parse_error_t *err) {
-    parse_ctx_t ctx;
-    cfgpack_err_t rc;
-    line_iter_t iter;
     char line_buf[MAX_LINE_LEN];
+    int header_read = 0;
+    size_t line_no = 0;
+    line_iter_t iter;
     const char *line;
     size_t line_len;
-    size_t line_no = 0;
-    int header_read = 0;
+    cfgpack_err_t rc;
+    parse_ctx_t ctx;
 
     rc = parse_ctx_init(&ctx, opts, measure, err);
     if (rc != CFGPACK_OK) {
@@ -965,9 +966,9 @@ static cfgpack_err_t parse_schema_map_impl(const char *data,
 
     /* ── Phase 1: Parse/measure entries ────────────────────────────────── */
     while ((line = line_iter_next(&iter, &line_len)) != NULL) {
+        size_t stop_offset = 0;
         char *slots[4];
         tokens_t tok;
-        size_t stop_offset = 0;
 
         line_no++;
 
@@ -1307,7 +1308,8 @@ static int json_parse_number(json_parser_t *p,
                              int *is_float) {
     json_skip_ws(p);
     size_t start = p->pos;
-    int has_dot = 0, has_exp = 0;
+    int has_dot = 0;
+    int has_exp = 0;
 
     /* Optional minus */
     if (p->pos < p->len && p->data[p->pos] == '-') {
@@ -1383,9 +1385,9 @@ static int json_match_literal(json_parser_t *p, const char *lit) {
 
 cfgpack_err_t cfgpack_schema_get_sizing(const cfgpack_schema_t *schema,
                                         cfgpack_schema_sizing_t *out) {
-    size_t str_count = 0;
-    size_t fstr_count = 0;
     size_t str_pool_size = 0;
+    size_t fstr_count = 0;
+    size_t str_count = 0;
 
     for (size_t i = 0; i < schema->entry_count; ++i) {
         switch (schema->entries[i].type) {
@@ -1449,9 +1451,9 @@ static cfgpack_err_t json_parse_header_name(parse_ctx_t *ctx,
  */
 static cfgpack_err_t json_parse_header_version(parse_ctx_t *ctx,
                                                json_parser_t *p) {
-    int64_t ver;
-    double ver_f;
     int is_float;
+    double ver_f;
+    int64_t ver;
 
     if (!json_parse_number(p, &ver, &ver_f, &is_float) || is_float || ver < 0) {
         set_err(ctx->err, p->line, "invalid version");
@@ -1467,6 +1469,9 @@ static cfgpack_err_t json_parse_header_version(parse_ctx_t *ctx,
  * @brief Temporary state for parsing one JSON entry's fields.
  */
 typedef struct {
+    int64_t default_ival;
+    double default_fval;
+    size_t default_str_len;
     int got_index;
     int got_ename;
     int got_type;
@@ -1475,11 +1480,8 @@ typedef struct {
     int default_is_null;
     int default_is_string;
     int default_is_number;
-    char default_str[CFGPACK_STR_MAX + 1];
-    size_t default_str_len;
-    int64_t default_ival;
-    double default_fval;
     int default_is_float;
+    char default_str[CFGPACK_STR_MAX + 1];
 } json_entry_fields_t;
 
 /**
@@ -1492,8 +1494,8 @@ static cfgpack_err_t json_parse_entry_fields(parse_ctx_t *ctx,
                                              cfgpack_entry_t *e,
                                              json_entry_fields_t *f) {
     while (json_peek(p) != '}' && json_peek(p) != '\0') {
-        char ekey[32];
         size_t ekey_len;
+        char ekey[32];
 
         if (!json_parse_string(p, ekey, sizeof(ekey), &ekey_len)) {
             set_err(ctx->err, p->line, "expected entry key");
@@ -1505,9 +1507,9 @@ static cfgpack_err_t json_parse_entry_fields(parse_ctx_t *ctx,
         }
 
         if (strcmp(ekey, "index") == 0) {
-            int64_t idx;
-            double idx_f;
             int is_float;
+            double idx_f;
+            int64_t idx;
             if (!json_parse_number(p, &idx, &idx_f, &is_float) || is_float ||
                 idx < 0 || idx > 65535) {
                 set_err(ctx->err, p->line, "invalid index");
@@ -1662,8 +1664,8 @@ static cfgpack_err_t json_store_entry_defaults(parse_ctx_t *ctx,
  */
 static cfgpack_err_t json_parse_one_entry(parse_ctx_t *ctx, json_parser_t *p) {
     cfgpack_entry_t *e = NULL;
-    cfgpack_entry_t dummy;
     json_entry_fields_t f;
+    cfgpack_entry_t dummy;
     cfgpack_err_t rc;
 
     if (!ctx->measuring && ctx->count >= ctx->max_entries) {
@@ -1736,8 +1738,8 @@ static void json_phase2(parse_ctx_t *ctx, const char *data, size_t data_len) {
     }
 
     while (json_peek(jp) != '}' && json_peek(jp) != '\0') {
-        char key[32];
         size_t key_len;
+        char key[32];
         if (!json_parse_string(jp, key, sizeof(key), &key_len)) {
             break;
         }
@@ -1751,12 +1753,12 @@ static void json_phase2(parse_ctx_t *ctx, const char *data, size_t data_len) {
             }
 
             while (json_peek(jp) != ']' && json_peek(jp) != '\0') {
-                uint16_t entry_index;
-                cfgpack_type_t entry_type;
-                int has_string_default;
                 char str_data[CFGPACK_STR_MAX + 1];
-                size_t str_len;
+                int has_string_default;
+                cfgpack_type_t entry_type;
                 int entry_has_default;
+                uint16_t entry_index;
+                size_t str_len;
 
                 if (!json_expect(jp, '{')) {
                     break;
@@ -1769,8 +1771,8 @@ static void json_phase2(parse_ctx_t *ctx, const char *data, size_t data_len) {
                 entry_has_default = 0;
 
                 while (json_peek(jp) != '}' && json_peek(jp) != '\0') {
-                    char ekey[32];
                     size_t ekey_len;
+                    char ekey[32];
                     if (!json_parse_string(jp, ekey, sizeof(ekey), &ekey_len)) {
                         break;
                     }
@@ -1779,9 +1781,9 @@ static void json_phase2(parse_ctx_t *ctx, const char *data, size_t data_len) {
                     }
 
                     if (strcmp(ekey, "index") == 0) {
-                        int64_t idx;
                         double idx_f;
                         int is_float;
+                        int64_t idx;
                         json_parse_number(jp, &idx, &idx_f, &is_float);
                         entry_index = (uint16_t)idx;
                     } else if (strcmp(ekey, "name") == 0) {
@@ -1869,11 +1871,13 @@ static cfgpack_err_t parse_schema_json_impl(const char *data,
                                             const cfgpack_parse_opts_t *opts,
                                             cfgpack_schema_measure_t *measure,
                                             cfgpack_parse_error_t *err) {
-    parse_ctx_t ctx;
-    cfgpack_err_t rc;
     json_parser_t parser = {data, data_len, 0, 1};
     json_parser_t *p = &parser;
-    int got_name = 0, got_version = 0, got_entries = 0;
+    int got_version = 0;
+    int got_entries = 0;
+    int got_name = 0;
+    cfgpack_err_t rc;
+    parse_ctx_t ctx;
 
     rc = parse_ctx_init(&ctx, opts, measure, err);
     if (rc != CFGPACK_OK) {
@@ -1888,8 +1892,8 @@ static cfgpack_err_t parse_schema_json_impl(const char *data,
 
     /* Parse top-level keys: name, version, entries */
     while (json_peek(p) != '}' && json_peek(p) != '\0') {
-        char key[32];
         size_t key_len;
+        char key[32];
         if (!json_parse_string(p, key, sizeof(key), &key_len)) {
             set_err(err, p->line, "expected key");
             return (CFGPACK_ERR_PARSE);
@@ -2150,12 +2154,15 @@ static cfgpack_err_t mp_parse_header_version(parse_ctx_t *ctx,
  * Increments ctx->count on success.
  */
 static cfgpack_err_t mp_parse_one_entry(parse_ctx_t *ctx, cfgpack_reader_t *r) {
-    uint32_t ecount;
-    cfgpack_entry_t *e = NULL;
     cfgpack_type_t entry_type = CFGPACK_TYPE_U8;
-    int got_idx = 0, got_ename = 0, got_type = 0, got_default = 0;
+    cfgpack_entry_t *e = NULL;
     int default_is_nil = 0;
+    int got_default = 0;
+    int got_ename = 0;
+    int got_type = 0;
     cfgpack_err_t rc;
+    int got_idx = 0;
+    uint32_t ecount;
 
     if (!ctx->measuring && ctx->count >= ctx->max_entries) {
         set_err(ctx->err, 0, "too many entries");
@@ -2550,10 +2557,10 @@ static cfgpack_err_t mp_phase2_decode_entry_fields(cfgpack_reader_t *rp,
 static cfgpack_err_t mp_phase2(parse_ctx_t *ctx,
                                const uint8_t *data,
                                size_t data_len) {
-    cfgpack_reader_t r2;
     cfgpack_reader_t *rp;
-    uint32_t top2;
+    cfgpack_reader_t r2;
     cfgpack_err_t rc;
+    uint32_t top2;
 
     cfgpack_reader_init(&r2, data, data_len);
     rp = &r2;
@@ -2583,8 +2590,8 @@ static cfgpack_err_t mp_phase2(parse_ctx_t *ctx,
             }
 
             for (uint32_t ei = 0; ei < arr_count; ++ei) {
-                uint32_t ecount;
                 mp_p2_entry_t p2;
+                uint32_t ecount;
                 int pos;
 
                 rc = cfgpack_msgpack_decode_map_header(rp, &ecount);
@@ -2640,12 +2647,14 @@ static cfgpack_err_t parse_schema_msgpack_impl(
     const cfgpack_parse_opts_t *opts,
     cfgpack_schema_measure_t *measure,
     cfgpack_parse_error_t *err) {
-    parse_ctx_t ctx;
     cfgpack_reader_t reader;
     cfgpack_reader_t *r;
-    cfgpack_err_t rc;
+    int got_version = 0;
+    int got_entries = 0;
     uint32_t top_count;
-    int got_name = 0, got_version = 0, got_entries = 0;
+    int got_name = 0;
+    cfgpack_err_t rc;
+    parse_ctx_t ctx;
 
     rc = parse_ctx_init(&ctx, opts, measure, err);
     if (rc != CFGPACK_OK) {
@@ -2772,8 +2781,9 @@ cfgpack_err_t cfgpack_schema_write_msgpack(const cfgpack_ctx_t *ctx,
                                            cfgpack_parse_error_t *err) {
     const cfgpack_schema_t *schema = ctx->schema;
     cfgpack_buf_t buf;
-    cfgpack_buf_init(&buf, out, out_cap);
     cfgpack_err_t rc;
+
+    cfgpack_buf_init(&buf, out, out_cap);
 
     /* map(3): name, version, entries */
     rc = cfgpack_msgpack_encode_map_header(&buf, 3);

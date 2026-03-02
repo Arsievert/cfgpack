@@ -75,8 +75,8 @@ cfgpack_err_t cfgpack_msgpack_encode_int64(cfgpack_buf_t *buf, int64_t v) {
 }
 
 cfgpack_err_t cfgpack_msgpack_encode_f32(cfgpack_buf_t *buf, float v) {
-    uint32_t u;
     uint8_t tmp[5];
+    uint32_t u;
 
     memcpy(&u, &v, sizeof(u));
     tmp[0] = 0xca;
@@ -88,8 +88,8 @@ cfgpack_err_t cfgpack_msgpack_encode_f32(cfgpack_buf_t *buf, float v) {
 }
 
 cfgpack_err_t cfgpack_msgpack_encode_f64(cfgpack_buf_t *buf, double v) {
-    uint64_t u;
     uint8_t tmp[9];
+    uint64_t u;
 
     memcpy(&u, &v, sizeof(u));
     tmp[0] = 0xcb;
@@ -102,8 +102,8 @@ cfgpack_err_t cfgpack_msgpack_encode_f64(cfgpack_buf_t *buf, double v) {
 cfgpack_err_t cfgpack_msgpack_encode_str(cfgpack_buf_t *buf,
                                          const char *s,
                                          size_t len) {
-    uint8_t hdr[3];
     size_t hlen = 0;
+    uint8_t hdr[3];
     if (len <= 31) {
         hdr[hlen++] = (uint8_t)(0xa0 | (uint8_t)len);
     } else if (len <= 255) {
@@ -223,8 +223,8 @@ cfgpack_err_t cfgpack_msgpack_decode_uint64(cfgpack_reader_t *r,
         return (CFGPACK_OK);
     }
     if (b == 0xcf) {
-        uint8_t v[8];
         uint64_t res = 0;
+        uint8_t v[8];
 
         if (read_bytes(r, v, 8)) {
             return (CFGPACK_ERR_DECODE);
@@ -282,8 +282,8 @@ cfgpack_err_t cfgpack_msgpack_decode_int64(cfgpack_reader_t *r, int64_t *out) {
         return (CFGPACK_OK);
     }
     if (b == 0xd3) {
-        uint8_t v[8];
         int64_t res = 0;
+        uint8_t v[8];
 
         if (read_bytes(r, v, 8)) {
             return (CFGPACK_ERR_DECODE);
@@ -298,9 +298,9 @@ cfgpack_err_t cfgpack_msgpack_decode_int64(cfgpack_reader_t *r, int64_t *out) {
 }
 
 cfgpack_err_t cfgpack_msgpack_decode_f32(cfgpack_reader_t *r, float *out) {
-    uint8_t b;
     uint8_t v[4];
     uint32_t u;
+    uint8_t b;
 
     if (read_bytes(r, &b, 1)) {
         return (CFGPACK_ERR_DECODE);
@@ -318,9 +318,9 @@ cfgpack_err_t cfgpack_msgpack_decode_f32(cfgpack_reader_t *r, float *out) {
 }
 
 cfgpack_err_t cfgpack_msgpack_decode_f64(cfgpack_reader_t *r, double *out) {
-    uint8_t b;
-    uint8_t v[8];
     uint64_t u = 0;
+    uint8_t v[8];
+    uint8_t b;
 
     if (read_bytes(r, &b, 1)) {
         return (CFGPACK_ERR_DECODE);
@@ -383,8 +383,8 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
      * Stack budget: CFGPACK_SKIP_MAX_DEPTH * sizeof(uint32_t) bytes.
      * Default 32 levels = 128 bytes, which is safe for embedded targets.
      */
-    uint32_t depth = 0;
     uint32_t remaining[CFGPACK_SKIP_MAX_DEPTH];
+    uint32_t depth = 0;
     remaining[0] = 1; /* skip exactly one top-level value */
 
     do {

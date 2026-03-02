@@ -76,8 +76,8 @@ cfgpack_err_t cfgpack_pageout(const cfgpack_ctx_t *ctx,
                               uint8_t *out,
                               size_t out_cap,
                               size_t *out_len) {
-    cfgpack_buf_t buf;
     size_t present_count = 0;
+    cfgpack_buf_t buf;
 
     /* Minimum headroom: map header + u64 key + u8 value (~12 bytes). */
     if (out_cap < 12) {
@@ -131,8 +131,8 @@ cfgpack_err_t cfgpack_peek_name(const uint8_t *data,
                                 size_t len,
                                 char *out_name,
                                 size_t out_cap) {
-    cfgpack_reader_t r;
     uint32_t map_count;
+    cfgpack_reader_t r;
 
     if (!data || len == 0 || !out_name || out_cap == 0) {
         return (CFGPACK_ERR_DECODE);
@@ -207,10 +207,10 @@ static cfgpack_err_t decode_value(cfgpack_reader_t *r,
     case CFGPACK_TYPE_F64: return cfgpack_msgpack_decode_f64(r, &out->v.f64);
     case CFGPACK_TYPE_STR: {
         const uint8_t *ptr;
-        uint32_t len;
-        int slot;
         uint16_t pool_off;
+        uint32_t len;
         char *dst;
+        int slot;
 
         if (cfgpack_msgpack_decode_str(r, &ptr, &len) != CFGPACK_OK) {
             return (CFGPACK_ERR_DECODE);
@@ -236,10 +236,10 @@ static cfgpack_err_t decode_value(cfgpack_reader_t *r,
     }
     case CFGPACK_TYPE_FSTR: {
         const uint8_t *ptr;
-        uint32_t len;
-        int slot;
         uint16_t pool_off;
+        uint32_t len;
         char *dst;
+        int slot;
 
         if (cfgpack_msgpack_decode_str(r, &ptr, &len) != CFGPACK_OK) {
             return (CFGPACK_ERR_DECODE);
@@ -354,10 +354,10 @@ static cfgpack_err_t decode_value_with_coercion(cfgpack_reader_t *r,
                                                 size_t entry_off,
                                                 cfgpack_type_t schema_type,
                                                 cfgpack_value_t *out) {
-    uint8_t b;
     cfgpack_type_t wire_type;
     int wire_is_unsigned;
     int schema_is_signed;
+    uint8_t b;
 
     if (r->pos >= r->len) {
         return (CFGPACK_ERR_DECODE);
@@ -474,8 +474,8 @@ cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx,
                                    size_t len,
                                    const cfgpack_remap_entry_t *remap,
                                    size_t remap_count) {
-    cfgpack_reader_t r;
     uint32_t map_count = 0;
+    cfgpack_reader_t r;
 
     if (!data || len == 0) {
         return (CFGPACK_ERR_DECODE);
@@ -488,11 +488,11 @@ cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx,
     memset(ctx->present, 0, sizeof(ctx->present));
 
     for (uint32_t i = 0; i < map_count; ++i) {
-        uint64_t key;
-        uint16_t target_index;
         const cfgpack_entry_t *entry;
-        size_t idx;
+        uint16_t target_index;
         cfgpack_err_t err;
+        uint64_t key;
+        size_t idx;
 
         if (cfgpack_msgpack_decode_uint64(&r, &key) != CFGPACK_OK) {
             return (CFGPACK_ERR_DECODE);
