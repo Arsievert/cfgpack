@@ -33,7 +33,7 @@ int tokens_create(tokens_t *tokens, uint16_t n, char **provided) {
  * @param d NUL-terminated delimiter string.
  * @return 1 if delimiter, 0 otherwise.
  */
-static int _is_delimeter(char s, const char *d) {
+static int _is_delimiter(char s, const char *d) {
     size_t len;
 
     if (!d) {
@@ -54,13 +54,13 @@ static int _is_delimeter(char s, const char *d) {
 /** @copydoc tokens_find */
 int tokens_find(tokens_t *tokens,
                 char *input,
-                const char *delimeters,
+                const char *delimiters,
                 uint16_t n_tokens,
                 size_t *stop_offset) {
     bool new_token;
     size_t len;
 
-    if ((!input) || (!delimeters) || (!n_tokens) || (!tokens->index)) {
+    if ((!input) || (!delimiters) || (!n_tokens) || (!tokens->index)) {
         return (-1);
     }
 
@@ -75,7 +75,7 @@ int tokens_find(tokens_t *tokens,
     len = strlen(input);
 
     for (size_t i = 0; i < len; i++) {
-        if (_is_delimeter(input[i], delimeters)) {
+        if (_is_delimiter(input[i], delimiters)) {
             input[i] = 0;
             new_token = true;
             continue;

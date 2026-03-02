@@ -46,14 +46,14 @@ int tokens_create(tokens_t *tokens, uint16_t n, char **provided);
  *
  * @param tokens      Token container (must be initialized via tokens_create).
  * @param input       Mutable input string (modified in place).
- * @param delimeters  Delimiter characters (each char is a separator).
+ * @param delimiters  Delimiter characters (each char is a separator).
  * @param n_tokens    Maximum number of tokens to extract.
  * @param stop_offset If non-NULL, set to the byte offset where parsing stopped.
  * @return 0 on success, -1 on invalid arguments or capacity exceeded.
  */
 int tokens_find(tokens_t *tokens,
                 char *input,
-                const char *delimeters,
+                const char *delimiters,
                 uint16_t n_tokens,
                 size_t *stop_offset);
 
