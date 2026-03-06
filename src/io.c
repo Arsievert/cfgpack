@@ -40,6 +40,10 @@ static cfgpack_err_t encode_value(cfgpack_buf_t *buf,
                                   const cfgpack_ctx_t *ctx,
                                   size_t entry_off,
                                   const cfgpack_value_t *v) {
+    /* All unsigned integer types are stored in v.u64 regardless of width (see
+     * cfgpack_value_t in value.h).  encode_uint64 / encode_int64 already emit
+     * the smallest msgpack encoding for the actual value, so no per-width
+     * encoder is needed. */
     switch (v->type) {
     case CFGPACK_TYPE_U8: return cfgpack_msgpack_encode_uint64(buf, v->v.u64);
     case CFGPACK_TYPE_U16: return cfgpack_msgpack_encode_uint64(buf, v->v.u64);
