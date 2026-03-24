@@ -238,7 +238,7 @@ static void sort_entries(cfgpack_entry_t *entries,
  * After sorting, recomputes str_offsets[] in sorted entry order.
  * Returns total pool bytes needed.
  */
-static size_t compute_str_offsets(const cfgpack_entry_t *entries,
+static size_t compute_str_offsets(cfgpack_entry_t *entries,
                                   size_t count,
                                   uint16_t *str_offsets,
                                   size_t str_offsets_count) {
@@ -247,41 +247,24 @@ static size_t compute_str_offsets(const cfgpack_entry_t *entries,
     for (size_t i = 0; i < count; ++i) {
         cfgpack_type_t t = entries[i].type;
         if (t == CFGPACK_TYPE_STR) {
-            if (slot < str_offsets_count) {
+            entries[i].str_slot = (uint8_t)slot;
+            if (slot < str_offsets_count && pool_offset <= UINT16_MAX) {
                 str_offsets[slot] = (uint16_t)pool_offset;
             }
             slot++;
             pool_offset += CFGPACK_STR_MAX + 1;
         } else if (t == CFGPACK_TYPE_FSTR) {
-            if (slot < str_offsets_count) {
+            entries[i].str_slot = (uint8_t)slot;
+            if (slot < str_offsets_count && pool_offset <= UINT16_MAX) {
                 str_offsets[slot] = (uint16_t)pool_offset;
             }
             slot++;
             pool_offset += CFGPACK_FSTR_MAX + 1;
+        } else {
+            entries[i].str_slot = CFGPACK_STR_SLOT_NONE;
         }
     }
     return (pool_offset);
-}
-
-/**
- * @brief Get the string slot index for a given entry offset.
- */
-static int get_str_slot(const cfgpack_entry_t *entries, size_t entry_off) {
-    int slot = 0;
-
-    for (size_t i = 0; i < entry_off; ++i) {
-        cfgpack_type_t t = entries[i].type;
-        if (t == CFGPACK_TYPE_STR || t == CFGPACK_TYPE_FSTR) {
-            slot++;
-        }
-    }
-    {
-        cfgpack_type_t t = entries[entry_off].type;
-        if (t != CFGPACK_TYPE_STR && t != CFGPACK_TYPE_FSTR) {
-            return (-1);
-        }
-    }
-    return (slot);
 }
 
 /**
@@ -576,11 +559,11 @@ static void fat_str_to_pool(const cfgpack_fat_value_t *fat,
                             const cfgpack_entry_t *entries,
                             char *str_pool,
                             uint16_t *str_offsets) {
-    int slot = get_str_slot(entries, entry_pos);
+    uint8_t slot = entries[entry_pos].str_slot;
     uint16_t offset;
     char *dst;
 
-    if (slot < 0) {
+    if (slot == CFGPACK_STR_SLOT_NONE) {
         return;
     }
 
@@ -628,6 +611,10 @@ static cfgpack_err_t schema_finalize(const cfgpack_parse_opts_t *opts,
 
     pool_needed = compute_str_offsets(opts->entries, count, opts->str_offsets,
                                       opts->str_offsets_count);
+    if (pool_needed > UINT16_MAX) {
+        set_err(opts->err, 0, "string pool exceeds offset range");
+        return (CFGPACK_ERR_BOUNDS);
+    }
     if (pool_needed > opts->str_pool_cap) {
         set_err(opts->err, 0, "string pool too small");
         return (CFGPACK_ERR_BOUNDS);
@@ -1043,7 +1030,7 @@ static cfgpack_err_t parse_schema_map_impl(const char *data,
 cfgpack_err_t cfgpack_parse_schema(const char *data,
                                    size_t data_len,
                                    const cfgpack_parse_opts_t *opts) {
-    if (!opts) {
+    if (!opts || !data) {
         return (CFGPACK_ERR_ARGS);
     }
     return (parse_schema_map_impl(data, data_len, opts, NULL, opts->err));
@@ -1417,6 +1404,9 @@ cfgpack_err_t cfgpack_schema_measure(const char *data,
                                      size_t data_len,
                                      cfgpack_schema_measure_t *out,
                                      cfgpack_parse_error_t *err) {
+    if (!data || !out) {
+        return (CFGPACK_ERR_ARGS);
+    }
     return (parse_schema_map_impl(data, data_len, NULL, out, err));
 }
 
@@ -1977,6 +1967,9 @@ cfgpack_err_t cfgpack_schema_measure_json(const char *data,
                                           size_t data_len,
                                           cfgpack_schema_measure_t *out,
                                           cfgpack_parse_error_t *err) {
+    if (!data || !out) {
+        return (CFGPACK_ERR_ARGS);
+    }
     return (parse_schema_json_impl(data, data_len, NULL, out, err));
 }
 
@@ -1987,7 +1980,7 @@ cfgpack_err_t cfgpack_schema_measure_json(const char *data,
 cfgpack_err_t cfgpack_schema_parse_json(const char *data,
                                         size_t data_len,
                                         const cfgpack_parse_opts_t *opts) {
-    if (!opts) {
+    if (!opts || !data) {
         return (CFGPACK_ERR_ARGS);
     }
     return (parse_schema_json_impl(data, data_len, opts, NULL, opts->err));
@@ -2753,6 +2746,9 @@ cfgpack_err_t cfgpack_schema_measure_msgpack(const uint8_t *data,
                                              size_t data_len,
                                              cfgpack_schema_measure_t *out,
                                              cfgpack_parse_error_t *err) {
+    if (!data || !out) {
+        return (CFGPACK_ERR_ARGS);
+    }
     return (parse_schema_msgpack_impl(data, data_len, NULL, out, err));
 }
 
@@ -2763,7 +2759,7 @@ cfgpack_err_t cfgpack_schema_measure_msgpack(const uint8_t *data,
 cfgpack_err_t cfgpack_schema_parse_msgpack(const uint8_t *data,
                                            size_t data_len,
                                            const cfgpack_parse_opts_t *opts) {
-    if (!opts) {
+    if (!opts || !data) {
         return (CFGPACK_ERR_ARGS);
     }
     return (parse_schema_msgpack_impl(data, data_len, opts, NULL, opts->err));

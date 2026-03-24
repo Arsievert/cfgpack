@@ -7,38 +7,14 @@
 #include <string.h>
 
 /**
- * @brief Get the string slot index for a given entry offset.
- */
-static int get_str_slot(const cfgpack_schema_t *schema, size_t entry_off) {
-    int slot = 0;
-
-    for (size_t i = 0; i < entry_off; ++i) {
-        cfgpack_type_t t = schema->entries[i].type;
-        if (t == CFGPACK_TYPE_STR || t == CFGPACK_TYPE_FSTR) {
-            slot++;
-        }
-    }
-    {
-        cfgpack_type_t t;
-        t = schema->entries[entry_off].type;
-        if (t != CFGPACK_TYPE_STR && t != CFGPACK_TYPE_FSTR) {
-            return (-1);
-        }
-    }
-    return (slot);
-}
-
-/**
  * @brief Encode a cfgpack value into msgpack format.
- * @param buf        Output buffer.
- * @param ctx        Context (for string pool access).
- * @param entry_off  Entry offset in schema.
- * @param v          Value to encode.
+ * @param buf  Output buffer.
+ * @param ctx  Context (for string pool access).
+ * @param v    Value to encode.
  * @return CFGPACK_OK on success, CFGPACK_ERR_ENCODE or CFGPACK_ERR_INVALID_TYPE on failure.
  */
 static cfgpack_err_t encode_value(cfgpack_buf_t *buf,
                                   const cfgpack_ctx_t *ctx,
-                                  size_t entry_off,
                                   const cfgpack_value_t *v) {
     /* All unsigned integer types are stored in v.u64 regardless of width (see
      * cfgpack_value_t in value.h).  encode_uint64 / encode_int64 already emit
@@ -72,7 +48,6 @@ static cfgpack_err_t encode_value(cfgpack_buf_t *buf,
         return (cfgpack_msgpack_encode_str(buf, str, v->v.fstr.len));
     }
     }
-    (void)entry_off; /* May be used in future for bounds checking */
     return (CFGPACK_ERR_INVALID_TYPE);
 }
 
@@ -82,6 +57,10 @@ cfgpack_err_t cfgpack_pageout(const cfgpack_ctx_t *ctx,
                               size_t *out_len) {
     size_t present_count = 0;
     cfgpack_buf_t buf;
+
+    if (!ctx || !out) {
+        return (CFGPACK_ERR_ARGS);
+    }
 
     /* Minimum headroom: map header + u64 key + u8 value (~12 bytes). */
     if (out_cap < 12) {
@@ -120,7 +99,7 @@ cfgpack_err_t cfgpack_pageout(const cfgpack_ctx_t *ctx,
         if (cfgpack_msgpack_encode_uint_key(&buf, e->index) != CFGPACK_OK) {
             return (CFGPACK_ERR_ENCODE);
         }
-        if (encode_value(&buf, ctx, i, &ctx->values[i]) != CFGPACK_OK) {
+        if (encode_value(&buf, ctx, &ctx->values[i]) != CFGPACK_OK) {
             return (CFGPACK_ERR_ENCODE);
         }
     }
@@ -214,7 +193,7 @@ static cfgpack_err_t decode_value(cfgpack_reader_t *r,
         uint16_t pool_off;
         uint32_t len;
         char *dst;
-        int slot;
+        uint8_t str_slot;
 
         if (cfgpack_msgpack_decode_str(r, &ptr, &len) != CFGPACK_OK) {
             return (CFGPACK_ERR_DECODE);
@@ -224,12 +203,16 @@ static cfgpack_err_t decode_value(cfgpack_reader_t *r,
         }
 
         /* Get string slot and write to pool */
-        slot = get_str_slot(ctx->schema, entry_off);
-        if (slot < 0 || (size_t)slot >= ctx->str_offsets_count) {
+        str_slot = ctx->schema->entries[entry_off].str_slot;
+        if (str_slot == CFGPACK_STR_SLOT_NONE ||
+            (size_t)str_slot >= ctx->str_offsets_count) {
             return (CFGPACK_ERR_BOUNDS);
         }
 
-        pool_off = ctx->str_offsets[slot];
+        pool_off = ctx->str_offsets[str_slot];
+        if ((size_t)pool_off + len + 1 > ctx->str_pool_cap) {
+            return (CFGPACK_ERR_BOUNDS);
+        }
         dst = ctx->str_pool + pool_off;
         memcpy(dst, ptr, len);
         dst[len] = '\0';
@@ -243,7 +226,7 @@ static cfgpack_err_t decode_value(cfgpack_reader_t *r,
         uint16_t pool_off;
         uint32_t len;
         char *dst;
-        int slot;
+        uint8_t str_slot;
 
         if (cfgpack_msgpack_decode_str(r, &ptr, &len) != CFGPACK_OK) {
             return (CFGPACK_ERR_DECODE);
@@ -253,12 +236,16 @@ static cfgpack_err_t decode_value(cfgpack_reader_t *r,
         }
 
         /* Get string slot and write to pool */
-        slot = get_str_slot(ctx->schema, entry_off);
-        if (slot < 0 || (size_t)slot >= ctx->str_offsets_count) {
+        str_slot = ctx->schema->entries[entry_off].str_slot;
+        if (str_slot == CFGPACK_STR_SLOT_NONE ||
+            (size_t)str_slot >= ctx->str_offsets_count) {
             return (CFGPACK_ERR_BOUNDS);
         }
 
-        pool_off = ctx->str_offsets[slot];
+        pool_off = ctx->str_offsets[str_slot];
+        if ((size_t)pool_off + len + 1 > ctx->str_pool_cap) {
+            return (CFGPACK_ERR_BOUNDS);
+        }
         dst = ctx->str_pool + pool_off;
         memcpy(dst, ptr, len);
         dst[len] = '\0';
@@ -481,6 +468,9 @@ cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx,
     uint32_t map_count = 0;
     cfgpack_reader_t r;
 
+    if (!ctx) {
+        return (CFGPACK_ERR_ARGS);
+    }
     if (!data || len == 0) {
         return (CFGPACK_ERR_DECODE);
     }

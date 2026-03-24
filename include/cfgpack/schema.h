@@ -16,6 +16,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/** Sentinel: entry is not a string type (no pool slot). */
+#define CFGPACK_STR_SLOT_NONE UINT8_MAX
+
 /**
  * @brief Single entry within a schema.
  */
@@ -24,6 +27,7 @@ typedef struct {
     char name[6]; /* 5 chars + null */
     cfgpack_type_t type;
     uint8_t has_default; /* 1 if default value exists, 0 otherwise */
+    uint8_t str_slot;    /* string pool slot index, or CFGPACK_STR_SLOT_NONE */
 } cfgpack_entry_t;
 
 /**
