@@ -60,7 +60,7 @@ static size_t entry_offset(const cfgpack_schema_t *schema,
 }
 
 cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx,
-                           const cfgpack_schema_t *schema,
+                           cfgpack_schema_t *schema,
                            cfgpack_value_t *values,
                            size_t values_count,
                            char *str_pool,

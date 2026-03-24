@@ -61,6 +61,7 @@ TESTSRC := tests/basic.c         \
            tests/measure.c      \
            tests/msgpack.c      \
            tests/msgpack_schema.c \
+           tests/null_args.c    \
            tests/parser.c        \
            tests/parser_bounds.c \
            tests/runtime.c       \

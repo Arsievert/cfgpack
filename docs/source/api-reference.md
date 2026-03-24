@@ -30,7 +30,7 @@ typedef enum {
 | `CFGPACK_ERR_PARSE` | General parse failure (malformed `.map` or JSON syntax). |
 | `CFGPACK_ERR_INVALID_TYPE` | Unknown or out-of-range type code in a schema. |
 | `CFGPACK_ERR_DUPLICATE` | Duplicate entry index or name in a schema. |
-| `CFGPACK_ERR_BOUNDS` | Index, length, or count out of range (e.g. string pool too small, entry name > 5 chars). |
+| `CFGPACK_ERR_BOUNDS` | Index, length, or count out of range (e.g. string pool too small, entry name > 5 chars, values array smaller than entry count). Returned when arguments are non-NULL but the sizes don't add up. |
 | `CFGPACK_ERR_MISSING` | Requested entry not found or not present in the context. |
 | `CFGPACK_ERR_TYPE_MISMATCH` | Value type incompatible with schema entry: (1) default value wire format does not match declared type during schema parsing (e.g. float default for a string entry), (2) narrowing type coercion during remap (e.g. u16 to u8), or (3) wrong-family wire type at runtime pagein. |
 | `CFGPACK_ERR_STR_TOO_LONG` | String value exceeds `CFGPACK_STR_MAX` (64) or `CFGPACK_FSTR_MAX` (16). |
@@ -38,7 +38,7 @@ typedef enum {
 | `CFGPACK_ERR_ENCODE` | Encoding failure or output buffer too small. Also returned as a defense-in-depth check if a string value's offset/length exceeds the string pool capacity. |
 | `CFGPACK_ERR_DECODE` | Decoding failure or malformed msgpack input. |
 | `CFGPACK_ERR_RESERVED_INDEX` | Attempt to use reserved index 0 (reserved for schema name). |
-| `CFGPACK_ERR_ARGS` | Missing or bad arguments (NULL pointer, invalid option). |
+| `CFGPACK_ERR_ARGS` | Missing or bad arguments (NULL pointer passed to any public API function, or NULL required field in `cfgpack_parse_opts_t`). Distinguished from `CFGPACK_ERR_BOUNDS` — `ERR_ARGS` means a required pointer is NULL; `ERR_BOUNDS` means a non-NULL buffer is too small. |
 
 ## Values
 
@@ -81,7 +81,10 @@ typedef struct {
     char     name[6];     /* 5 chars + NUL */
     cfgpack_type_t type;  /* one of the supported types */
     uint8_t  has_default; /* 1 if default value exists, 0 otherwise */
+    uint8_t  str_slot;    /* string pool slot index, or CFGPACK_STR_SLOT_NONE */
 } cfgpack_entry_t;
+
+#define CFGPACK_STR_SLOT_NONE UINT8_MAX  /* entry is not a string type */
 
 typedef struct {
     char map_name[64];
@@ -110,6 +113,43 @@ typedef struct {
 cfgpack_err_t cfgpack_schema_get_sizing(const cfgpack_schema_t *schema,
                                         cfgpack_schema_sizing_t *out);
 ```
+
+### String Pool Architecture
+
+String values (`str` and `fstr`) are not stored inline in `cfgpack_value_t`. Instead, each string-typed entry is assigned a fixed-size slot in a caller-provided pool buffer. This design avoids heap allocation and fragmentation.
+
+**Pool layout:**
+
+Each `str` entry reserves `CFGPACK_STR_MAX + 1` (65) bytes. Each `fstr` entry reserves `CFGPACK_FSTR_MAX + 1` (17) bytes. Slots are assigned in entry order (all `str` entries first, then `fstr` entries), and the total pool size is:
+
+```
+pool_size = (str_count × 65) + (fstr_count × 17)
+```
+
+**Three data structures work together:**
+
+| Structure | Purpose |
+|-----------|---------|
+| `str_pool` (`char *`) | Contiguous byte buffer holding all string data. |
+| `str_offsets` (`uint16_t[]`) | Maps slot index → byte offset into `str_pool`. One slot per string-typed entry. |
+| `entry.str_slot` (`uint8_t`) | Per-entry field mapping the entry to its slot in `str_offsets`. Non-string entries have `CFGPACK_STR_SLOT_NONE`. |
+
+**Lookup path** (O(1)):
+
+```
+entry.str_slot  →  str_offsets[slot]  →  &str_pool[offset]
+```
+
+The `cfgpack_value_t` for a string entry stores the pool offset and current length, not the string bytes themselves. When you call `cfgpack_get_str()`, it returns a pointer directly into the pool.
+
+**Sizing in practice:**
+
+Use `cfgpack_schema_measure()` or `cfgpack_schema_get_sizing()` to compute exact sizes — you don't need to calculate the formula manually. The measure functions report `str_pool_size`, `str_count`, and `fstr_count`, from which you allocate:
+
+- `str_pool`: `m.str_pool_size` bytes
+- `str_offsets`: `m.str_count + m.fstr_count` slots
+
+If a schema has no string-typed entries, both can be NULL/0.
 
 ### Parse Options
 

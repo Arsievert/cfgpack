@@ -54,8 +54,7 @@ typedef struct {
  * up to CFGPACK_MAX_ENTRIES entries (default 128, configurable in config.h).
  */
 struct cfgpack_ctx {
-    const cfgpack_schema_t
-        *schema; /**< Pointer to schema describing entries. */
+    cfgpack_schema_t *schema; /**< Pointer to schema describing entries. */
     cfgpack_value_t
         *values; /**< Caller-provided value slots (size = entry_count). */
     size_t values_count; /**< Number of value slots available. */
@@ -115,7 +114,7 @@ static inline void cfgpack_presence_clear(cfgpack_ctx_t *ctx, size_t idx) {
  *         or schema has more than CFGPACK_MAX_ENTRIES entries.
  */
 cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx,
-                           const cfgpack_schema_t *schema,
+                           cfgpack_schema_t *schema,
                            cfgpack_value_t *values,
                            size_t values_count,
                            char *str_pool,
