@@ -336,7 +336,7 @@ typedef struct {
 /* Initialize runtime context. The values and string pool should already
  * contain defaults from schema parsing. Presence bitmap is embedded in
  * cfgpack_ctx_t (sized by CFGPACK_MAX_ENTRIES, default 128). */
-cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx, const cfgpack_schema_t *schema,
+cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx, cfgpack_schema_t *schema,
                            cfgpack_value_t *values, size_t values_count,
                            char *str_pool, size_t str_pool_cap,
                            uint16_t *str_offsets, size_t str_offsets_count);

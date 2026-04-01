@@ -137,11 +137,12 @@ Running tests...
   measure:       15/15 passed
   msgpack:       16/16 passed
   msgpack_schema: 17/17 passed
+  null_args:     40/40 passed
   parser_bounds: 23/23 passed
   parser:        3/3 passed
   runtime:       24/24 passed
 
-TOTAL: 155/155 passed
+TOTAL: 195/195 passed
 ```
 
 ### Fuzz Testing

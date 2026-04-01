@@ -195,7 +195,7 @@ Each test binary links against: the core static library, `io_file.o`, the encode
 
 ### Test Binaries
 
-13 test files producing 12 test binaries (test.c is shared infrastructure, not a standalone binary):
+14 test files producing 13 test binaries (test.c is shared infrastructure, not a standalone binary):
 
 | Binary | Source | Area |
 |--------|--------|------|
@@ -208,6 +208,7 @@ Each test binary links against: the core static library, `io_file.o`, the encode
 | `measure` | `tests/measure.c` | Schema measure (pre-parse sizing) |
 | `msgpack` | `tests/msgpack.c` | MessagePack encode/decode |
 | `msgpack_schema` | `tests/msgpack_schema.c` | MessagePack schema handling |
+| `null_args` | `tests/null_args.c` | NULL pointer and bounds validation |
 | `parser` | `tests/parser.c` | Schema parser |
 | `parser_bounds` | `tests/parser_bounds.c` | Parser boundary conditions |
 | `runtime` | `tests/runtime.c` | Runtime behavior |
@@ -547,7 +548,7 @@ cfgpack/
 ├── tests/                      # Test files
 │   ├── test.h                  #   Test framework header
 │   ├── test.c                  #   Shared test infrastructure
-│   ├── basic.c ... runtime.c   #   12 test binaries
+│   ├── basic.c ... runtime.c   #   13 test binaries
 │   ├── data/                   #   Test fixture files
 │   └── fuzz/                   #   Fuzz testing
 │       ├── Makefile            #     Fuzz build system
