@@ -17,6 +17,7 @@ jobs:
           wget -q https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh 22
+          sudo apt-get install -y clang-format-22
           clang-format-22 --version
       - name: Run clang-format
         run: make format-check CLANG_FORMAT=clang-format-22
