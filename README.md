@@ -1,5 +1,7 @@
 # CFGPack
 
+[![CI](https://github.com/Arsievert/cfgpack/actions/workflows/ci.yml/badge.svg)](https://github.com/Arsievert/cfgpack/actions/workflows/ci.yml)
+
 A MessagePack-based configuration library for embedded systems.
 
 **Embedded profile:** no heap allocation. All buffers are caller-owned. Hard caps: max 128 schema entries. Schema descriptions are ignored/dropped.

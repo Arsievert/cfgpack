@@ -10,6 +10,14 @@ CFLAGS_HOSTED := $(CFLAGS) -DCFGPACK_HOSTED
 LDFLAGS       :=
 LDLIBS        :=
 
+# -MJ (emit compile_commands.json fragment) is a clang-only flag. Detect the
+# compiler once and gate it so `make CC=gcc` works.
+ifneq (,$(findstring clang,$(shell $(CC) --version 2>/dev/null | head -1)))
+  MJ_FLAG = -MJ $(JSON)/$(@F).json
+else
+  MJ_FLAG =
+endif
+
 # --- Directories --------------------------------------------------------------
 BUILD := build
 OUT   := $(BUILD)/out
@@ -96,19 +104,19 @@ $(LIB): $(COREOBJ)
 $(OBJ)/%.o: %.c
 	@mkdir -p $(@D) $(JSON)
 	@echo "CC $<"
-	@$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -MJ $(JSON)/$(@F).json -c $< -o $@
+	@$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP $(MJ_FLAG) -c $< -o $@
 
 # Test objects need CFLAGS_HOSTED for printf support
 $(OBJ)/tests/%.o: tests/%.c
 	@mkdir -p $(@D) $(JSON)
 	@echo "CC (hosted) $<"
-	@$(CC) $(CPPFLAGS) $(CFLAGS_HOSTED) -MMD -MP -MJ $(JSON)/$(@F).json -c $< -o $@
+	@$(CC) $(CPPFLAGS) $(CFLAGS_HOSTED) -MMD -MP $(MJ_FLAG) -c $< -o $@
 
 # io_file.c needs CFLAGS_HOSTED for stdio
 $(OBJ)/src/io_file.o: src/io_file.c
 	@mkdir -p $(@D) $(JSON)
 	@echo "CC (hosted) $<"
-	@$(CC) $(CPPFLAGS) $(CFLAGS_HOSTED) -MMD -MP -MJ $(JSON)/$(@F).json -c $< -o $@
+	@$(CC) $(CPPFLAGS) $(CFLAGS_HOSTED) -MMD -MP $(MJ_FLAG) -c $< -o $@
 
 # --- Test targets -------------------------------------------------------------
 tests: $(TESTBINS) ## Build all test binaries
@@ -148,6 +156,14 @@ compile_commands: $(OBJECTS) ## Generate compile_commands.json from dep JSON
 	@sed -e '1s/^/[\n/' -e '$$s/,$$/\n]/' $(JSON)/temp.json > compile_commands.json
 	@rm $(JSON)/temp.json
 
+SAN_FLAGS := -fsanitize=address,undefined -fno-omit-frame-pointer
+
+test-asan: clean ## Rebuild tests with ASan+UBSan and run the full test suite
+	@$(MAKE) tests \
+		CFLAGS="-Wall -Wextra -std=c99 -O1 -g -DCFGPACK_LZ4 -DCFGPACK_HEATSHRINK $(SAN_FLAGS)" \
+		LDFLAGS="$(SAN_FLAGS)"
+	@scripts/run-tests.sh
+
 stack-usage-O0: clean ## Build with -fstack-usage at -O0 and report per-function stack sizes
 	@$(MAKE) all CFLAGS="-Wall -Wextra -std=c99 -DCFGPACK_LZ4 -DCFGPACK_HEATSHRINK -O0 -fstack-usage"
 	@echo "--- Stack usage at -O0 ---"
@@ -182,5 +198,5 @@ fuzz: ## Build all fuzz harnesses (requires clang with libFuzzer)
 	@$(MAKE) -C tests/fuzz fuzz ROOT=$(CURDIR) BUILD=$(CURDIR)/$(BUILD) OUT=$(CURDIR)/$(OUT) CC=$(CC)
 
 # --- Phony / Includes ---------------------------------------------------------
-.PHONY: all tests clean clean-docs help docs tools format format-check compile_commands fuzz
+.PHONY: all tests clean clean-docs help docs tools format format-check compile_commands fuzz test-asan stack-usage-O0 stack-usage-Os
 -include $(DEPS)
