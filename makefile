@@ -4,8 +4,8 @@ AR           := ar
 CLANG_FORMAT ?= clang-format
 
 # --- Flags --------------------------------------------------------------------
-CPPFLAGS      := -Iinclude -Iinclude/cfgpack -Ithird_party/lz4 -Ithird_party/heatshrink
-CFLAGS        := -Wall -Wextra -std=c99 -Os -DCFGPACK_LZ4 -DCFGPACK_HEATSHRINK
+CPPFLAGS      := -Iinclude -Iinclude/cfgpack -Ithird_party/lz4 -Ithird_party/heatshrink -Ithird_party/littlefs
+CFLAGS        := -Wall -Wextra -std=c99 -Os -DCFGPACK_LZ4 -DCFGPACK_HEATSHRINK -DCFGPACK_LITTLEFS
 CFLAGS_HOSTED := $(CFLAGS) -DCFGPACK_HOSTED
 LDFLAGS       :=
 LDLIBS        :=
@@ -37,12 +37,15 @@ LIB := $(OUT)/libcfgpack.a
 CORESRC := src/core.c                   \
            src/decompress.c             \
            src/io.c                     \
+           src/io_littlefs.c            \
            src/msgpack.c                \
            src/schema_parser.c          \
            src/tokens.c                 \
            src/wbuf.c                   \
            third_party/lz4/lz4.c        \
-           third_party/heatshrink/heatshrink_decoder.c
+           third_party/heatshrink/heatshrink_decoder.c \
+           third_party/littlefs/lfs.c   \
+           third_party/littlefs/lfs_util.c
 
 # File I/O wrapper (optional, for desktop/POSIX)
 IOFILESRC := src/io_file.c
@@ -64,6 +67,7 @@ TESTSRC := tests/basic.c         \
            tests/core_edge.c    \
            tests/decompress.c    \
            tests/io_edge.c      \
+           tests/io_littlefs.c  \
            tests/json_edge.c    \
            tests/json_remap.c   \
            tests/measure.c      \
@@ -160,17 +164,17 @@ SAN_FLAGS := -fsanitize=address,undefined -fno-omit-frame-pointer
 
 test-asan: clean ## Rebuild tests with ASan+UBSan and run the full test suite
 	@$(MAKE) tests \
-		CFLAGS="-Wall -Wextra -std=c99 -O1 -g -DCFGPACK_LZ4 -DCFGPACK_HEATSHRINK $(SAN_FLAGS)" \
+		CFLAGS="-Wall -Wextra -std=c99 -O1 -g -DCFGPACK_LZ4 -DCFGPACK_HEATSHRINK -DCFGPACK_LITTLEFS $(SAN_FLAGS)" \
 		LDFLAGS="$(SAN_FLAGS)"
 	@scripts/run-tests.sh
 
 stack-usage-O0: clean ## Build with -fstack-usage at -O0 and report per-function stack sizes
-	@$(MAKE) all CFLAGS="-Wall -Wextra -std=c99 -DCFGPACK_LZ4 -DCFGPACK_HEATSHRINK -O0 -fstack-usage"
+	@$(MAKE) all CFLAGS="-Wall -Wextra -std=c99 -DCFGPACK_LZ4 -DCFGPACK_HEATSHRINK -DCFGPACK_LITTLEFS -O0 -fstack-usage"
 	@echo "--- Stack usage at -O0 ---"
 	@find $(OBJ) -name '*.su' -exec cat {} + | sort -t$$'\t' -k2 -n -r
 
 stack-usage-Os: clean ## Build with -fstack-usage at -Os and report per-function stack sizes
-	@$(MAKE) all CFLAGS="-Wall -Wextra -std=c99 -DCFGPACK_LZ4 -DCFGPACK_HEATSHRINK -Os -fstack-usage"
+	@$(MAKE) all CFLAGS="-Wall -Wextra -std=c99 -DCFGPACK_LZ4 -DCFGPACK_HEATSHRINK -DCFGPACK_LITTLEFS -Os -fstack-usage"
 	@echo "--- Stack usage at -Os ---"
 	@find $(OBJ) -name '*.su' -exec cat {} + | sort -t$$'\t' -k2 -n -r
 

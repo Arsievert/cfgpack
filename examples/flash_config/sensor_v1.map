@@ -1,0 +1,33 @@
+# Industrial Sensor Node — Schema v1
+# 19 entries: temperature, humidity, pressure monitoring
+# Configurable thresholds and reporting intervals
+sensor_v1 1
+
+# -- Device identity -------------------------------------------------------
+1   devid  u32   0            # Device ID
+2   dname  str   "sensor-01"  # Device display name
+3   loc    fstr  "floor-1"    # Installation location
+4   fwver  fstr  "1.0.0"      # Firmware version
+
+# -- Temperature sensor ----------------------------------------------------
+5   tmen   u8    1             # Temperature enable
+6   tmint  u16   5000          # Temperature interval (ms)
+7   tmhi   i16   850           # Temp high threshold (0.1C, 85.0C)
+8   tmlo   i16   -200          # Temp low threshold (0.1C, -20.0C)
+
+# -- Humidity sensor -------------------------------------------------------
+9   hmen   u8    1             # Humidity enable
+10  hmint  u16   5000          # Humidity interval (ms)
+11  hmhi   u8    90            # Humidity high threshold (%RH)
+12  hmlo   u8    20            # Humidity low threshold (%RH)
+
+# -- Pressure sensor -------------------------------------------------------
+13  pren   u8    1             # Pressure enable
+14  print  u16   10000         # Pressure interval (ms)
+15  prhi   u16   1050          # Pressure high threshold (hPa)
+16  prlo   u16   950           # Pressure low threshold (hPa)
+
+# -- Network ---------------------------------------------------------------
+17  srvh   str   "iot.example.com"  # Server hostname
+18  srvp   u16   8883               # Server port
+19  rptiv  u16   60                 # Report interval (seconds)

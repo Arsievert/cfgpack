@@ -1,0 +1,44 @@
+# Industrial Sensor Node — Schema v2
+# Firmware upgrade from v1:
+#   WIDEN:  tmint u16->u32, hmint u16->u32 (finer timing)
+#   MOVE:   thresholds 7-8,11-12,15-16 -> 40-45 (dedicated alarm block)
+#   REMOVE: tmen(5), hmen(9), pren(13) replaced by smask bitmask
+#   ADD:    smask, loglv, ntph, tzone, batch
+sensor_v2 2
+
+# -- Device identity (KEPT) ------------------------------------------------
+1   devid  u32   0            # Device ID
+2   dname  str   "sensor-01"  # Device display name
+3   loc    fstr  "floor-1"    # Installation location
+4   fwver  fstr  "2.0.0"      # Firmware version
+
+# -- Temperature (WIDENED interval; enable REMOVED) ------------------------
+6   tmint  u32   5000          # Temperature interval (ms) — widened
+
+# -- Humidity (WIDENED interval; enable REMOVED) ---------------------------
+10  hmint  u32   5000          # Humidity interval (ms) — widened
+
+# -- Pressure (enable REMOVED) --------------------------------------------
+14  print  u16   10000         # Pressure interval (ms)
+
+# -- Network (KEPT) -------------------------------------------------------
+17  srvh   str   "iot.example.com"  # Server hostname
+18  srvp   u16   8883               # Server port
+19  rptiv  u16   60                 # Report interval (seconds)
+
+# -- Sensor mask (ADD: replaces per-sensor enables) ------------------------
+30  smask  u8    7             # Sensor enable bitmask (b0=T b1=H b2=P)
+
+# -- Logging and time (ADD) ------------------------------------------------
+31  loglv  u8    2             # Log level (0=off 1=err 2=warn 3=info)
+32  ntph   str   "pool.ntp.org"  # NTP server hostname
+33  tzone  fstr  "UTC+0"       # Timezone string
+34  batch  u16   10            # Batch size (readings per upload)
+
+# -- Alarm thresholds (MOVED from v1 indices 7,8,11,12,15,16) -------------
+40  tmhi   i16   850           # Temp high threshold (0.1C)
+41  tmlo   i16   -200          # Temp low threshold (0.1C)
+42  hmhi   u8    90            # Humidity high threshold (%RH)
+43  hmlo   u8    20            # Humidity low threshold (%RH)
+44  prhi   u16   1050          # Pressure high threshold (hPa)
+45  prlo   u16   950           # Pressure low threshold (hPa)

@@ -13,6 +13,7 @@
  * - Runtime context and value access (api.h)
  *
  * For file-based convenience wrappers, also include io_file.h.
+ * For LittleFS storage wrappers, also include io_littlefs.h.
  * For decompression support (LZ4/heatshrink), also include decompress.h.
  */
 #include "api.h"
