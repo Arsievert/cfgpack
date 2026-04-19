@@ -219,7 +219,3 @@ IoT sensor hub demonstrating compressed schema loading with heatshrink (~22% com
 ```bash
 cd examples/sensor_hub && make run
 ```
-
-## Roadmap
-
-- Rust library alongside C implementation.
