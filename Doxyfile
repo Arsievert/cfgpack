@@ -90,8 +90,8 @@ ENABLE_PREPROCESSING   = YES
 MACRO_EXPANSION        = NO
 EXPAND_ONLY_PREDEF     = NO
 SEARCH_INCLUDES        = YES
-INCLUDE_PATH           = include
-PREDEFINED             = CFGPACK_LZ4 CFGPACK_HEATSHRINK
+INCLUDE_PATH           = include third_party/littlefs
+PREDEFINED             = CFGPACK_LZ4 CFGPACK_HEATSHRINK CFGPACK_LITTLEFS
 
 #---------------------------------------------------------------------------
 # Graph configuration (requires Graphviz)

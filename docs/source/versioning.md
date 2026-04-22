@@ -108,4 +108,4 @@ if (strcmp(stored_name, current_schema.map_name) == 0) {
 
 ## Working Examples
 
-See `examples/low_memory/` for a complete v1 -> v2 migration using JSON schemas with `cfgpack_schema_measure()`, or `examples/fleet_gateway/` for a three-version migration chain (v1 -> v2 -> v3) using msgpack binary schemas with `cfgpack_schema_measure_msgpack()`.
+See `examples/low_memory/` for a complete v1 -> v2 migration using JSON schemas with `cfgpack_schema_measure()`, `examples/fleet_gateway/` for a three-version migration chain (v1 -> v2 -> v3) using msgpack binary schemas with `cfgpack_schema_measure_msgpack()`, or `examples/flash_config/` for a LittleFS-backed migration with LZ4-compressed msgpack schemas and all five migration scenarios (keep, widen, move, remove, add).

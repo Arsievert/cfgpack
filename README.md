@@ -31,6 +31,7 @@ This checks for required tools (`clang`, `clang-format`, `make`, `ar`), installs
 - [API Reference](docs/source/api-reference.md) — Complete API documentation (errors, values, schema, runtime, typed functions)
 - [Schema Versioning](docs/source/versioning.md) — Version detection, migration, and type widening
 - [Compression](docs/source/compression.md) — LZ4/heatshrink decompression support
+- [LittleFS](docs/source/littlefs.md) — LittleFS flash storage wrappers
 - [Stack Analysis](docs/source/stack-analysis.md) — Per-function stack frame sizes for embedded budgeting
 - [Fuzz Testing](docs/source/fuzz-testing.md) — libFuzzer harnesses for parser and decode robustness
 
@@ -92,11 +93,12 @@ vehicle 1
   - `api.h` — main cfgpack runtime API (set/get/pagein/pageout/print/version/size).
   - `decompress.h` — optional LZ4/heatshrink decompression support.
   - `io_file.h` — optional FILE*-based convenience wrappers for desktop/POSIX systems.
-- `src/` — library implementation (`core.c`, `io.c`, `io_file.c`, `msgpack.c`, `schema_parser.c`, `tokens.c`, `wbuf.c`, `decompress.c`).
+  - `io_littlefs.h` — optional LittleFS-based convenience wrappers for flash storage.
+- `src/` — library implementation (`core.c`, `io.c`, `io_file.c`, `io_littlefs.c`, `msgpack.c`, `schema_parser.c`, `tokens.c`, `wbuf.c`, `decompress.c`).
 - `tests/` — C test programs plus sample data under `tests/data/`.
 - `tools/` — CLI tools source (`cfgpack-compress.c` for LZ4/heatshrink compression, `cfgpack-schema-pack.c` for converting schemas to msgpack binary).
-- `examples/` — complete usage examples (`allocate-once/`, `datalogger/`, `fleet_gateway/`, `low_memory/`, `sensor_hub/`).
-- `third_party/` — vendored dependencies (`lz4/`, `heatshrink/`).
+- `examples/` — complete usage examples (`allocate-once/`, `datalogger/`, `flash_config/`, `fleet_gateway/`, `low_memory/`, `sensor_hub/`).
+- `third_party/` — vendored dependencies (`lz4/`, `heatshrink/`, `littlefs/`).
 - `Makefile` — builds `build/out/libcfgpack.a`, test binaries, and tools.
 
 ## Building
@@ -130,21 +132,22 @@ Output:
 ```
 Running tests...
 
-  basic:         4/4 passed
-  core_edge:     11/11 passed
-  decompress:    8/8 passed
-  io_edge:       16/16 passed
-  json_edge:     8/8 passed
-  json_remap:    10/10 passed
-  measure:       15/15 passed
-  msgpack:       16/16 passed
+  basic:          4/4 passed
+  core_edge:      11/11 passed
+  decompress:     8/8 passed
+  io_edge:        16/16 passed
+  io_littlefs:    8/8 passed
+  json_edge:      8/8 passed
+  json_remap:     10/10 passed
+  measure:        15/15 passed
+  msgpack:        16/16 passed
   msgpack_schema: 17/17 passed
-  null_args:     40/40 passed
-  parser_bounds: 23/23 passed
-  parser:        3/3 passed
-  runtime:       24/24 passed
+  null_args:      40/40 passed
+  parser_bounds:  23/23 passed
+  parser:         3/3 passed
+  runtime:        24/24 passed
 
-TOTAL: 195/195 passed
+TOTAL: 203/203 passed
 ```
 
 ### Fuzz Testing
@@ -178,7 +181,7 @@ See [Fuzz Testing](docs/source/fuzz-testing.md) for detailed documentation on th
 
 ## Examples
 
-Five complete examples are provided in the `examples/` directory:
+Six complete examples are provided in the `examples/` directory:
 
 ### allocate-once
 
@@ -194,6 +197,14 @@ Basic data logger demonstrating schema parsing, typed convenience functions, and
 
 ```bash
 cd examples/datalogger && make run
+```
+
+### flash_config
+
+Industrial sensor node demonstrating LittleFS flash storage with LZ4-compressed msgpack binary schemas and a v1 → v2 schema migration. Uses a RAM-backed LittleFS block device for desktop testing. Shows the composable I/O pattern: manual LFS read + `cfgpack_pagein_remap()` for cross-version migration, and `cfgpack_pageout_lfs()` / `cfgpack_pagein_lfs()` for same-version round-trips. Covers all five migration scenarios: keep, widen, move, remove, and add.
+
+```bash
+cd examples/flash_config && make run
 ```
 
 ### fleet_gateway

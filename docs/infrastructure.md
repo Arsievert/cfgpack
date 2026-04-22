@@ -116,6 +116,12 @@ Two additional feature flags gate decompression library support:
 
 These are also passed to Doxygen as `PREDEFINED` macros so that conditional API surfaces appear in documentation.
 
+### Optional LittleFS Storage Wrappers
+
+- `-DCFGPACK_LITTLEFS` -- enables LittleFS storage wrappers (`cfgpack_pageout_lfs`, `cfgpack_pagein_lfs`)
+
+Unlike the compression flags, this is NOT on by default in `CFLAGS`. Applications that need LittleFS must explicitly pass `-DCFGPACK_LITTLEFS` and link `src/io_littlefs.c` along with the vendored LittleFS sources (`third_party/littlefs/lfs.c`, `third_party/littlefs/lfs_util.c`). This flag is also passed to Doxygen as a `PREDEFINED` macro.
+
 ### Compile-Time Limits
 
 Defined in `include/cfgpack/config.h` and overridable before including cfgpack headers:
@@ -144,6 +150,8 @@ third_party/heatshrink/heatshrink_decoder.c
 ```
 
 Notably, `src/io_file.c` is **excluded** from the core library because it depends on `<stdio.h>`. It is compiled separately with hosted flags and linked into tests and tools as needed. This preserves the embedded-friendly, zero-stdio core.
+
+Similarly, `src/io_littlefs.c` is **excluded** from the core library because it depends on LittleFS. It is compiled separately with `-DCFGPACK_LITTLEFS` and linked into applications, tests, and examples that use LittleFS storage.
 
 The archiver creates the library with `ar rcs`.
 
@@ -195,7 +203,7 @@ Each test binary links against: the core static library, `io_file.o`, the encode
 
 ### Test Binaries
 
-14 test files producing 13 test binaries (test.c is shared infrastructure, not a standalone binary):
+15 test files producing 14 test binaries (test.c is shared infrastructure, not a standalone binary):
 
 | Binary | Source | Area |
 |--------|--------|------|
@@ -203,6 +211,7 @@ Each test binary links against: the core static library, `io_file.o`, the encode
 | `core_edge` | `tests/core_edge.c` | Edge cases in core API |
 | `decompress` | `tests/decompress.c` | LZ4 and heatshrink decompression |
 | `io_edge` | `tests/io_edge.c` | I/O edge cases |
+| `io_littlefs` | `tests/io_littlefs.c` | LittleFS I/O wrappers (RAM-backed block device) |
 | `json_edge` | `tests/json_edge.c` | JSON parser edge cases |
 | `json_remap` | `tests/json_remap.c` | JSON remapping functionality |
 | `measure` | `tests/measure.c` | Schema measure (pre-parse sizing) |
@@ -482,7 +491,20 @@ third_party/heatshrink/
 
 Heatshrink is an LZSS-based compression library designed for embedded systems with very low memory overhead. The decoder is compiled into the core library when `CFGPACK_HEATSHRINK` is defined. The encoder is used by tests (to generate compressed test data) and the `cfgpack-compress` tool.
 
-Both libraries are included via `-Ithird_party/lz4` and `-Ithird_party/heatshrink` in `CPPFLAGS`.
+### LittleFS
+
+```
+third_party/littlefs/
+    lfs.c
+    lfs.h
+    lfs_util.c
+    lfs_util.h
+    LICENSE.md
+```
+
+LittleFS is a little fail-safe filesystem designed for microcontrollers. The LittleFS sources are compiled directly into applications that use the cfgpack LittleFS wrappers (they are not part of the core `libcfgpack.a`).
+
+All three libraries are included via `-Ithird_party/lz4`, `-Ithird_party/heatshrink`, and `-Ithird_party/littlefs` in `CPPFLAGS`.
 
 ---
 
@@ -535,6 +557,7 @@ cfgpack/
 │   ├── config.h                #   Build configuration / compile-time limits
 │   ├── msgpack.h               #   MessagePack encode/decode
 │   ├── io_file.h               #   File I/O (hosted only)
+│   ├── io_littlefs.h           #   LittleFS I/O (optional, -DCFGPACK_LITTLEFS)
 │   └── decompress.h            #   Decompression API
 ├── src/                        # Library implementation
 │   ├── core.c                  #   Core get/set/init/pageout/pagein
@@ -543,6 +566,7 @@ cfgpack/
 │   ├── decompress.c            #   LZ4/heatshrink decompression
 │   ├── io.c                    #   Buffer I/O
 │   ├── io_file.c               #   File I/O (hosted, excluded from core lib)
+│   ├── io_littlefs.c           #   LittleFS I/O (optional, excluded from core lib)
 │   ├── tokens.c                #   Tokenizer for schema parsing
 │   └── wbuf.c                  #   Internal write buffer
 ├── tests/                      # Test files
@@ -565,12 +589,14 @@ cfgpack/
 ├── examples/                   # Usage examples
 │   ├── allocate-once/          #   One-shot allocation pattern
 │   ├── datalogger/             #   Data logger example
+│   ├── flash_config/           #   LittleFS + LZ4 + schema migration
 │   ├── fleet_gateway/          #   Fleet gateway with schema versioning
 │   ├── low_memory/             #   Low-memory embedded example
 │   └── sensor_hub/             #   Sensor hub example
 ├── third_party/                # Vendored dependencies
 │   ├── lz4/                    #   LZ4 compression library
-│   └── heatshrink/             #   Heatshrink compression library
+│   ├── heatshrink/             #   Heatshrink compression library
+│   └── littlefs/               #   LittleFS filesystem library
 ├── scripts/                    # Build/test/setup scripts
 │   ├── setup.sh                #   One-time project setup
 │   ├── run-tests.sh            #   Test runner with summary
@@ -585,6 +611,7 @@ cfgpack/
         ├── api.rst
         ├── api-reference.md
         ├── compression.md
+        ├── littlefs.md
         ├── fuzz-testing.md
         ├── stack-analysis.md
         └── versioning.md

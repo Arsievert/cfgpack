@@ -75,7 +75,7 @@ Where `<algorithm>` is either `lz4` or `heatshrink`.
   [0..3]  4-byte little-endian original size
   [4..N]  LZ4-compressed data
   ```
-  This header is required because LZ4 decompression needs to know the output buffer size. The `examples/fleet_gateway/` example demonstrates reading this format at runtime.
+  This header is required because LZ4 decompression needs to know the output buffer size. The `examples/fleet_gateway/` example demonstrates reading this format at runtime. The `examples/flash_config/` example demonstrates the same pipeline with LittleFS flash storage.
 
 - **Heatshrink**: The output file contains raw compressed data only (no header). Heatshrink is a streaming decoder and does not require the original size up front.
 
@@ -108,15 +108,32 @@ The output binary can be parsed on-device with `cfgpack_schema_measure_msgpack()
 
 ## Third-Party Libraries
 
-LZ4 and heatshrink sources are vendored in `third_party/` for self-contained builds:
+LZ4, heatshrink, and LittleFS sources are vendored in `third_party/` for self-contained builds:
+
+### LZ4
 
 ```
-third_party/
-  lz4/
+third_party/lz4/
     lz4.h, lz4.c              # BSD-2-Clause license
-  heatshrink/
+```
+
+### Heatshrink
+
+```
+third_party/heatshrink/
     heatshrink_config.h       # window=8, lookahead=4
     heatshrink_decoder.h/c    # Used by library
     heatshrink_encoder.h/c    # Used by compression tool and tests
                               # ISC license
 ```
+
+### LittleFS
+
+```
+third_party/littlefs/
+    lfs.h, lfs.c              # Core filesystem implementation
+    lfs_util.h, lfs_util.c    # Utility functions
+    LICENSE.md                 # BSD-3-Clause license
+```
+
+LittleFS is a little fail-safe filesystem designed for microcontrollers. Unlike LZ4 and heatshrink, it is not compiled into the core library — it is linked directly by applications that use the LittleFS wrappers (`-DCFGPACK_LITTLEFS`). See [LittleFS Storage Wrappers](littlefs.md) for details.

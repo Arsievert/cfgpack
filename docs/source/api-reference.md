@@ -574,6 +574,32 @@ cfgpack_err_t cfgpack_pagein_file(cfgpack_ctx_t *ctx, const char *path,
                                   uint8_t *scratch, size_t scratch_cap);
 ```
 
+## LittleFS I/O Wrappers (Optional)
+
+These functions use LittleFS operations and are provided for embedded systems with flash storage. The caller owns the `lfs_t` instance and must mount/unmount it externally. To use these, compile with `-DCFGPACK_LITTLEFS` and link `src/io_littlefs.c` and the LittleFS sources with your project.
+
+The scratch buffer serves double duty: the first `lfs->cfg->cache_size` bytes are used as the LittleFS file cache (via `lfs_file_opencfg`), and the remainder holds the serialized data. This avoids `lfs_malloc`, making the wrappers compatible with `LFS_NO_MALLOC` builds. See [LittleFS Storage Wrappers](littlefs.md) for the full scratch buffer layout and usage guide.
+
+```c
+#include "cfgpack/io_littlefs.h"
+
+/* Encode to a LittleFS file using caller scratch buffer (no heap).
+ * scratch must be >= cfg->cache_size + encoded size. */
+cfgpack_err_t cfgpack_pageout_lfs(const cfgpack_ctx_t *ctx,
+                                  lfs_t *lfs,
+                                  const char *path,
+                                  uint8_t *scratch,
+                                  size_t scratch_cap);
+
+/* Decode from a LittleFS file using caller scratch buffer (no heap).
+ * scratch must be >= cfg->cache_size + file size. */
+cfgpack_err_t cfgpack_pagein_lfs(cfgpack_ctx_t *ctx,
+                                 lfs_t *lfs,
+                                 const char *path,
+                                 uint8_t *scratch,
+                                 size_t scratch_cap);
+```
+
 ## MessagePack Helpers (Internal-Facing)
 
 These are lower-level functions used internally. They're exposed for advanced use cases.

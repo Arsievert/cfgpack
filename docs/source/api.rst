@@ -39,6 +39,12 @@ File I/O Wrappers
 .. doxygenfile:: io_file.h
    :project: CFGPack
 
+LittleFS I/O Wrappers
+---------------------
+
+.. doxygenfile:: io_littlefs.h
+   :project: CFGPack
+
 Decompression
 -------------
 

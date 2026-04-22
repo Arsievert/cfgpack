@@ -56,7 +56,9 @@ Include just ``cfgpack/cfgpack.h``; it re-exports the public API surface.
    the full measure-then-allocate pattern, ``examples/low_memory/`` for a
    complete example combining measure-then-allocate with schema migration, or
    ``examples/fleet_gateway/`` for msgpack binary schemas with a three-version
-   migration chain using ``cfgpack_schema_measure_msgpack()``.
+   migration chain using ``cfgpack_schema_measure_msgpack()``, or
+   ``examples/flash_config/`` for LittleFS flash storage with LZ4-compressed
+   msgpack schemas and a v1 → v2 remap migration.
 
 Map Format
 ----------

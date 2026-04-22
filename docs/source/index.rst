@@ -15,6 +15,7 @@ Hard caps: max 128 schema entries.
    api-reference
    versioning
    compression
+   littlefs
    stack-analysis
    fuzz-testing
 
@@ -29,6 +30,7 @@ Features
 - Schema versioning with embedded schema name for version detection
 - Index remapping and type widening for schema migrations
 - Optional LZ4/heatshrink decompression support
+- Optional LittleFS storage wrappers for flash-based embedded systems
 
 Indices and tables
 ==================
