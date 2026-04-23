@@ -11,7 +11,7 @@ jobs:
     name: Format check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Install clang-format-22
         run: |
           wget -q https://apt.llvm.org/llvm.sh
@@ -33,7 +33,7 @@ jobs:
           - { os: macos-latest,  cc: clang }
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Install toolchain (Linux)
         if: runner.os == 'Linux'
@@ -54,7 +54,7 @@ jobs:
 
       - name: Upload test log
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: test-log-${{ matrix.os }}-${{ matrix.cc }}
           path: build/test.log
@@ -64,7 +64,7 @@ jobs:
     name: ASan + UBSan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Install clang
         run: |
           sudo apt-get update
@@ -73,7 +73,7 @@ jobs:
         run: make CC=clang test-asan
       - name: Upload sanitizer log
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: test-log-asan
           path: build/test.log
@@ -83,7 +83,7 @@ jobs:
     name: Fuzz smoke (30s per target)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Install clang
         run: |
           sudo apt-get update
@@ -94,7 +94,7 @@ jobs:
         run: scripts/run-fuzz.sh 30
       - name: Upload corpora + any crash artifacts
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: fuzz-artifacts
           path: |
@@ -108,7 +108,7 @@ jobs:
     name: Docs build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Install docs dependencies
         run: |
           sudo apt-get update
@@ -116,7 +116,7 @@ jobs:
       - name: Build Sphinx + Doxygen
         run: make docs
       - name: Upload HTML docs
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: docs-html
           path: build/docs/html
