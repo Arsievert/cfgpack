@@ -4,7 +4,7 @@
 
 A MessagePack-based configuration library for embedded systems.
 
-**Embedded profile:** no heap allocation. All buffers are caller-owned. Hard caps: max 128 schema entries. Schema descriptions are ignored/dropped.
+**Design constraints:** no heap allocation. All buffers are caller-owned. Hard caps: max 128 schema entries. Schema descriptions are ignored/dropped.
 
 ## What It Does
 
@@ -15,16 +15,6 @@ A MessagePack-based configuration library for embedded systems.
 - Encodes/decodes MessagePack maps; pageout to buffer or file, pagein from buffer or file, with size caps.
 - **Schema versioning**: Embeds schema name in serialized blobs for version detection.
 - **Remapping**: Migrates config between schema versions with index remapping, type widening, and automatic default restoration for new entries.
-
-## Setup
-
-After cloning, run the one-time setup to install git hooks and verify dependencies:
-
-```bash
-./scripts/setup.sh
-```
-
-This checks for required tools (`clang`, `clang-format`, `make`, `ar`), installs the pre-commit hook, and runs a test build to confirm everything works.
 
 ## Documentation
 

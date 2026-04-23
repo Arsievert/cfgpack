@@ -4,6 +4,29 @@ This document provides per-function stack frame sizes for every cfgpack library
 function, measured with `clang -fstack-usage` on an arm64 target. Use these
 numbers to budget stack space when deploying cfgpack on embedded systems.
 
+## Recommendations for Embedded Targets
+
+1. **Runtime stack budget**: With `-Os`, all runtime operations (get/set,
+   pageout, pagein) stay under **~500 B** of stack. Budget 512 B for the
+   cfgpack runtime call chain.
+
+2. **Setup stack budget**: Schema parsing needs up to **~1,296 B** at `-Os`
+   for `.map` format. If parsing schemas on the device, budget 1.5 KB.
+   JSON and msgpack parsers are cheaper (~1,120 B and ~752 B respectively).
+   If schemas are parsed on a host and only binary config is loaded, the
+   parser is not linked.
+
+3. **Always compile with `-Os` or `-O2`**: Stack usage drops significantly
+   versus `-O0` due to inlining and register allocation. Many small
+   functions (getters, setters, init) collapse to 0 B frames at `-Os`.
+
+4. **Reduce `CFGPACK_SKIP_MAX_DEPTH`** on very constrained targets. A
+   value of 8 saves 96 B versus the default 32 and is sufficient for
+   typical 1-2 level config maps.
+
+5. **Use `make stack-usage-Os`** to verify stack sizes any time the code
+   changes or compiler flags are adjusted.
+
 ## Measurement Method
 
 Stack frame sizes were obtained by compiling with:
@@ -37,9 +60,9 @@ Run `make stack-usage-O0` or `make stack-usage-Os` to reproduce these measuremen
 | `cfgpack_set_fstr` | 96 | 80 | Set fixed-string value |
 | `cfgpack_get_fstr` | 80 | 0 | Get fixed-string value |
 | `cfgpack_set_str_by_name` | 64 | 64 | |
-| `cfgpack_get_str_by_name` | 64 | 80 | |
+| `cfgpack_get_str_by_name` | 64 | 64 | |
 | `cfgpack_set_fstr_by_name` | 64 | 64 | |
-| `cfgpack_get_fstr_by_name` | 64 | 80 | |
+| `cfgpack_get_fstr_by_name` | 64 | 64 | |
 | `cfgpack_get_version` | 16 | 0 | |
 | `cfgpack_get_size` | 48 | 0 | |
 | `cfgpack_print` | 16 | 0 | No-op in embedded mode |
@@ -49,13 +72,22 @@ Run `make stack-usage-O0` or `make stack-usage-Os` to reproduce these measuremen
 
 | Function | -O0 | -Os | Notes |
 |---|---:|---:|---|
-| `cfgpack_pageout` | 128 | 96 | Serialize context to buffer |
+| `cfgpack_pageout` | 128 | 112 | Serialize context to buffer |
 | `cfgpack_peek_name` | 128 | 112 | Read schema name from buffer |
 | `cfgpack_pagein_buf` | 48 | 0 | Deserialize from buffer |
-| `cfgpack_pagein_remap` | 160 | 160 | Deserialize with index remapping |
-| `decode_value` | 144 | 64 | Internal |
+| `cfgpack_pagein_remap` | 176 | 160 | Deserialize with index remapping |
+| `decode_value` | 128 | 64 | Internal |
 | `decode_value_with_coercion` | 144 | — | Inlined at -Os |
 | `encode_value` | 80 | — | Inlined at -Os |
+
+### io_littlefs.c — LittleFS file I/O
+
+| Function | -O0 | -Os | Notes |
+|---|---:|---:|---|
+| `cfgpack_pageout_lfs` | 112 | 208 | Serialize to LittleFS file |
+| `cfgpack_pagein_lfs` | 112 | 192 | Deserialize from LittleFS file |
+| `write_lfs_file` | 224 | — | Internal; inlined at -Os |
+| `read_lfs_file` | 240 | — | Internal; inlined at -Os |
 
 ### msgpack.c — Low-level MessagePack primitives
 
@@ -64,8 +96,8 @@ Run `make stack-usage-O0` or `make stack-usage-Os` to reproduce these measuremen
 | `cfgpack_msgpack_skip_value` | 240 | 160 | **Iterative** — bounded at all depths |
 | `cfgpack_msgpack_encode_uint64` | 80 | 48 | |
 | `cfgpack_msgpack_encode_int64` | 80 | 48 | |
-| `cfgpack_msgpack_encode_f32` | 48 | 0 | |
-| `cfgpack_msgpack_encode_f64` | 80 | 0 | |
+| `cfgpack_msgpack_encode_f32` | 48 | 32 | |
+| `cfgpack_msgpack_encode_f64` | 80 | 48 | |
 | `cfgpack_msgpack_encode_str` | 64 | 64 | |
 | `cfgpack_msgpack_encode_map_header` | 48 | 32 | |
 | `cfgpack_msgpack_decode_uint64` | 80 | 32 | |
@@ -77,15 +109,24 @@ Run `make stack-usage-O0` or `make stack-usage-Os` to reproduce these measuremen
 
 ### schema_parser.c — Schema parsing (setup-time only)
 
+Public API functions are thin wrappers that delegate to shared `_impl`
+functions. At `-Os`, most wrappers are inlined to 0 B. The `_impl` functions
+hold the real stack cost and are included below.
+
 | Function | -O0 | -Os | Notes |
 |---|---:|---:|---|
-| `cfgpack_parse_schema` | 1408 | 880 | Largest frame — two 256 B buffers |
-| `cfgpack_schema_parse_json` | 1104 | 576 | JSON schema parser |
-| `cfgpack_schema_measure` | 896 | 816 | Pre-parse measurement |
-| `cfgpack_schema_measure_json` | 544 | 368 | JSON pre-parse measurement |
-| `cfgpack_schema_write_json` | 144 | 160 | JSON schema writer |
-| `cfgpack_schema_measure_msgpack` | 208 | 176 | Msgpack pre-parse measurement |
-| `cfgpack_schema_parse_msgpack` | 656 | 448 | Msgpack schema parser |
+| `cfgpack_parse_schema` | 48 | 0 | Wrapper → `parse_schema_map_impl` |
+| `parse_schema_map_impl` | 592 | 1200 | `map_phase2` inlined at -Os |
+| `cfgpack_schema_measure` | 64 | 0 | Wrapper → `parse_schema_map_impl` |
+| `cfgpack_schema_parse_json` | 48 | 0 | Wrapper → `parse_schema_json_impl` |
+| `parse_schema_json_impl` | 288 | 544 | JSON orchestrator |
+| `json_phase2` | 592 | 416 | JSON string default extraction |
+| `cfgpack_schema_measure_json` | 64 | 0 | Wrapper → `parse_schema_json_impl` |
+| `cfgpack_schema_parse_msgpack` | 48 | 0 | Wrapper → `parse_schema_msgpack_impl` |
+| `parse_schema_msgpack_impl` | 240 | 336 | Msgpack orchestrator |
+| `mp_phase2` | 320 | 352 | Msgpack default extraction |
+| `cfgpack_schema_measure_msgpack` | 64 | 0 | Wrapper → `parse_schema_msgpack_impl` |
+| `cfgpack_schema_write_json` | 144 | 144 | JSON schema writer |
 | `cfgpack_schema_write_msgpack` | 176 | 128 | Msgpack schema writer |
 | `cfgpack_schema_get_sizing` | 64 | 0 | |
 | `cfgpack_schema_free` | 16 | 0 | |
@@ -114,25 +155,34 @@ computed by summing frame sizes along the deepest call chain.
 
 | API Call | -O0 worst case | -Os worst case |
 |---|---:|---:|
-| `cfgpack_set` / `cfgpack_get` | ~128 B | ~80 B |
-| `cfgpack_set_by_name` / `cfgpack_get_by_name` | ~176 B | ~128 B |
+| `cfgpack_set` / `cfgpack_get` | ~128 B | ~0 B |
+| `cfgpack_set_by_name` / `cfgpack_get_by_name` | ~128 B | ~80 B |
 | `cfgpack_set_str` / `cfgpack_set_fstr` | ~160 B | ~80 B |
-| `cfgpack_pageout` | ~336 B | ~208 B |
-| `cfgpack_pagein_buf` | ~432 B | ~320 B |
-| `cfgpack_pagein_remap` | ~544 B | ~480 B |
-| `cfgpack_pagein_lz4` | ~512 B | ~368 B |
-| `cfgpack_pagein_heatshrink` | ~544 B | ~416 B |
+| `cfgpack_pageout` | ~272 B | ~176 B |
+| `cfgpack_pagein_buf` | ~544 B | ~320 B |
+| `cfgpack_pagein_remap` | ~544 B | ~320 B |
+| `cfgpack_pagein_lz4` | ~624 B | ~368 B |
+| `cfgpack_pagein_heatshrink` | ~656 B | ~416 B |
+| `cfgpack_pageout_lfs` | ~464 B | ~384 B |
+| `cfgpack_pagein_lfs` | ~656 B | ~512 B |
 
 ### Setup operations (called once at startup)
 
 | API Call | -O0 worst case | -Os worst case |
 |---|---:|---:|
 | `cfgpack_init` | ~128 B | ~0 B |
-| `cfgpack_parse_schema` | ~1,408 B | ~880 B |
-| `cfgpack_schema_parse_json` | ~1,104 B | ~576 B |
-| `cfgpack_schema_parse_msgpack` | ~656 B | ~448 B |
-| `cfgpack_schema_measure` | ~896 B | ~816 B |
-| `cfgpack_schema_measure_msgpack` | ~208 B | ~176 B |
+| `cfgpack_parse_schema` | ~1,456 B | ~1,296 B |
+| `cfgpack_schema_parse_json` | ~1,136 B | ~1,120 B |
+| `cfgpack_schema_parse_msgpack` | ~688 B | ~752 B |
+| `cfgpack_schema_measure` | ~736 B | ~1,296 B |
+| `cfgpack_schema_measure_json` | ~560 B | ~704 B |
+| `cfgpack_schema_measure_msgpack` | ~464 B | ~496 B |
+
+**Note on measure functions at -Os**: The `_impl` functions are shared between
+parse and measure paths. At `-Os`, `map_phase2` is inlined into
+`parse_schema_map_impl`, inflating the frame to 1,200 B even though the measure
+path never executes the phase 2 code. The compiler reserves stack for all locals
+regardless of which branch is taken.
 
 ## Configuration Knobs Affecting Stack Usage
 
@@ -173,28 +223,7 @@ Override at compile time:
 
 ### `MAX_LINE_LEN` (default: 256, internal to schema_parser.c)
 
-Controls the maximum line length for `.map` schema files. Two buffers of
-this size exist on the stack in `cfgpack_parse_schema()` and
-`cfgpack_schema_measure()`. Reducing to 128 would save ~256 B per function,
-but this is setup-time code and not called at runtime.
-
-## Recommendations for Embedded Targets
-
-1. **Runtime stack budget**: With `-Os`, all runtime operations (get/set,
-   pageout, pagein) stay under **~500 B** of stack. Budget 512 B for the
-   cfgpack runtime call chain.
-
-2. **Setup stack budget**: Schema parsing needs up to **~880 B** at `-Os`.
-   If parsing schemas on the device, budget 1 KB. If schemas are parsed
-   on a host and only binary config is loaded, the parser is not linked.
-
-3. **Always compile with `-Os` or `-O2`**: Stack usage drops significantly
-   versus `-O0` due to inlining and register allocation. Many small
-   functions (getters, setters, init) collapse to 0 B frames at `-Os`.
-
-4. **Reduce `CFGPACK_SKIP_MAX_DEPTH`** on very constrained targets. A
-   value of 8 saves 96 B versus the default 32 and is sufficient for
-   typical 1-2 level config maps.
-
-5. **Use `make stack-usage-Os`** to verify stack sizes any time the code
-   changes or compiler flags are adjusted.
+Controls the maximum line length for `.map` schema files. A buffer of
+this size exists on the stack in `parse_schema_map_impl()`. Reducing to
+128 would save ~128 B, but this is setup-time code and not called at
+runtime.
