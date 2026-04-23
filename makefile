@@ -150,7 +150,7 @@ docs: ## Generate Sphinx documentation
 	@test -d $(DOCS_VENV) || python3 -m venv $(DOCS_VENV)
 	@$(DOCS_PIP) install -q -r docs/requirements.txt
 	@doxygen Doxyfile
-	@$(DOCS_SPHINX) -q -b html docs/source $(BUILD)/docs/html
+	@$(DOCS_SPHINX) -q -b html docs $(BUILD)/docs/html
 	@echo "Documentation: $(BUILD)/docs/html/index.html"
 
 # --- Utility targets ----------------------------------------------------------

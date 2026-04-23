@@ -12,9 +12,9 @@ extensions = [
 ]
 
 # Breathe configuration (for Doxygen XML integration)
-# Doxygen outputs to build/docs/doxygen/xml, Sphinx runs from docs/source
+# Doxygen outputs to build/docs/doxygen/xml, Sphinx runs from docs/
 breathe_projects = {
-    'CFGPack': '../../build/docs/doxygen/xml'
+    'CFGPack': '../build/docs/doxygen/xml'
 }
 breathe_default_project = 'CFGPack'
 
@@ -31,7 +31,7 @@ source_suffix = {
 }
 
 templates_path = ['_templates']
-exclude_patterns = []
+exclude_patterns = ['.venv', 'requirements.txt']
 
 # Suppress warnings for duplicate declarations (from anonymous struct members)
 suppress_warnings = ['duplicate_declaration.cpp']

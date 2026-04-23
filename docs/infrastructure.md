@@ -386,7 +386,7 @@ The `Doxyfile` at the repository root is configured for a C library:
 
 ### Sphinx Configuration
 
-`docs/source/conf.py` configures:
+`docs/conf.py` configures:
 
 - **Extensions**: `breathe` (Doxygen bridge), `myst_parser` (Markdown support)
 - **Theme**: `sphinx_rtd_theme` (Read the Docs theme)
@@ -409,7 +409,7 @@ The `make docs` target automatically creates the venv and installs dependencies 
 ### Documentation Source Files
 
 ```
-docs/source/
+docs/
     conf.py              # Sphinx configuration
     index.rst            # Main table of contents
     getting-started.rst  # Getting started guide
@@ -417,8 +417,10 @@ docs/source/
     api-reference.md     # API reference (Markdown)
     compression.md       # Compression documentation
     fuzz-testing.md      # Fuzz testing guide
+    littlefs.md          # LittleFS integration
     stack-analysis.md    # Stack usage analysis
     versioning.md        # Schema versioning
+    infrastructure.md    # This file
 ```
 
 ---

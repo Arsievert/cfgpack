@@ -11,7 +11,6 @@ Hard caps: max 128 schema entries.
    :caption: Contents:
 
    getting-started
-   api
    api-reference
    versioning
    compression

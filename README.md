@@ -16,14 +16,49 @@ A MessagePack-based configuration library for embedded systems.
 - **Schema versioning**: Embeds schema name in serialized blobs for version detection.
 - **Remapping**: Migrates config between schema versions with index remapping, type widening, and automatic default restoration for new entries.
 
+## Recommended Workflow
+
+The intended workflow is to author schemas as `.map` text files, convert them
+to compact MessagePack binary at build time, and optionally compress them.
+Your application then loads the binary blob directly — no text parsing on the
+device.
+
+```bash
+# 1. Write your schema as a .map file (see Map Format below)
+
+# 2. Convert to MessagePack binary (50-60% smaller than JSON, no tokenizer needed)
+./build/out/cfgpack-schema-pack vehicle.map vehicle.msgpack
+
+# 3. (Optional) Compress with LZ4 or heatshrink
+./build/out/cfgpack-compress lz4 vehicle.msgpack vehicle.msgpack.lz4
+```
+
+On the device:
+
+```c
+/* Decompress if needed */
+cfgpack_pagein_lz4(&ctx, compressed_data, compressed_len,
+                   scratch, scratch_cap);
+
+/* Or load the uncompressed msgpack binary directly */
+cfgpack_schema_measure_msgpack(data, len, &m, &err);  /* measure first */
+/* ... allocate buffers from m ... */
+cfgpack_schema_parse_msgpack(data, len, &opts);        /* then parse */
+```
+
+This keeps the `.map` files human-readable in your repo while shipping the
+smallest possible binary to the device. See [`examples/fleet_gateway/`](examples/fleet_gateway/)
+for a complete example with LZ4-compressed msgpack schemas and multi-version
+migration.
+
 ## Documentation
 
-- [API Reference](docs/source/api-reference.md) — Complete API documentation (errors, values, schema, runtime, typed functions)
-- [Schema Versioning](docs/source/versioning.md) — Version detection, migration, and type widening
-- [Compression](docs/source/compression.md) — LZ4/heatshrink decompression support
-- [LittleFS](docs/source/littlefs.md) — LittleFS flash storage wrappers
-- [Stack Analysis](docs/source/stack-analysis.md) — Per-function stack frame sizes for embedded budgeting
-- [Fuzz Testing](docs/source/fuzz-testing.md) — libFuzzer harnesses for parser and decode robustness
+- [API Reference](docs/api-reference.md) — Complete API documentation (errors, values, schema, runtime, typed functions)
+- [Schema Versioning](docs/versioning.md) — Version detection, migration, and type widening
+- [Compression](docs/compression.md) — LZ4/heatshrink decompression support
+- [LittleFS](docs/littlefs.md) — LittleFS flash storage wrappers
+- [Stack Analysis](docs/stack-analysis.md) — Per-function stack frame sizes for embedded budgeting
+- [Fuzz Testing](docs/fuzz-testing.md) — libFuzzer harnesses for parser and decode robustness
 
 ## Map Format
 
@@ -167,7 +202,7 @@ scripts/run-fuzz.sh 0      # run indefinitely (Ctrl-C to stop)
 | `fuzz_pagein` | `cfgpack_pagein_buf()` against a fixed schema |
 | `fuzz_msgpack_decode` | All low-level msgpack decode functions |
 
-See [Fuzz Testing](docs/source/fuzz-testing.md) for detailed documentation on the harness architecture, seed corpus generation, and crash investigation.
+See [Fuzz Testing](docs/fuzz-testing.md) for detailed documentation on the harness architecture, seed corpus generation, and crash investigation.
 
 ## Examples
 
