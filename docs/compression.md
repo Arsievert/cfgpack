@@ -2,7 +2,7 @@
 
 CFGPack supports decompression of stored config blobs using LZ4 or heatshrink algorithms. This is useful when config blobs are stored compressed in flash to save space. Compression must be done externally (e.g., at build time or on the host); only decompression is supported on the device.
 
-> **Note:** The `cfgpack_pagein_lz4()` and `cfgpack_pagein_heatshrink()` functions decompress **and then load config values** via `cfgpack_pagein_buf()`. They expect the decompressed result to be a config blob (produced by `cfgpack_pageout()`, with CRC-32C trailer). For compressed **schema** blobs (produced by `cfgpack-schema-pack`), call `LZ4_decompress_safe()` or heatshrink directly, then use `cfgpack_schema_parse_msgpack()`. See [Data Flow & Lifecycle](workflow.md) for details.
+> **Note:** The `cfgpack_pagein_lz4()` and `cfgpack_pagein_heatshrink()` functions decompress **and then load config values** via `cfgpack_pagein_buf()`. They expect the decompressed result to be a config blob (produced by `cfgpack_pageout()`, with CRC-32C trailer). For compressed **schema** blobs (produced by `cfgpack-schema-pack`), call `LZ4_decompress_safe()` or heatshrink directly, then use `cfgpack_schema_parse_msgpack()`. See [`examples/fleet_gateway/`](../examples/fleet_gateway/) for the complete pattern.
 
 Both LZ4 and heatshrink are enabled by default. To disable for minimal embedded builds, edit the `CFLAGS` in the Makefile to remove `-DCFGPACK_LZ4` and/or `-DCFGPACK_HEATSHRINK`.
 

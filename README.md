@@ -25,6 +25,8 @@ to compact MessagePack binary at build time, and optionally compress them.
 Your application then loads the binary blob directly — no text parsing on the
 device.
 
+![Build-time pipeline: vehicle.map source is converted by cfgpack-schema-pack into a vehicle.msgpack schema blob, which can optionally be compressed via cfgpack-compress (LZ4 or heatshrink) into vehicle.msgpack.lz4](docs/build_pipeline.svg)
+
 ```bash
 # 1. Write your schema as a .map file (see Map Format below)
 
@@ -55,6 +57,29 @@ This keeps the `.map` files human-readable in your repo while shipping the
 smallest possible binary to the device. See [`examples/fleet_gateway/`](examples/fleet_gateway/)
 for a complete example with LZ4-compressed msgpack schemas and multi-version
 migration.
+
+## Device Boot Lifecycle
+
+CFGPack uses two distinct binary formats — they are not interchangeable:
+
+| | Schema blob | Config blob |
+|---|---|---|
+| **Produced by** | `cfgpack_schema_write_msgpack()` / `cfgpack-schema-pack` tool | `cfgpack_pageout()` |
+| **Consumed by** | `cfgpack_schema_parse_msgpack()` | `cfgpack_pagein_buf()` / `cfgpack_pagein_remap()` |
+| **CRC-32C** | No | Yes (4-byte little-endian trailer) |
+| **Contains** | Entry definitions (indices, names, types, defaults) | Runtime values keyed by index |
+| **When used** | Boot — load schema from firmware image | Runtime — persist and restore config values |
+| **Compression** | Decompress with LZ4/heatshrink directly | `cfgpack_pagein_lz4()` / `cfgpack_pagein_heatshrink()` |
+
+Every boot loads the schema, then takes one of three paths depending on what's in flash:
+
+![Device boot lifecycle: shared schema init phase decompresses (if needed), measures, parses, and initializes the context; then branches into three paths — first boot (no saved config, defaults used), same-version boot (cfgpack_pagein_buf with CRC verification), or firmware upgrade (peek_name then pagein_remap with index translation); all paths converge to the running application, which calls cfgpack_pageout on changes](docs/boot_lifecycle.svg)
+
+**First boot** — No saved config in flash. Schema defaults are applied by `cfgpack_init()`. The application runs with defaults and eventually calls `cfgpack_pageout()` to persist changes. No pagein needed, CRC not involved.
+
+**Same-version boot** — Flash contains a config blob from `cfgpack_pageout()`. Call `cfgpack_pagein_buf()` to load it. CRC-32C is verified automatically — if corrupt, `CFGPACK_ERR_CRC` is returned and the app can fall back to defaults.
+
+**Firmware upgrade** — Flash contains a config blob from an older schema version. Load the new schema (already part of firmware), call `cfgpack_peek_name()` to identify the old version, select a remap table, and call `cfgpack_pagein_remap()` to load old values with index translation. Type widening is automatic; removed entries are skipped; new entries keep schema defaults. See [Schema Versioning](docs/versioning.md) and [`examples/fleet_gateway/`](examples/fleet_gateway/).
 
 ## Documentation
 
@@ -213,52 +238,5 @@ See [Fuzz Testing](docs/fuzz-testing.md) for detailed documentation on the harne
 
 ## Examples
 
-Six complete examples are provided in the `examples/` directory:
+Six complete examples are provided in [`examples/`](examples/). Each has its own Makefile — run with `cd examples/<name> && make run`.
 
-### allocate-once
-
-Dynamic allocation example demonstrating two-phase init: `cfgpack_schema_measure()` to learn sizes (32 bytes of stack), then right-sized `malloc`. This replaces the old discovery-parse pattern that required ~8KB of temporary stack buffers.
-
-```bash
-cd examples/allocate-once && make run
-```
-
-### datalogger
-
-Basic data logger demonstrating schema parsing, typed convenience functions, and serialization.
-
-```bash
-cd examples/datalogger && make run
-```
-
-### flash_config
-
-Industrial sensor node demonstrating LittleFS flash storage with LZ4-compressed msgpack binary schemas and a v1 → v2 schema migration. Uses a RAM-backed LittleFS block device for desktop testing. Shows the composable I/O pattern: manual LFS read + `cfgpack_pagein_remap()` for cross-version migration, and `cfgpack_pageout_lfs()` / `cfgpack_pagein_lfs()` for same-version round-trips. Covers all five migration scenarios: keep, widen, move, remove, and add.
-
-```bash
-cd examples/flash_config && make run
-```
-
-### fleet_gateway
-
-Fleet management gateway demonstrating LZ4-compressed msgpack binary schemas (pre-compiled from `.map` files via `cfgpack-schema-pack` and compressed with `cfgpack-compress lz4`) and a three-version migration chain (v1 -> v2 -> v3). Shows runtime LZ4 decompression of schema data before parsing, and uses `cfgpack_schema_measure_msgpack()` for right-sized heap allocation with no static buffer guessing. Covers all five migration scenarios: keep, widen, move, remove, and add.
-
-```bash
-cd examples/fleet_gateway && make run
-```
-
-### low_memory
-
-HVAC zone controller demonstrating the measure API for right-sized allocation and a full v1 -> v2 schema migration covering all five migration scenarios (keep, widen, move, remove, add). Shows how `cfgpack_schema_measure()` eliminates compile-time guessing of buffer sizes.
-
-```bash
-cd examples/low_memory && make run
-```
-
-### sensor_hub
-
-IoT sensor hub demonstrating compressed schema loading with heatshrink (~22% compression ratio).
-
-```bash
-cd examples/sensor_hub && make run
-```

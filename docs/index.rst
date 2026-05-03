@@ -10,7 +10,6 @@ Hard caps: max 128 schema entries.
    :maxdepth: 2
    :caption: Contents:
 
-   workflow
    getting-started
    api-reference
    versioning
