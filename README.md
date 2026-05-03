@@ -6,6 +6,8 @@ A MessagePack-based configuration library for embedded systems.
 
 **Design constraints:** no heap allocation. All buffers are caller-owned. Hard caps: max 128 schema entries. Schema descriptions are ignored/dropped.
 
+**Thread safety:** All core operations operate exclusively on the caller-provided `cfgpack_ctx_t` — no global state is used. Distinct contexts may be used concurrently from different threads without synchronization. Concurrent access to the *same* context requires external locking. Exception: `cfgpack_pagein_heatshrink()` uses a static decoder instance and is not thread-safe even across distinct contexts; the LZ4 path has no such limitation.
+
 ## What It Does
 
 - Defines a fixed-cap schema (up to 128 entries) with typed values (u/i 8–64, f32/f64, str/fstr) and 5-char names.

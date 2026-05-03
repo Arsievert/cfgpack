@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
 jobs:
   lint:
     name: Format check
@@ -121,3 +126,23 @@ jobs:
           name: docs-html
           path: build/docs/html
           if-no-files-found: ignore
+      - name: Upload Pages artifact
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: build/docs/html
+
+  docs-deploy:
+    name: Deploy docs to Pages
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: docs
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pages
+      cancel-in-progress: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
