@@ -41,11 +41,11 @@ device.
 On the device:
 
 ```c
-/* Decompress if needed */
-cfgpack_pagein_lz4(&ctx, compressed_data, compressed_len,
-                   decompressed_size, scratch, scratch_cap);
+/* Decompress if needed (LZ4 example) */
+LZ4_decompress_safe(compressed_data, scratch, compressed_len,
+                    decompressed_size);
 
-/* Or load the uncompressed msgpack binary directly */
+/* Measure, allocate, and parse the msgpack schema */
 cfgpack_schema_measure_msgpack(data, len, &m, &err);  /* measure first */
 /* ... allocate buffers from m ... */
 cfgpack_schema_parse_msgpack(data, len, &opts);        /* then parse */
