@@ -103,6 +103,7 @@ cfgpack_err_t cfgpack_msgpack_encode_str(cfgpack_buf_t *buf,
                                          const char *s,
                                          size_t len) {
     size_t hlen = 0;
+    cfgpack_err_t rc;
     uint8_t hdr[3];
     if (len <= 31) {
         hdr[hlen++] = (uint8_t)(0xa0 | (uint8_t)len);
@@ -114,10 +115,11 @@ cfgpack_err_t cfgpack_msgpack_encode_str(cfgpack_buf_t *buf,
         hdr[hlen++] = (uint8_t)(len >> 8);
         hdr[hlen++] = (uint8_t)len;
     }
-    if (cfgpack_buf_append(buf, hdr, hlen) != CFGPACK_OK) {
-        return (CFGPACK_ERR_ENCODE);
+    rc = cfgpack_buf_append(buf, hdr, hlen);
+    if (cfgpack_buf_append(buf, s, len) != CFGPACK_OK) {
+        rc = CFGPACK_ERR_ENCODE;
     }
-    return (cfgpack_buf_append(buf, s, len));
+    return (rc);
 }
 
 cfgpack_err_t cfgpack_msgpack_encode_map_header(cfgpack_buf_t *buf,

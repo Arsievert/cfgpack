@@ -6,6 +6,11 @@
  * config values from a binary blob (e.g. from flash storage).
  * Uses a fixed valid schema -- we are fuzzing the input data, not
  * the schema setup.
+ *
+ * The fuzzer input is treated as raw msgpack content.  A valid CRC-32C
+ * trailer is computed and appended so the decoder paths (not just the
+ * CRC check) get exercised.  Raw input is also fed directly to test
+ * the CRC rejection path.
  */
 
 #include "cfgpack/cfgpack.h"
@@ -13,6 +18,11 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+
+/* CRC-32C: linked from libcfgpack */
+uint32_t cfgpack_crc32c(const uint8_t *data, size_t len);
+
+#define CRC_SIZE 4
 
 /* Fixed schema with a mix of types to exercise all decode paths.
  * Matches the kind of schema a real application would use. */
@@ -67,6 +77,21 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         return 0;
     }
 
+    /*
+     * Build a CRC-wrapped copy: treat fuzzer input as raw msgpack,
+     * append a valid CRC-32C trailer so the decode paths get exercised.
+     */
+    uint8_t wrapped[4096 + CRC_SIZE];
+    size_t wrapped_len = size;
+    uint32_t crc;
+    memcpy(wrapped, data, size);
+    crc = cfgpack_crc32c(wrapped, wrapped_len);
+    wrapped[wrapped_len] = (uint8_t)(crc);
+    wrapped[wrapped_len + 1] = (uint8_t)(crc >> 8);
+    wrapped[wrapped_len + 2] = (uint8_t)(crc >> 16);
+    wrapped[wrapped_len + 3] = (uint8_t)(crc >> 24);
+    wrapped_len += CRC_SIZE;
+
     /* Fresh context for each iteration */
     cfgpack_value_t values[6];
     char str_pool[256];
@@ -81,14 +106,14 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         return 0;
     }
 
-    /* Exercise pagein */
-    (void)cfgpack_pagein_buf(&ctx, data, size);
+    /* Exercise pagein with valid CRC (reaches decoder) */
+    (void)cfgpack_pagein_buf(&ctx, wrapped, wrapped_len);
 
-    /* Exercise peek_name on the same data */
+    /* Exercise peek_name with valid CRC */
     char name_buf[64];
-    (void)cfgpack_peek_name(data, size, name_buf, sizeof(name_buf));
+    (void)cfgpack_peek_name(wrapped, wrapped_len, name_buf, sizeof(name_buf));
 
-    /* Also exercise pagein_remap with a small remap table */
+    /* Exercise pagein_remap with valid CRC */
     memset(values, 0, sizeof(values));
     memset(ctx.present, 0, sizeof(ctx.present));
 
@@ -96,7 +121,12 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         {10, 1}, /* map old index 10 -> new index 1 */
         {20, 2}, /* map old index 20 -> new index 2 */
     };
-    (void)cfgpack_pagein_remap(&ctx, data, size, remap, 2);
+    (void)cfgpack_pagein_remap(&ctx, wrapped, wrapped_len, remap, 2);
+
+    /* Exercise CRC rejection path with raw data (no valid trailer) */
+    memset(values, 0, sizeof(values));
+    memset(ctx.present, 0, sizeof(ctx.present));
+    (void)cfgpack_pagein_buf(&ctx, data, size);
 
     cfgpack_free(&ctx);
     return 0;

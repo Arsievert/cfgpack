@@ -329,8 +329,9 @@ TEST_CASE(test_lz4_basic) {
 
     LOG("Creating large test MessagePack data (15 entries, mixed types)");
     msgpack_len = create_large_test_msgpack(msgpack_buf, BUF_SIZE);
+    test_append_crc(msgpack_buf, &msgpack_len);
     CHECK(msgpack_len > 0);
-    LOG("Created %zu bytes of MessagePack data", msgpack_len);
+    LOG("Created %zu bytes of MessagePack data (incl. CRC)", msgpack_len);
     LOG_HEX("Original msgpack (first 64 bytes)", msgpack_buf,
             msgpack_len > 64 ? 64 : msgpack_len);
 
@@ -507,8 +508,9 @@ TEST_CASE(test_heatshrink_basic) {
 
     LOG("Creating large test MessagePack data (15 entries, mixed types)");
     msgpack_len = create_large_test_msgpack(msgpack_buf, BUF_SIZE);
+    test_append_crc(msgpack_buf, &msgpack_len);
     CHECK(msgpack_len > 0);
-    LOG("Created %zu bytes of MessagePack data", msgpack_len);
+    LOG("Created %zu bytes of MessagePack data (incl. CRC)", msgpack_len);
     LOG_HEX("Original msgpack (first 64 bytes)", msgpack_buf,
             msgpack_len > 64 ? 64 : msgpack_len);
 
@@ -658,7 +660,8 @@ TEST_CASE(test_roundtrip_both_algorithms) {
 
     LOG("Creating large test MessagePack data");
     msgpack_len = create_large_test_msgpack(msgpack_buf, BUF_SIZE);
-    LOG("Original size: %zu bytes", msgpack_len);
+    test_append_crc(msgpack_buf, &msgpack_len);
+    LOG("Original size: %zu bytes (incl. CRC)", msgpack_len);
     LOG_HEX("Original msgpack (first 64 bytes)", msgpack_buf,
             msgpack_len > 64 ? 64 : msgpack_len);
 

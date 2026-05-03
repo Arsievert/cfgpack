@@ -383,8 +383,13 @@ TEST_CASE(test_get_size) {
     LOG("After setting index 3: size = 3 (correct)");
 
     /* Pagein a minimal map with only 1 entry -> resets to 1 */
-    uint8_t tiny[] = {0x81, 0x01, 0x05};
-    CHECK(cfgpack_pagein_buf(&ctx, tiny, sizeof(tiny)) == CFGPACK_OK);
+    uint8_t tiny[16];
+    size_t tiny_len = 0;
+    tiny[tiny_len++] = 0x81;
+    tiny[tiny_len++] = 0x01;
+    tiny[tiny_len++] = 0x05;
+    test_append_crc(tiny, &tiny_len);
+    CHECK(cfgpack_pagein_buf(&ctx, tiny, tiny_len) == CFGPACK_OK);
     CHECK(cfgpack_get_size(&ctx) == 1);
     LOG("After pagein with 1 entry: size = 1 (correct, reset)");
 

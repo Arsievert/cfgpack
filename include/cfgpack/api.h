@@ -739,6 +739,20 @@ cfgpack_err_t cfgpack_pageout(const cfgpack_ctx_t *ctx,
                               size_t *out_len);
 
 /**
+ * @brief Measure the exact buffer size needed for cfgpack_pageout().
+ *
+ * Runs the full encoding logic without writing, tracking total bytes needed.
+ * Use this to right-size the output buffer before calling cfgpack_pageout().
+ *
+ * @param ctx      Initialized context.
+ * @param out_len  Receives the exact number of bytes cfgpack_pageout() will
+ *                 write (including the CRC-32C trailer).
+ * @return CFGPACK_OK on success; CFGPACK_ERR_ARGS if ctx or out_len is NULL.
+ */
+cfgpack_err_t cfgpack_pageout_measure(const cfgpack_ctx_t *ctx,
+                                      size_t *out_len);
+
+/**
  * @brief Peek at the schema name stored in a MessagePack config blob.
  *
  * Reads the schema name from CFGPACK_INDEX_RESERVED_NAME (0) without fully

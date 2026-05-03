@@ -72,7 +72,8 @@ Run `make stack-usage-O0` or `make stack-usage-Os` to reproduce these measuremen
 
 | Function | -O0 | -Os | Notes |
 |---|---:|---:|---|
-| `cfgpack_pageout` | 128 | 112 | Serialize context to buffer |
+| `cfgpack_pageout` | 128 | 112 | Serialize context to buffer (incl. CRC) |
+| `cfgpack_pageout_measure` | 128 | 112 | Measure serialized size without encoding |
 | `cfgpack_peek_name` | 128 | 112 | Read schema name from buffer |
 | `cfgpack_pagein_buf` | 48 | 0 | Deserialize from buffer |
 | `cfgpack_pagein_remap` | 176 | 160 | Deserialize with index remapping |

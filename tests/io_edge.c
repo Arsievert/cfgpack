@@ -705,10 +705,15 @@ TEST_CASE(test_pagein_buf_defaults_restored) {
     LOG("Pre-set default: values[1] = u8(42)");
 
     /* Craft minimal msgpack: map(1) {key=1: val=77} */
-    uint8_t buf[] = {0x81, 0x01, 0x4d}; /* map(1), key=1, val=77 */
+    uint8_t buf[16];
+    size_t buf_len = 0;
+    buf[buf_len++] = 0x81; /* map(1) */
+    buf[buf_len++] = 0x01; /* key=1 */
+    buf[buf_len++] = 0x4d; /* val=77 */
+    test_append_crc(buf, &buf_len);
     LOG("Crafted payload: map(1) {1: 77}");
 
-    CHECK(cfgpack_pagein_buf(&ctx, buf, sizeof(buf)) == CFGPACK_OK);
+    CHECK(cfgpack_pagein_buf(&ctx, buf, buf_len) == CFGPACK_OK);
     LOG("Pagein succeeded");
 
     /* Key 1 was in payload -> present */

@@ -20,7 +20,8 @@ typedef enum {
     CFGPACK_ERR_ENCODE = -9,
     CFGPACK_ERR_DECODE = -10,
     CFGPACK_ERR_RESERVED_INDEX = -11,
-    CFGPACK_ERR_ARGS = -12
+    CFGPACK_ERR_ARGS = -12,
+    CFGPACK_ERR_CRC = -13
 } cfgpack_err_t;
 ```
 
@@ -35,10 +36,11 @@ typedef enum {
 | `CFGPACK_ERR_TYPE_MISMATCH` | Value type incompatible with schema entry: (1) default value wire format does not match declared type during schema parsing (e.g. float default for a string entry), (2) narrowing type coercion during remap (e.g. u16 to u8), or (3) wrong-family wire type at runtime pagein. |
 | `CFGPACK_ERR_STR_TOO_LONG` | String value exceeds `CFGPACK_STR_MAX` (64) or `CFGPACK_FSTR_MAX` (16). |
 | `CFGPACK_ERR_IO` | File I/O failure (read/write error). |
-| `CFGPACK_ERR_ENCODE` | Encoding failure or output buffer too small. Also returned as a defense-in-depth check if a string value's offset/length exceeds the string pool capacity. |
+| `CFGPACK_ERR_ENCODE` | Encoding failure or output buffer too small. |
 | `CFGPACK_ERR_DECODE` | Decoding failure or malformed msgpack input. |
 | `CFGPACK_ERR_RESERVED_INDEX` | Attempt to use reserved index 0 (reserved for schema name). |
 | `CFGPACK_ERR_ARGS` | Missing or bad arguments (NULL pointer passed to any public API function, or NULL required field in `cfgpack_parse_opts_t`). Distinguished from `CFGPACK_ERR_BOUNDS` — `ERR_ARGS` means a required pointer is NULL; `ERR_BOUNDS` means a non-NULL buffer is too small. |
+| `CFGPACK_ERR_CRC` | CRC-32C integrity check failed. The stored CRC trailer does not match the computed CRC of the payload. Returned by `cfgpack_pagein_buf()` and `cfgpack_pagein_remap()`. |
 
 ## Values
 
@@ -348,6 +350,7 @@ cfgpack_err_t cfgpack_set_by_name(cfgpack_ctx_t *ctx, const char *name, const cf
 cfgpack_err_t cfgpack_get_by_name(const cfgpack_ctx_t *ctx, const char *name, cfgpack_value_t *out_value);
 
 cfgpack_err_t cfgpack_pageout(const cfgpack_ctx_t *ctx, uint8_t *out, size_t out_cap, size_t *out_len);
+cfgpack_err_t cfgpack_pageout_measure(const cfgpack_ctx_t *ctx, size_t *out_len);
 cfgpack_err_t cfgpack_pagein_buf(cfgpack_ctx_t *ctx, const uint8_t *data, size_t len);
 
 /* Schema versioning and remapping */
@@ -369,6 +372,46 @@ size_t cfgpack_get_size(const cfgpack_ctx_t *ctx);
 ```
 
 After decoding all entries from the old data, `cfgpack_pagein_remap()` restores presence for any new-schema entries that have `has_default` set but were not in the incoming payload. This ensures new entries with defaults are immediately accessible after migration without explicit code to set them. Entries without defaults that were not in the old data remain absent.
+
+### CRC-32C Integrity Checking
+
+All serialized blobs include a 4-byte CRC-32C (Castagnoli) trailer for data integrity verification. This is always on — there is no compile flag or option to disable it.
+
+**Wire format:**
+
+```
+[msgpack map data ... N bytes] [CRC-32C little-endian ... 4 bytes]
+```
+
+- `cfgpack_pageout()` always appends the 4-byte CRC trailer after the msgpack data.
+- `cfgpack_pagein_buf()` and `cfgpack_pagein_remap()` verify the CRC and return `CFGPACK_ERR_CRC` on mismatch. The CRC is stripped before decoding.
+- `cfgpack_peek_name()` strips the trailer before parsing but does not verify the CRC (it is a lightweight probe; the caller will verify CRC when they call `cfgpack_pagein_buf()` later).
+
+**CRC algorithm:** CRC-32C with polynomial 0x82F63B78 (Castagnoli, reflected). This polynomial achieves Hamming distance 6 (detects all 1–5 bit errors) for data words up to ~8KB, well within cfgpack's typical blob sizes. Implemented as a nibble-at-a-time lookup table (16 entries = 64 bytes ROM).
+
+**Interaction with compression:** The CRC covers the uncompressed msgpack data. Decompression functions (`cfgpack_pagein_lz4`, `cfgpack_pagein_heatshrink`) decompress first, then call `cfgpack_pagein_buf` — CRC verification happens automatically on the decompressed payload.
+
+### Measure-Then-Allocate for Serialization
+
+`cfgpack_pageout_measure()` computes the exact number of bytes that `cfgpack_pageout()` will produce, including the 4-byte CRC trailer, without writing any data:
+
+```c
+cfgpack_err_t cfgpack_pageout_measure(const cfgpack_ctx_t *ctx, size_t *out_len);
+```
+
+This enables the measure-then-allocate pattern for serialization, matching the existing `cfgpack_schema_measure()` pattern for schema parsing:
+
+```c
+size_t needed;
+cfgpack_pageout_measure(&ctx, &needed);
+
+uint8_t *buf = malloc(needed);
+size_t len;
+cfgpack_pageout(&ctx, buf, needed, &len);
+/* len == needed */
+```
+
+Returns `CFGPACK_ERR_ARGS` if `ctx` or `out_len` is NULL. The measured size always matches the actual `cfgpack_pageout()` output length.
 
 ### Presence Bitmap
 
@@ -487,8 +530,15 @@ cfgpack_get_by_name(&ctx, "maxsp", &v);
 v.v.u64 = 120;
 cfgpack_set_by_name(&ctx, "maxsp", &v);
 
+// Measure exact output size (includes 4-byte CRC-32C trailer), then serialize
+size_t needed;
+cfgpack_pageout_measure(&ctx, &needed);
+
 size_t len;
 cfgpack_pageout(&ctx, scratch, sizeof(scratch), &len);
+// len == needed; blob includes CRC-32C trailer
+
+// Deserialize (CRC is verified automatically)
 cfgpack_pagein_buf(&ctx, scratch, len);
 ```
 

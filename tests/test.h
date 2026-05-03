@@ -112,4 +112,18 @@ static inline test_result_t test_fail(const char *name) {
 
 test_result_t test_case_result(const char *name, test_result_t r);
 
+/* CRC-32C: linked from libcfgpack.a, used to craft test blobs with trailer */
+uint32_t cfgpack_crc32c(const uint8_t *data, size_t len);
+
+#define TEST_CRC_SIZE 4
+
+static inline void test_append_crc(uint8_t *buf, size_t *len) {
+    uint32_t crc = cfgpack_crc32c(buf, *len);
+    buf[*len] = (uint8_t)(crc);
+    buf[*len + 1] = (uint8_t)(crc >> 8);
+    buf[*len + 2] = (uint8_t)(crc >> 16);
+    buf[*len + 3] = (uint8_t)(crc >> 24);
+    *len += TEST_CRC_SIZE;
+}
+
 #endif /* CFGPACK_TEST_H */

@@ -593,13 +593,27 @@ int main(void) {
     printf("── Phase 2: Serialize v1 to flash ───────────────────────────────\n"
            "\n");
 
+    size_t needed;
+    rc = cfgpack_pageout_measure(&ctx, &needed);
+    if (rc != CFGPACK_OK) {
+        fprintf(stderr, "Pageout measure failed: %d\n", rc);
+        return (1);
+    }
+    printf("  Measured: %zu bytes needed (incl. CRC-32C trailer)\n", needed);
+
+    if (needed > sizeof(flash)) {
+        fprintf(stderr, "Flash too small: need %zu, have %zu\n", needed,
+                sizeof(flash));
+        return (1);
+    }
+
     rc = cfgpack_pageout(&ctx, flash, sizeof(flash), &flash_len);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Pageout failed: %d\n", rc);
         return (1);
     }
-    printf("  Serialized %zu entries -> %zu bytes of MessagePack\n\n",
-           cfgpack_get_size(&ctx), flash_len);
+    printf("  Serialized %zu entries -> %zu bytes (measured %zu)\n\n",
+           cfgpack_get_size(&ctx), flash_len, needed);
 
     /* ═════════════════════════════════════════════════════════════════════
      * Phase 3: Firmware upgrade v1 -> v2
@@ -710,13 +724,26 @@ int main(void) {
 
     printf("  Modified 9 values for v2\n\n");
 
+    rc = cfgpack_pageout_measure(&ctx, &needed);
+    if (rc != CFGPACK_OK) {
+        fprintf(stderr, "Pageout measure v2 failed: %d\n", rc);
+        return (1);
+    }
+    printf("  Measured: %zu bytes needed (incl. CRC-32C trailer)\n", needed);
+
+    if (needed > sizeof(flash)) {
+        fprintf(stderr, "Flash too small: need %zu, have %zu\n", needed,
+                sizeof(flash));
+        return (1);
+    }
+
     rc = cfgpack_pageout(&ctx, flash, sizeof(flash), &flash_len);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Pageout v2 failed: %d\n", rc);
         return (1);
     }
-    printf("  Serialized %zu entries -> %zu bytes\n\n", cfgpack_get_size(&ctx),
-           flash_len);
+    printf("  Serialized %zu entries -> %zu bytes (measured %zu)\n\n",
+           cfgpack_get_size(&ctx), flash_len, needed);
 
     /* ═════════════════════════════════════════════════════════════════════
      * Phase 5: Firmware upgrade v2 -> v3

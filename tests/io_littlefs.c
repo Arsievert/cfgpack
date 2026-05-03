@@ -308,8 +308,8 @@ TEST_CASE(test_lfs_pagein_corrupted) {
     }
 
     CHECK(cfgpack_pagein_lfs(&ctx, &lfs, "/bad.bin", scratch,
-                             sizeof(scratch)) == CFGPACK_ERR_DECODE);
-    LOG("Correctly returned CFGPACK_ERR_DECODE");
+                             sizeof(scratch)) == CFGPACK_ERR_CRC);
+    LOG("Correctly returned CFGPACK_ERR_CRC");
 
     unmount();
     return (TEST_OK);

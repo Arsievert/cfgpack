@@ -143,6 +143,7 @@ static void craft_map_with_unknown_key(uint8_t *buf, size_t *len_out) {
     cfgpack_msgpack_encode_uint_key(&b, 42);
     cfgpack_msgpack_encode_uint64(&b, 1);
     *len_out = b.len;
+    test_append_crc(buf, len_out);
 }
 
 TEST_CASE(test_decode_unknown_key_skipped) {
@@ -256,11 +257,16 @@ TEST_CASE(test_presence_reset) {
     memset(ctx.present, 0, sizeof(ctx.present));
 
     LOG("Crafting minimal map with only index 1 set to 1");
-    uint8_t tiny[] = {0x81, /* map of 1 */ 0x01, /* key=1 */ 0x01 /* val=1 */};
-    LOG_HEX("Tiny map", tiny, sizeof(tiny));
+    uint8_t tiny[16];
+    size_t tiny_len = 0;
+    tiny[tiny_len++] = 0x81; /* map of 1 */
+    tiny[tiny_len++] = 0x01; /* key=1 */
+    tiny[tiny_len++] = 0x01; /* val=1 */
+    test_append_crc(tiny, &tiny_len);
+    LOG_HEX("Tiny map", tiny, tiny_len);
 
     LOG("Pagein minimal map");
-    CHECK(cfgpack_pagein_buf(&ctx, tiny, sizeof(tiny)) == CFGPACK_OK);
+    CHECK(cfgpack_pagein_buf(&ctx, tiny, tiny_len) == CFGPACK_OK);
     LOG("Pagein succeeded, get_size = %zu", cfgpack_get_size(&ctx));
 
     CHECK(cfgpack_get_size(&ctx) == 1);
@@ -356,9 +362,9 @@ TEST_CASE(test_pageout_empty_map) {
     LOG_HEX("Output buffer", buf, len);
 
     LOG("Verifying output structure:");
-    LOG("  Expected: map(1), key=0, fixstr(4), 'test'");
-    CHECK(len == 7);
-    LOG("  len = 7 (correct)");
+    LOG("  Expected: map(1), key=0, fixstr(4), 'test', CRC32(4)");
+    CHECK(len == 11);
+    LOG("  len = 11 (correct: 7 msgpack + 4 CRC)");
     CHECK(buf[0] == 0x81); /* map of 1 */
     LOG("  buf[0] = 0x81 (map of 1)");
     CHECK(buf[1] == 0x00); /* key 0 */
@@ -423,6 +429,7 @@ TEST_CASE(test_pagein_type_mismatch_map_payload) {
     cfgpack_buf_t b;
     char str_pool[128];
     uint16_t str_offsets[1];
+    size_t total_len;
 
     LOG("Creating schema: index 1 = str");
     make_schema(&schema, entries, 1);
@@ -439,10 +446,13 @@ TEST_CASE(test_pagein_type_mismatch_map_payload) {
     CHECK(cfgpack_msgpack_encode_uint_key(&b, 1) == CFGPACK_OK);
     CHECK(cfgpack_msgpack_encode_uint64(&b, 5) ==
           CFGPACK_OK); /* wrong type: number instead of str */
-    LOG_HEX("Crafted buffer", buf, b.len);
+    total_len = b.len;
+    test_append_crc(buf, &total_len);
+    LOG_HEX("Crafted buffer", buf, total_len);
 
     LOG("Pagein should fail with type mismatch");
-    CHECK(cfgpack_pagein_buf(&ctx, buf, b.len) == CFGPACK_ERR_TYPE_MISMATCH);
+    CHECK(cfgpack_pagein_buf(&ctx, buf, total_len) ==
+          CFGPACK_ERR_TYPE_MISMATCH);
     LOG("Correctly rejected: CFGPACK_ERR_TYPE_MISMATCH");
 
     LOG("Test completed successfully");
@@ -644,16 +654,19 @@ TEST_CASE(test_peek_name_missing) {
     uint8_t buf[8];
     cfgpack_buf_t b;
     char name[32];
+    size_t total_len;
 
     LOG("Crafting blob without key 0 (backward compat scenario)");
     cfgpack_buf_init(&b, buf, sizeof(buf));
     cfgpack_msgpack_encode_map_header(&b, 1);
     cfgpack_msgpack_encode_uint_key(&b, 5); /* key != 0 */
     cfgpack_msgpack_encode_uint64(&b, 42);
-    LOG_HEX("Crafted buffer", buf, b.len);
+    total_len = b.len;
+    test_append_crc(buf, &total_len);
+    LOG_HEX("Crafted buffer", buf, total_len);
 
     LOG("Peek name should return MISSING");
-    CHECK(cfgpack_peek_name(buf, b.len, name, sizeof(name)) ==
+    CHECK(cfgpack_peek_name(buf, total_len, name, sizeof(name)) ==
           CFGPACK_ERR_MISSING);
     LOG("Correctly returned: CFGPACK_ERR_MISSING");
 
@@ -925,6 +938,7 @@ TEST_CASE(test_remap_reserved_index_skipped) {
     cfgpack_msgpack_encode_uint_key(&b, 1);
     cfgpack_msgpack_encode_uint64(&b, 99);
     len = b.len;
+    test_append_crc(buf, &len);
     LOG_HEX("Crafted buffer", buf, len);
 
     LOG("Pagein should succeed, skipping key 0");

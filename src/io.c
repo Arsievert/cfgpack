@@ -4,6 +4,8 @@
 #include "cfgpack/schema.h"
 #include "cfgpack/value.h"
 
+#include "crc32.h"
+
 #include <string.h>
 
 /**
@@ -11,7 +13,8 @@
  * @param buf  Output buffer.
  * @param ctx  Context (for string pool access).
  * @param v    Value to encode.
- * @return CFGPACK_OK on success, CFGPACK_ERR_ENCODE or CFGPACK_ERR_INVALID_TYPE on failure.
+ * @return CFGPACK_OK on success, CFGPACK_ERR_ENCODE on buffer overflow,
+ *         CFGPACK_ERR_BOUNDS on pool corruption, CFGPACK_ERR_INVALID_TYPE on failure.
  */
 static cfgpack_err_t encode_value(cfgpack_buf_t *buf,
                                   const cfgpack_ctx_t *ctx,
@@ -34,7 +37,7 @@ static cfgpack_err_t encode_value(cfgpack_buf_t *buf,
     case CFGPACK_TYPE_STR: {
         const char *str;
         if ((size_t)v->v.str.offset + v->v.str.len > ctx->str_pool_cap) {
-            return (CFGPACK_ERR_ENCODE);
+            return (CFGPACK_ERR_BOUNDS);
         }
         str = ctx->str_pool + v->v.str.offset;
         return (cfgpack_msgpack_encode_str(buf, str, v->v.str.len));
@@ -42,7 +45,7 @@ static cfgpack_err_t encode_value(cfgpack_buf_t *buf,
     case CFGPACK_TYPE_FSTR: {
         const char *str;
         if ((size_t)v->v.fstr.offset + v->v.fstr.len > ctx->str_pool_cap) {
-            return (CFGPACK_ERR_ENCODE);
+            return (CFGPACK_ERR_BOUNDS);
         }
         str = ctx->str_pool + v->v.fstr.offset;
         return (cfgpack_msgpack_encode_str(buf, str, v->v.fstr.len));
@@ -51,21 +54,16 @@ static cfgpack_err_t encode_value(cfgpack_buf_t *buf,
     return (CFGPACK_ERR_INVALID_TYPE);
 }
 
-cfgpack_err_t cfgpack_pageout(const cfgpack_ctx_t *ctx,
-                              uint8_t *out,
-                              size_t out_cap,
-                              size_t *out_len) {
+/**
+ * @brief Core pageout logic shared by cfgpack_pageout and cfgpack_pageout_measure.
+ *
+ * Encodes present values into the buffer.  Overflow errors from the msgpack
+ * encoders are ignored — buf->len tracks the total needed size regardless.
+ * Real errors (pool corruption, invalid type) are propagated.
+ */
+static cfgpack_err_t pageout_impl(const cfgpack_ctx_t *ctx,
+                                  cfgpack_buf_t *buf) {
     size_t present_count = 0;
-    cfgpack_buf_t buf;
-
-    if (!ctx || !out) {
-        return (CFGPACK_ERR_ARGS);
-    }
-
-    /* Minimum headroom: map header + u64 key + u8 value (~12 bytes). */
-    if (out_cap < 12) {
-        return (CFGPACK_ERR_ENCODE);
-    }
 
     for (size_t i = 0; i < ctx->schema->entry_count; ++i) {
         if (cfgpack_presence_get(ctx, i)) {
@@ -73,41 +71,79 @@ cfgpack_err_t cfgpack_pageout(const cfgpack_ctx_t *ctx,
         }
     }
 
-    cfgpack_buf_init(&buf, out, out_cap);
-    /* Map header includes +1 for reserved index 0 (schema name) */
-    if (cfgpack_msgpack_encode_map_header(&buf, (uint32_t)(present_count +
-                                                           1)) != CFGPACK_OK) {
-        return (CFGPACK_ERR_ENCODE);
-    }
-
-    /* Write schema name at reserved index 0 */
-    if (cfgpack_msgpack_encode_uint_key(&buf, CFGPACK_INDEX_RESERVED_NAME) !=
-        CFGPACK_OK) {
-        return (CFGPACK_ERR_ENCODE);
-    }
-    if (cfgpack_msgpack_encode_str(&buf, ctx->schema->map_name,
-                                   strlen(ctx->schema->map_name)) !=
-        CFGPACK_OK) {
-        return (CFGPACK_ERR_ENCODE);
-    }
+    cfgpack_msgpack_encode_map_header(buf, (uint32_t)(present_count + 1));
+    cfgpack_msgpack_encode_uint_key(buf, CFGPACK_INDEX_RESERVED_NAME);
+    cfgpack_msgpack_encode_str(buf, ctx->schema->map_name,
+                               strlen(ctx->schema->map_name));
 
     for (size_t i = 0; i < ctx->schema->entry_count; ++i) {
         const cfgpack_entry_t *e = &ctx->schema->entries[i];
+        cfgpack_err_t err;
         if (!cfgpack_presence_get(ctx, i)) {
             continue;
         }
-        if (cfgpack_msgpack_encode_uint_key(&buf, e->index) != CFGPACK_OK) {
-            return (CFGPACK_ERR_ENCODE);
-        }
-        if (encode_value(&buf, ctx, &ctx->values[i]) != CFGPACK_OK) {
-            return (CFGPACK_ERR_ENCODE);
+        cfgpack_msgpack_encode_uint_key(buf, e->index);
+        err = encode_value(buf, ctx, &ctx->values[i]);
+        if (err != CFGPACK_OK && err != CFGPACK_ERR_ENCODE) {
+            return (err);
         }
     }
+
+    return (CFGPACK_OK);
+}
+
+cfgpack_err_t cfgpack_pageout(const cfgpack_ctx_t *ctx,
+                              uint8_t *out,
+                              size_t out_cap,
+                              size_t *out_len) {
+    uint8_t crc_bytes[CFGPACK_CRC_SIZE];
+    cfgpack_buf_t buf;
+    cfgpack_err_t rc;
+    uint32_t crc;
+
+    if (!ctx || !out) {
+        return (CFGPACK_ERR_ARGS);
+    }
+    if (out_cap < 12) {
+        return (CFGPACK_ERR_ENCODE);
+    }
+
+    cfgpack_buf_init(&buf, out, out_cap);
+    rc = pageout_impl(ctx, &buf);
+    if (rc != CFGPACK_OK) {
+        return (rc);
+    }
+
+    crc = cfgpack_crc32c(out, buf.len);
+    crc_bytes[0] = (uint8_t)(crc);
+    crc_bytes[1] = (uint8_t)(crc >> 8);
+    crc_bytes[2] = (uint8_t)(crc >> 16);
+    crc_bytes[3] = (uint8_t)(crc >> 24);
+    cfgpack_buf_append(&buf, crc_bytes, CFGPACK_CRC_SIZE);
 
     if (out_len) {
         *out_len = buf.len;
     }
     return (buf.len <= out_cap) ? CFGPACK_OK : CFGPACK_ERR_ENCODE;
+}
+
+cfgpack_err_t cfgpack_pageout_measure(const cfgpack_ctx_t *ctx,
+                                      size_t *out_len) {
+    cfgpack_buf_t buf;
+    cfgpack_err_t rc;
+
+    if (!ctx || !out_len) {
+        return (CFGPACK_ERR_ARGS);
+    }
+
+    cfgpack_buf_init(&buf, NULL, 0);
+    rc = pageout_impl(ctx, &buf);
+    if (rc != CFGPACK_OK) {
+        return (rc);
+    }
+
+    *out_len = buf.len + CFGPACK_CRC_SIZE;
+    return (CFGPACK_OK);
 }
 
 cfgpack_err_t cfgpack_peek_name(const uint8_t *data,
@@ -120,6 +156,10 @@ cfgpack_err_t cfgpack_peek_name(const uint8_t *data,
     if (!data || len == 0 || !out_name || out_cap == 0) {
         return (CFGPACK_ERR_DECODE);
     }
+    if (len < CFGPACK_CRC_SIZE) {
+        return (CFGPACK_ERR_DECODE);
+    }
+    len -= CFGPACK_CRC_SIZE;
 
     cfgpack_reader_init(&r, data, len);
     if (cfgpack_msgpack_decode_map_header(&r, &map_count) != CFGPACK_OK) {
@@ -466,6 +506,8 @@ cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx,
                                    const cfgpack_remap_entry_t *remap,
                                    size_t remap_count) {
     uint32_t map_count = 0;
+    uint32_t stored_crc;
+    uint32_t actual_crc;
     cfgpack_reader_t r;
 
     if (!ctx) {
@@ -474,6 +516,19 @@ cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx,
     if (!data || len == 0) {
         return (CFGPACK_ERR_DECODE);
     }
+
+    if (len < CFGPACK_CRC_SIZE) {
+        return (CFGPACK_ERR_DECODE);
+    }
+    stored_crc = (uint32_t)data[len - 4] | ((uint32_t)data[len - 3] << 8) |
+                 ((uint32_t)data[len - 2] << 16) |
+                 ((uint32_t)data[len - 1] << 24);
+    actual_crc = cfgpack_crc32c(data, len - CFGPACK_CRC_SIZE);
+    if (stored_crc != actual_crc) {
+        return (CFGPACK_ERR_CRC);
+    }
+    len -= CFGPACK_CRC_SIZE;
+
     cfgpack_reader_init(&r, data, len);
     if (cfgpack_msgpack_decode_map_header(&r, &map_count) != CFGPACK_OK) {
         return (CFGPACK_ERR_DECODE);

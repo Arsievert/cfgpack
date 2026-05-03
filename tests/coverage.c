@@ -843,6 +843,268 @@ TEST_CASE(test_pageout_file_tiny_scratch) {
     return TEST_OK;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 19. CRC-32C test vector
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_crc32c_vector) {
+    LOG_SECTION("CRC-32C test vector: '123456789' = 0xE3069283");
+
+    const uint8_t data[] = "123456789";
+    uint32_t crc = cfgpack_crc32c(data, 9);
+
+    LOG("cfgpack_crc32c(\"123456789\", 9) = 0x%08X", crc);
+    CHECK(crc == 0xE3069283);
+
+    LOG("Empty input returns initial CRC");
+    uint32_t empty_crc = cfgpack_crc32c(NULL, 0);
+    LOG("cfgpack_crc32c(NULL, 0) = 0x%08X", empty_crc);
+    CHECK(empty_crc == 0x00000000);
+
+    return TEST_OK;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 20. CRC bit flip detection
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_crc_bit_flip) {
+    LOG_SECTION("Single bit flip in blob -> CFGPACK_ERR_CRC");
+
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[1];
+    cfgpack_value_t values[1];
+    cfgpack_ctx_t ctx;
+    uint8_t buf[64];
+    size_t len = 0;
+    char str_pool[1];
+    uint16_t str_offsets[1];
+
+    make_schema(&schema, entries, 1);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, str_pool, sizeof(str_pool),
+                       str_offsets, 0) == CFGPACK_OK);
+    CHECK(cfgpack_set_u8(&ctx, 1, 42) == CFGPACK_OK);
+
+    CHECK(cfgpack_pageout(&ctx, buf, sizeof(buf), &len) == CFGPACK_OK);
+    LOG("Pageout: %zu bytes", len);
+
+    buf[0] ^= 0x01;
+    LOG("Flipped bit 0 of buf[0]");
+    CHECK(cfgpack_pagein_buf(&ctx, buf, len) == CFGPACK_ERR_CRC);
+    LOG("Correctly returned CFGPACK_ERR_CRC");
+
+    buf[0] ^= 0x01;
+    CHECK(cfgpack_pagein_buf(&ctx, buf, len) == CFGPACK_OK);
+    LOG("Restored original: pagein succeeds");
+
+    return TEST_OK;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 21. Truncated blob (< 4 bytes)
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_crc_truncated) {
+    LOG_SECTION("Truncated blob (< CRC_SIZE) -> CFGPACK_ERR_DECODE");
+
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[1];
+    cfgpack_value_t values[1];
+    cfgpack_ctx_t ctx;
+    uint8_t tiny[] = {0x81, 0x01, 0x05};
+    char str_pool[1];
+    uint16_t str_offsets[1];
+
+    make_schema(&schema, entries, 1);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, str_pool, sizeof(str_pool),
+                       str_offsets, 0) == CFGPACK_OK);
+
+    CHECK(cfgpack_pagein_buf(&ctx, tiny, 3) == CFGPACK_ERR_DECODE);
+    LOG("3-byte blob: DECODE (too short for CRC)");
+
+    CHECK(cfgpack_pagein_buf(&ctx, tiny, 0) == CFGPACK_ERR_DECODE);
+    LOG("0-byte blob: DECODE");
+
+    return TEST_OK;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 22. pageout_measure: exact size matches pageout
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_pageout_measure_matches) {
+    LOG_SECTION("pageout_measure returns exact size matching pageout");
+
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[3];
+    cfgpack_value_t values[3];
+    cfgpack_ctx_t ctx;
+    uint8_t buf[128];
+    size_t pageout_len = 0;
+    size_t measure_len = 0;
+    char str_pool[1];
+    uint16_t str_offsets[1];
+
+    make_schema(&schema, entries, 3);
+    CHECK(cfgpack_init(&ctx, &schema, values, 3, str_pool, sizeof(str_pool),
+                       str_offsets, 0) == CFGPACK_OK);
+
+    CHECK(cfgpack_set_u8(&ctx, 1, 10) == CFGPACK_OK);
+    CHECK(cfgpack_set_u8(&ctx, 2, 20) == CFGPACK_OK);
+    CHECK(cfgpack_set_u8(&ctx, 3, 30) == CFGPACK_OK);
+
+    CHECK(cfgpack_pageout_measure(&ctx, &measure_len) == CFGPACK_OK);
+    LOG("Measured size: %zu", measure_len);
+
+    CHECK(cfgpack_pageout(&ctx, buf, sizeof(buf), &pageout_len) == CFGPACK_OK);
+    LOG("Pageout size: %zu", pageout_len);
+
+    CHECK(measure_len == pageout_len);
+    LOG("Sizes match (both include CRC trailer)");
+
+    return TEST_OK;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 23. pageout_measure: empty context (no present entries)
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_pageout_measure_empty) {
+    LOG_SECTION("pageout_measure with no values set");
+
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[2];
+    cfgpack_value_t values[2];
+    cfgpack_ctx_t ctx;
+    uint8_t buf[64];
+    size_t pageout_len = 0;
+    size_t measure_len = 0;
+    char str_pool[1];
+    uint16_t str_offsets[1];
+
+    make_schema(&schema, entries, 2);
+    CHECK(cfgpack_init(&ctx, &schema, values, 2, str_pool, sizeof(str_pool),
+                       str_offsets, 0) == CFGPACK_OK);
+
+    CHECK(cfgpack_pageout_measure(&ctx, &measure_len) == CFGPACK_OK);
+    LOG("Measured empty size: %zu", measure_len);
+
+    CHECK(cfgpack_pageout(&ctx, buf, sizeof(buf), &pageout_len) == CFGPACK_OK);
+    CHECK(measure_len == pageout_len);
+    LOG("Empty sizes match: %zu", measure_len);
+
+    return TEST_OK;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 24. pageout_measure: all types present
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_pageout_measure_all_types) {
+    LOG_SECTION("pageout_measure with all types present");
+
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[6];
+    cfgpack_value_t values[6];
+    cfgpack_ctx_t ctx;
+    uint8_t buf[256];
+    size_t pageout_len = 0;
+    size_t measure_len = 0;
+    char str_pool[256];
+    uint16_t str_offsets[2];
+
+    make_schema(&schema, entries, 6);
+    entries[0].type = CFGPACK_TYPE_U8;
+    entries[1].type = CFGPACK_TYPE_I32;
+    entries[2].type = CFGPACK_TYPE_F64;
+    entries[3].type = CFGPACK_TYPE_U64;
+    entries[4].type = CFGPACK_TYPE_STR;
+    entries[5].type = CFGPACK_TYPE_FSTR;
+
+    CHECK(cfgpack_init(&ctx, &schema, values, 6, str_pool, sizeof(str_pool),
+                       str_offsets, 2) == CFGPACK_OK);
+
+    CHECK(cfgpack_set_u8(&ctx, 1, 255) == CFGPACK_OK);
+    CHECK(cfgpack_set_i32(&ctx, 2, -100000) == CFGPACK_OK);
+    CHECK(cfgpack_set_f64(&ctx, 3, 3.14159) == CFGPACK_OK);
+    CHECK(cfgpack_set_u64(&ctx, 4, 999999) == CFGPACK_OK);
+    CHECK(cfgpack_set_str(&ctx, 5, "hello world") == CFGPACK_OK);
+    CHECK(cfgpack_set_fstr(&ctx, 6, "fix") == CFGPACK_OK);
+
+    CHECK(cfgpack_pageout_measure(&ctx, &measure_len) == CFGPACK_OK);
+    LOG("Measured size (all types): %zu", measure_len);
+
+    CHECK(cfgpack_pageout(&ctx, buf, sizeof(buf), &pageout_len) == CFGPACK_OK);
+    CHECK(measure_len == pageout_len);
+    LOG("All-types sizes match: %zu", measure_len);
+
+    return TEST_OK;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 25. measure -> allocate -> pageout -> pagein roundtrip
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_measure_pageout_pagein_roundtrip) {
+    LOG_SECTION("measure -> pageout -> pagein roundtrip");
+
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[2];
+    cfgpack_value_t values[2];
+    cfgpack_ctx_t ctx;
+    size_t needed = 0;
+    size_t written = 0;
+    cfgpack_value_t v;
+    char str_pool[1];
+    uint16_t str_offsets[1];
+
+    make_schema(&schema, entries, 2);
+    CHECK(cfgpack_init(&ctx, &schema, values, 2, str_pool, sizeof(str_pool),
+                       str_offsets, 0) == CFGPACK_OK);
+
+    CHECK(cfgpack_set_u8(&ctx, 1, 77) == CFGPACK_OK);
+    CHECK(cfgpack_set_u8(&ctx, 2, 88) == CFGPACK_OK);
+
+    CHECK(cfgpack_pageout_measure(&ctx, &needed) == CFGPACK_OK);
+    LOG("Measured: %zu bytes needed", needed);
+
+    uint8_t buf[128];
+    CHECK(needed <= sizeof(buf));
+    CHECK(cfgpack_pageout(&ctx, buf, needed, &written) == CFGPACK_OK);
+    CHECK(written == needed);
+    LOG("Pageout wrote exactly %zu bytes into %zu-byte buffer", written,
+        needed);
+
+    memset(values, 0, sizeof(values));
+    memset(ctx.present, 0, sizeof(ctx.present));
+
+    CHECK(cfgpack_pagein_buf(&ctx, buf, written) == CFGPACK_OK);
+    CHECK(cfgpack_get(&ctx, 1, &v) == CFGPACK_OK && v.v.u64 == 77);
+    CHECK(cfgpack_get(&ctx, 2, &v) == CFGPACK_OK && v.v.u64 == 88);
+    LOG("Roundtrip verified: values intact");
+
+    return TEST_OK;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 26. pageout_measure NULL args
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_pageout_measure_null_args) {
+    LOG_SECTION("pageout_measure NULL argument handling");
+
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[1];
+    cfgpack_value_t values[1];
+    cfgpack_ctx_t ctx;
+    size_t len = 0;
+    char str_pool[1];
+    uint16_t str_offsets[1];
+
+    make_schema(&schema, entries, 1);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, str_pool, sizeof(str_pool),
+                       str_offsets, 0) == CFGPACK_OK);
+
+    CHECK(cfgpack_pageout_measure(NULL, &len) == CFGPACK_ERR_ARGS);
+    LOG("NULL ctx: ARGS");
+    CHECK(cfgpack_pageout_measure(&ctx, NULL) == CFGPACK_ERR_ARGS);
+    LOG("NULL out_len: ARGS");
+
+    return TEST_OK;
+}
+
 int main(void) {
     test_result_t overall = TEST_OK;
 
@@ -887,6 +1149,25 @@ int main(void) {
                 TEST_OK);
     overall |= (test_case_result("pageout_file_tiny_scratch",
                                  test_pageout_file_tiny_scratch()) != TEST_OK);
+
+    /* CRC-32C and pageout_measure tests */
+    overall |= (test_case_result("crc32c_vector", test_crc32c_vector()) !=
+                TEST_OK);
+    overall |= (test_case_result("crc_bit_flip", test_crc_bit_flip()) !=
+                TEST_OK);
+    overall |= (test_case_result("crc_truncated", test_crc_truncated()) !=
+                TEST_OK);
+    overall |= (test_case_result("pageout_measure_matches",
+                                 test_pageout_measure_matches()) != TEST_OK);
+    overall |= (test_case_result("pageout_measure_empty",
+                                 test_pageout_measure_empty()) != TEST_OK);
+    overall |= (test_case_result("pageout_measure_all_types",
+                                 test_pageout_measure_all_types()) != TEST_OK);
+    overall |= (test_case_result("measure_pageout_pagein_roundtrip",
+                                 test_measure_pageout_pagein_roundtrip()) !=
+                TEST_OK);
+    overall |= (test_case_result("pageout_measure_null_args",
+                                 test_pageout_measure_null_args()) != TEST_OK);
 
     if (overall == TEST_OK) {
         printf(COLOR_GREEN "ALL PASS" COLOR_RESET "\n");

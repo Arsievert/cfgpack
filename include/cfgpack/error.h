@@ -25,7 +25,8 @@ typedef enum {
     CFGPACK_ERR_ENCODE = -9,  /**< Encoding failure or output too small. */
     CFGPACK_ERR_DECODE = -10, /**< Decoding failure or malformed input. */
     CFGPACK_ERR_RESERVED_INDEX = -11, /**< Attempt to use reserved index 0. */
-    CFGPACK_ERR_ARGS = -12            /**< Missing or bad arguments. */
+    CFGPACK_ERR_ARGS = -12,           /**< Missing or bad arguments. */
+    CFGPACK_ERR_CRC = -13             /**< CRC-32C integrity check failed. */
 } cfgpack_err_t;
 
 #endif /* CFGPACK_ERROR_H */

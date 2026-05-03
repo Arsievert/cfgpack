@@ -23,6 +23,7 @@ CFLAGS   := -Wall -Wextra -std=c99 -DCFGPACK_LZ4 -DCFGPACK_HEATSHRINK -DCFGPACK_
 
 # --- Library sources (compiled directly — sanitizers need both compile + link) -
 LIBSRC := $(ROOT)/src/core.c           \
+          $(ROOT)/src/crc32.c           \
           $(ROOT)/src/decompress.c      \
           $(ROOT)/src/io.c              \
           $(ROOT)/src/msgpack.c         \

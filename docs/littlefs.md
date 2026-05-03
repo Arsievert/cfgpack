@@ -142,6 +142,7 @@ For embedded builds, omit `-DCFGPACK_HOSTED` and adjust the toolchain as needed.
 | `CFGPACK_ERR_BOUNDS` | `scratch_cap <= cache_size` (no room for data) |
 | `CFGPACK_ERR_ENCODE` | Data portion too small for `cfgpack_pageout()` (pageout only) |
 | `CFGPACK_ERR_IO` | LittleFS file open, read, write, or size failure |
+| `CFGPACK_ERR_CRC` | CRC-32C integrity check failed (pagein only) |
 | `CFGPACK_ERR_DECODE` | Invalid MessagePack payload (pagein only) |
 
 ## Working Example

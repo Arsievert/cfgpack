@@ -35,6 +35,7 @@ LIB := $(OUT)/libcfgpack.a
 # --- Sources ------------------------------------------------------------------
 # Core library (excludes io_file.c for embedded use)
 CORESRC := src/core.c                   \
+           src/crc32.c                  \
            src/decompress.c             \
            src/io.c                     \
            src/io_littlefs.c            \
