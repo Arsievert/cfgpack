@@ -13,6 +13,8 @@ A MessagePack-based configuration library for embedded systems.
 - Supports **default values** for schema entries, automatically applied at initialization.
 - Supports set/get by index and by schema name with type/length validation.
 - Encodes/decodes MessagePack maps; pageout to buffer or file, pagein from buffer or file, with size caps.
+- **CRC-32C integrity checking**: All serialized blobs include a 4-byte CRC-32C (Castagnoli) trailer, verified automatically on pagein.
+- **Measure-then-allocate**: `cfgpack_pageout_measure()` computes exact serialized size before encoding, matching the existing schema measure pattern.
 - **Schema versioning**: Embeds schema name in serialized blobs for version detection.
 - **Remapping**: Migrates config between schema versions with index remapping, type widening, and automatic default restoration for new entries.
 
@@ -122,7 +124,7 @@ vehicle 1
   - `decompress.h` — optional LZ4/heatshrink decompression support.
   - `io_file.h` — optional FILE*-based convenience wrappers for desktop/POSIX systems.
   - `io_littlefs.h` — optional LittleFS-based convenience wrappers for flash storage.
-- `src/` — library implementation (`core.c`, `io.c`, `io_file.c`, `io_littlefs.c`, `msgpack.c`, `schema_parser.c`, `tokens.c`, `wbuf.c`, `decompress.c`).
+- `src/` — library implementation (`core.c`, `crc32.c`, `io.c`, `io_file.c`, `io_littlefs.c`, `msgpack.c`, `schema_parser.c`, `tokens.c`, `wbuf.c`, `decompress.c`).
 - `tests/` — C test programs plus sample data under `tests/data/`.
 - `tools/` — CLI tools source (`cfgpack-compress.c` for LZ4/heatshrink compression, `cfgpack-schema-pack.c` for converting schemas to msgpack binary, `cfgpack-schema-validate.c` for schema validation).
 - `examples/` — complete usage examples (`allocate-once/`, `datalogger/`, `flash_config/`, `fleet_gateway/`, `low_memory/`, `sensor_hub/`).
@@ -162,7 +164,7 @@ Running tests...
 
   basic:          4/4 passed
   core_edge:      11/11 passed
-  coverage:       19/19 passed
+  coverage:       27/27 passed
   decompress:     8/8 passed
   io_edge:        16/16 passed
   io_littlefs:    8/8 passed
@@ -177,7 +179,7 @@ Running tests...
   parser:         3/3 passed
   runtime:        24/24 passed
 
-TOTAL: 233/233 passed
+TOTAL: 241/241 passed
 ```
 
 ### Fuzz Testing

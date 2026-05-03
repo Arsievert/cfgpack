@@ -26,6 +26,8 @@ Features
 - Default values for schema entries, automatically applied at initialization
 - Set/get by index and by schema name with type/length validation
 - MessagePack encoding/decoding with size caps
+- CRC-32C integrity checking on all serialized blobs (always on, verified on pagein)
+- Measure-then-allocate for serialization via ``cfgpack_pageout_measure()``
 - Schema versioning with embedded schema name for version detection
 - Index remapping and type widening for schema migrations
 - Optional LZ4/heatshrink decompression support

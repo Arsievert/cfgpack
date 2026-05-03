@@ -131,7 +131,7 @@ Defined in `include/cfgpack/config.h` and overridable before including cfgpack h
 | Macro | Default | Purpose |
 |-------|---------|---------|
 | `CFGPACK_MAX_ENTRIES` | 128 | Max schema entries; determines inline presence bitmap size |
-| `CFGPACK_SKIP_MAX_DEPTH` | 32 | Max nesting depth for msgpack skip (32 levels = 256 bytes stack) |
+| `CFGPACK_SKIP_MAX_DEPTH` | 32 | Max nesting depth for msgpack skip (32 levels = 128 bytes stack) |
 
 ---
 
@@ -141,6 +141,7 @@ The default `make` target produces `build/out/libcfgpack.a` -- a static archive 
 
 ```
 src/core.c
+src/crc32.c
 src/decompress.c
 src/io.c
 src/io_littlefs.c
@@ -418,7 +419,6 @@ docs/
     conf.py              # Sphinx configuration
     index.rst            # Main table of contents
     getting-started.rst  # Getting started guide
-    api.rst              # API overview (reStructuredText)
     api-reference.md     # API reference (Markdown)
     compression.md       # Compression documentation
     fuzz-testing.md      # Fuzz testing guide
@@ -586,6 +586,8 @@ cfgpack/
 │   └── decompress.h            #   Decompression API
 ├── src/                        # Library implementation
 │   ├── core.c                  #   Core get/set/init/pageout/pagein
+│   ├── crc32.c                 #   CRC-32C (Castagnoli) implementation
+│   ├── crc32.h                 #   CRC-32C internal header
 │   ├── schema_parser.c         #   .map and JSON schema parsing
 │   ├── msgpack.c               #   MessagePack codec
 │   ├── decompress.c            #   LZ4/heatshrink decompression
@@ -628,6 +630,7 @@ cfgpack/
 │   ├── run-tests.sh            #   Test runner with summary
 │   ├── run-coverage.sh         #   LLVM coverage report generator
 │   ├── run-fuzz.sh             #   Fuzz test runner
+│   ├── doc-check-diff.sh       #   Documentation drift checker
 │   └── pre-commit              #   Git pre-commit hook
 └── docs/                       # Documentation sources
     ├── conf.py                 #   Sphinx configuration
