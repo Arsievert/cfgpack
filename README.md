@@ -1,6 +1,7 @@
 # CFGPack
 
 [![CI](https://github.com/Arsievert/cfgpack/actions/workflows/ci.yml/badge.svg)](https://github.com/Arsievert/cfgpack/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://arsievert.github.io/cfgpack/coverage.json)](https://arsievert.github.io/cfgpack/)
 
 A MessagePack-based configuration library for embedded systems.
 

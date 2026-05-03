@@ -110,16 +110,30 @@ jobs:
           if-no-files-found: ignore
 
   docs:
-    name: Docs build
+    name: Docs + coverage
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Install docs dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y doxygen python3-venv
+          sudo apt-get install -y doxygen python3-venv clang llvm
       - name: Build Sphinx + Doxygen
         run: make docs
+      - name: Build coverage report
+        run: make coverage
+      - name: Generate coverage badge JSON
+        run: |
+          pct=$(grep '^TOTAL' build/coverage/report.txt | awk '{print $4}' | tr -d '%')
+          echo "Line coverage: $pct%"
+          # Color: green ≥90, yellowgreen ≥80, yellow ≥70, orange ≥60, red <60
+          if [ "$(echo "$pct >= 90" | bc)" -eq 1 ]; then color="brightgreen"
+          elif [ "$(echo "$pct >= 80" | bc)" -eq 1 ]; then color="green"
+          elif [ "$(echo "$pct >= 70" | bc)" -eq 1 ]; then color="yellowgreen"
+          elif [ "$(echo "$pct >= 60" | bc)" -eq 1 ]; then color="orange"
+          else color="red"; fi
+          printf '{"schemaVersion":1,"label":"coverage","message":"%s%%","color":"%s"}\n' "$pct" "$color" \
+            > build/docs/html/coverage.json
       - name: Upload HTML docs
         uses: actions/upload-artifact@v6
         with:
