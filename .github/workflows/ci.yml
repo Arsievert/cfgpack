@@ -118,10 +118,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y doxygen python3-venv clang llvm
-      - name: Build Sphinx + Doxygen
-        run: make docs
       - name: Build coverage report
         run: make coverage
+      - name: Build Sphinx + Doxygen
+        run: make docs
       - name: Generate coverage badge JSON
         run: |
           pct=$(grep '^TOTAL' build/coverage/report.txt | awk '{print $4}' | tr -d '%')
