@@ -61,6 +61,8 @@ cfgpack_err_t cfgpack_pagein_lz4(cfgpack_ctx_t *ctx,
  * - Window size: 8 bits (256 bytes)
  * - Lookahead: 4 bits (16 bytes)
  *
+ * @note Uses a static decoder instance; not thread-safe or reentrant.
+ *
  * @param ctx         Initialized cfgpack context.
  * @param data        Heatshrink-compressed data.
  * @param len         Length of compressed data in bytes.

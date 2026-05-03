@@ -26,10 +26,13 @@ device.
 ```bash
 # 1. Write your schema as a .map file (see Map Format below)
 
-# 2. Convert to MessagePack binary (50-60% smaller than JSON, no tokenizer needed)
+# 2. Validate your schema
+./build/out/cfgpack-schema-validate vehicle.map
+
+# 3. Convert to MessagePack binary (50-60% smaller than JSON, no tokenizer needed)
 ./build/out/cfgpack-schema-pack vehicle.map vehicle.msgpack
 
-# 3. (Optional) Compress with LZ4 or heatshrink
+# 4. (Optional) Compress with LZ4 or heatshrink
 ./build/out/cfgpack-compress lz4 vehicle.msgpack vehicle.msgpack.lz4
 ```
 
@@ -38,7 +41,7 @@ On the device:
 ```c
 /* Decompress if needed */
 cfgpack_pagein_lz4(&ctx, compressed_data, compressed_len,
-                   scratch, scratch_cap);
+                   decompressed_size, scratch, scratch_cap);
 
 /* Or load the uncompressed msgpack binary directly */
 cfgpack_schema_measure_msgpack(data, len, &m, &err);  /* measure first */
@@ -65,7 +68,7 @@ migration.
 - First line: `<name> <version>` header (e.g., `vehicle 1` where `vehicle` is the schema name and `1` is the version). The schema name is embedded at reserved index 0 in serialized blobs for version detection during firmware upgrades.
 - Lines follow the format: `INDEX NAME TYPE DEFAULT  # optional description`
   - `INDEX`: 0–65535
-  - `NAME`: up to 5 characters
+  - `NAME`: up to 5 characters (hard limit — longer names will fail to parse)
   - `TYPE`: one of the supported numeric/float/string types (str max 64, fstr max 16)
   - `DEFAULT`: default value for this entry (see below)
   - `# description`: optional trailing comment for documentation (not stored in binary)
@@ -121,7 +124,7 @@ vehicle 1
   - `io_littlefs.h` — optional LittleFS-based convenience wrappers for flash storage.
 - `src/` — library implementation (`core.c`, `io.c`, `io_file.c`, `io_littlefs.c`, `msgpack.c`, `schema_parser.c`, `tokens.c`, `wbuf.c`, `decompress.c`).
 - `tests/` — C test programs plus sample data under `tests/data/`.
-- `tools/` — CLI tools source (`cfgpack-compress.c` for LZ4/heatshrink compression, `cfgpack-schema-pack.c` for converting schemas to msgpack binary).
+- `tools/` — CLI tools source (`cfgpack-compress.c` for LZ4/heatshrink compression, `cfgpack-schema-pack.c` for converting schemas to msgpack binary, `cfgpack-schema-validate.c` for schema validation).
 - `examples/` — complete usage examples (`allocate-once/`, `datalogger/`, `flash_config/`, `fleet_gateway/`, `low_memory/`, `sensor_hub/`).
 - `third_party/` — vendored dependencies (`lz4/`, `heatshrink/`, `littlefs/`).
 - `Makefile` — builds `build/out/libcfgpack.a`, test binaries, and tools.
@@ -131,7 +134,7 @@ vehicle 1
 ```bash
 make              # builds build/out/libcfgpack.a
 make tests        # builds all test binaries
-make tools        # builds CLI tools (cfgpack-compress, cfgpack-schema-pack)
+make tools        # builds CLI tools (cfgpack-compress, cfgpack-schema-pack, cfgpack-schema-validate)
 ```
 
 ### Build Modes
@@ -159,6 +162,7 @@ Running tests...
 
   basic:          4/4 passed
   core_edge:      11/11 passed
+  coverage:       19/19 passed
   decompress:     8/8 passed
   io_edge:        16/16 passed
   io_littlefs:    8/8 passed
@@ -166,13 +170,14 @@ Running tests...
   json_remap:     10/10 passed
   measure:        15/15 passed
   msgpack:        16/16 passed
+  msgpack_decode: 11/11 passed
   msgpack_schema: 17/17 passed
   null_args:      40/40 passed
   parser_bounds:  23/23 passed
   parser:         3/3 passed
   runtime:        24/24 passed
 
-TOTAL: 203/203 passed
+TOTAL: 233/233 passed
 ```
 
 ### Fuzz Testing

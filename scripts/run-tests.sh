@@ -12,7 +12,7 @@ BUILD_OUT="$ROOT_DIR/build/out"
 LOG_FILE="$ROOT_DIR/build/test.log"
 
 # Test binaries to run (order matters for readability)
-TESTS=(basic core_edge decompress io_edge io_littlefs json_edge json_remap measure msgpack msgpack_schema null_args parser_bounds parser runtime)
+TESTS=(basic core_edge coverage decompress io_edge io_littlefs json_edge json_remap measure msgpack msgpack_decode msgpack_schema null_args parser_bounds parser runtime)
 
 # Colors
 RED='\033[31m'

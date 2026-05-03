@@ -45,7 +45,7 @@ All build artifacts are placed under `build/`:
 |--------|-------------|
 | `all` (default) | Build `libcfgpack.a` -- core library only, no stdio |
 | `tests` | Build all test binaries into `build/out/` |
-| `tools` | Build `cfgpack-compress` and `cfgpack-schema-pack` |
+| `tools` | Build `cfgpack-compress`, `cfgpack-schema-pack`, and `cfgpack-schema-validate` |
 | `fuzz` | Build all libFuzzer harnesses (delegated to `tests/fuzz/Makefile`) |
 | `docs` | Generate Sphinx + Doxygen documentation |
 | `format` | Auto-format all source with clang-format |
@@ -53,6 +53,8 @@ All build artifacts are placed under `build/`:
 | `compile_commands` | Generate `compile_commands.json` from per-TU JSON fragments |
 | `stack-usage-O0` | Build at `-O0` with `-fstack-usage` and report per-function stack sizes |
 | `stack-usage-Os` | Build at `-Os` with `-fstack-usage` and report per-function stack sizes |
+| `test-asan` | Rebuild tests with ASan+UBSan and run the full test suite |
+| `coverage` | Rebuild with LLVM coverage, run tests, and generate report |
 | `clean` | Remove all build artifacts, compile_commands.json, fuzz corpora |
 | `clean-docs` | Remove generated docs and the Python venv |
 | `help` | List all targets with descriptions |
@@ -94,7 +96,7 @@ The library has two build modes controlled by preprocessor defines:
 Enabled by compiling with `-DCFGPACK_HOSTED`. Provides full `printf`/`snprintf` support. The Makefile defines a separate `CFLAGS_HOSTED` variable and uses it for:
 - All test object files (`tests/*.c`)
 - `src/io_file.c` (file I/O wrapper requiring `<stdio.h>`)
-- Both CLI tools
+- All CLI tools
 
 This is enforced with pattern-specific rules in the Makefile:
 
@@ -120,7 +122,7 @@ These are also passed to Doxygen as `PREDEFINED` macros so that conditional API 
 
 - `-DCFGPACK_LITTLEFS` -- enables LittleFS storage wrappers (`cfgpack_pageout_lfs`, `cfgpack_pagein_lfs`)
 
-Unlike the compression flags, this is NOT on by default in `CFLAGS`. Applications that need LittleFS must explicitly pass `-DCFGPACK_LITTLEFS` and link `src/io_littlefs.c` along with the vendored LittleFS sources (`third_party/littlefs/lfs.c`, `third_party/littlefs/lfs_util.c`). This flag is also passed to Doxygen as a `PREDEFINED` macro.
+This flag is on by default in `CFLAGS`, and `src/io_littlefs.c` along with the vendored LittleFS sources (`third_party/littlefs/lfs.c`, `third_party/littlefs/lfs_util.c`) are compiled into the core library. This flag is also passed to Doxygen as a `PREDEFINED` macro.
 
 ### Compile-Time Limits
 
@@ -141,17 +143,18 @@ The default `make` target produces `build/out/libcfgpack.a` -- a static archive 
 src/core.c
 src/decompress.c
 src/io.c
+src/io_littlefs.c
 src/msgpack.c
 src/schema_parser.c
 src/tokens.c
 src/wbuf.c
 third_party/lz4/lz4.c
 third_party/heatshrink/heatshrink_decoder.c
+third_party/littlefs/lfs.c
+third_party/littlefs/lfs_util.c
 ```
 
 Notably, `src/io_file.c` is **excluded** from the core library because it depends on `<stdio.h>`. It is compiled separately with hosted flags and linked into tests and tools as needed. This preserves the embedded-friendly, zero-stdio core.
-
-Similarly, `src/io_littlefs.c` is **excluded** from the core library because it depends on LittleFS. It is compiled separately with `-DCFGPACK_LITTLEFS` and linked into applications, tests, and examples that use LittleFS storage.
 
 The archiver creates the library with `ar rcs`.
 
@@ -203,12 +206,13 @@ Each test binary links against: the core static library, `io_file.o`, the encode
 
 ### Test Binaries
 
-15 test files producing 14 test binaries (test.c is shared infrastructure, not a standalone binary):
+17 test files producing 16 test binaries (test.c is shared infrastructure, not a standalone binary):
 
 | Binary | Source | Area |
 |--------|--------|------|
 | `basic` | `tests/basic.c` | Core set/get/pageout/pagein, defaults, typed convenience functions |
 | `core_edge` | `tests/core_edge.c` | Edge cases in core API |
+| `coverage` | `tests/coverage.c` | Typed convenience wrappers, file I/O, init bounds, presence API |
 | `decompress` | `tests/decompress.c` | LZ4 and heatshrink decompression |
 | `io_edge` | `tests/io_edge.c` | I/O edge cases |
 | `io_littlefs` | `tests/io_littlefs.c` | LittleFS I/O wrappers (RAM-backed block device) |
@@ -216,6 +220,7 @@ Each test binary links against: the core static library, `io_file.o`, the encode
 | `json_remap` | `tests/json_remap.c` | JSON remapping functionality |
 | `measure` | `tests/measure.c` | Schema measure (pre-parse sizing) |
 | `msgpack` | `tests/msgpack.c` | MessagePack encode/decode |
+| `msgpack_decode` | `tests/msgpack_decode.c` | MessagePack decoder edge cases (wide format codes, skip depth) |
 | `msgpack_schema` | `tests/msgpack_schema.c` | MessagePack schema handling |
 | `null_args` | `tests/null_args.c` | NULL pointer and bounds validation |
 | `parser` | `tests/parser.c` | Schema parser |
@@ -381,7 +386,7 @@ The `Doxyfile` at the repository root is configured for a C library:
 | `JAVADOC_AUTOBRIEF` | YES |
 | `TYPEDEF_HIDES_STRUCT` | YES |
 | `HIDE_UNDOC_MEMBERS` | YES |
-| `PREDEFINED` | `CFGPACK_LZ4 CFGPACK_HEATSHRINK` |
+| `PREDEFINED` | `CFGPACK_LZ4 CFGPACK_HEATSHRINK CFGPACK_LITTLEFS` |
 | All graph generation | NO (no Graphviz dependency) |
 
 ### Sphinx Configuration
@@ -427,7 +432,7 @@ docs/
 
 ## CLI Tools
 
-Two CLI tools are built with `make tools`:
+Three CLI tools are built with `make tools`:
 
 ### cfgpack-compress
 
@@ -459,7 +464,25 @@ Usage: cfgpack-schema-pack <input> <output>
 - Output is raw MessagePack binary for `cfgpack_schema_parse_msgpack()`.
 - Links against the core library and `io_file.o`.
 
-Both tools use exit code conventions: 0 = success, 1 = usage error, 2 = I/O error, 3 = processing error.
+### cfgpack-schema-validate
+
+**Source**: `tools/cfgpack-schema-validate.c`
+
+Validates schema files in any supported format, with optional LZ4 or heatshrink decompression.
+
+```
+Usage: cfgpack-schema-validate [--lz4|--heatshrink] [--format map|json|msgpack] <input>
+```
+
+- Auto-detects input format by extension (`.json` = JSON, `.msgpack`/`.bin` = MessagePack, otherwise `.map`).
+- `--format` flag overrides extension-based detection.
+- `--lz4` / `--heatshrink` decompresses before validating (assumes msgpack binary underneath).
+- Runs two-phase validation: measure (structure check) then full parse (catches duplicates).
+- On success, prints schema name, version, entry count, and type summary to stdout.
+- On failure, prints error message with line number (for text formats) to stderr.
+- Links against the core library and `io_file.o`.
+
+All tools use exit code conventions: 0 = success, 1 = usage error, 2 = I/O error, 3 = processing error.
 
 ---
 
@@ -574,7 +597,7 @@ cfgpack/
 ├── tests/                      # Test files
 │   ├── test.h                  #   Test framework header
 │   ├── test.c                  #   Shared test infrastructure
-│   ├── basic.c ... runtime.c   #   13 test binaries
+│   ├── basic.c ... runtime.c   #   16 test binaries
 │   ├── data/                   #   Test fixture files
 │   └── fuzz/                   #   Fuzz testing
 │       ├── Makefile            #     Fuzz build system
@@ -587,7 +610,8 @@ cfgpack/
 │       └── fuzz_msgpack_decode.c
 ├── tools/                      # CLI tools
 │   ├── cfgpack-compress.c      #   LZ4/heatshrink compression tool
-│   └── cfgpack-schema-pack.c   #   Schema-to-msgpack converter
+│   ├── cfgpack-schema-pack.c   #   Schema-to-msgpack converter
+│   └── cfgpack-schema-validate.c #  Schema validation tool
 ├── examples/                   # Usage examples
 │   ├── allocate-once/          #   One-shot allocation pattern
 │   ├── datalogger/             #   Data logger example
@@ -602,19 +626,19 @@ cfgpack/
 ├── scripts/                    # Build/test/setup scripts
 │   ├── setup.sh                #   One-time project setup
 │   ├── run-tests.sh            #   Test runner with summary
+│   ├── run-coverage.sh         #   LLVM coverage report generator
 │   ├── run-fuzz.sh             #   Fuzz test runner
 │   └── pre-commit              #   Git pre-commit hook
 └── docs/                       # Documentation sources
+    ├── conf.py                 #   Sphinx configuration
     ├── requirements.txt        #   Python dependencies for Sphinx
-    └── source/                 #   Sphinx source files
-        ├── conf.py             #     Sphinx configuration
-        ├── index.rst
-        ├── getting-started.rst
-        ├── api.rst
-        ├── api-reference.md
-        ├── compression.md
-        ├── littlefs.md
-        ├── fuzz-testing.md
-        ├── stack-analysis.md
-        └── versioning.md
+    ├── index.rst
+    ├── getting-started.rst
+    ├── api-reference.md
+    ├── compression.md
+    ├── littlefs.md
+    ├── fuzz-testing.md
+    ├── stack-analysis.md
+    ├── versioning.md
+    └── infrastructure.md       #   This file
 ```

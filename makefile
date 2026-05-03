@@ -59,12 +59,17 @@ COMPRESS_DEPS := third_party/lz4/lz4.c third_party/heatshrink/heatshrink_encoder
 SCHEMA_PACK_TOOL := $(OUT)/cfgpack-schema-pack
 SCHEMA_PACK_SRC  := tools/cfgpack-schema-pack.c
 
+# Schema-validate tool
+SCHEMA_VALIDATE_TOOL := $(OUT)/cfgpack-schema-validate
+SCHEMA_VALIDATE_SRC  := tools/cfgpack-schema-validate.c
+
 # Encoder libraries needed for tests (to generate compressed test data)
 ENCODER_DEPS := third_party/heatshrink/heatshrink_encoder.c
 
 # Test sources
 TESTSRC := tests/basic.c         \
            tests/core_edge.c    \
+           tests/coverage.c     \
            tests/decompress.c    \
            tests/io_edge.c      \
            tests/io_littlefs.c  \
@@ -72,6 +77,7 @@ TESTSRC := tests/basic.c         \
            tests/json_remap.c   \
            tests/measure.c      \
            tests/msgpack.c      \
+           tests/msgpack_decode.c \
            tests/msgpack_schema.c \
            tests/null_args.c    \
            tests/parser.c        \
@@ -132,7 +138,7 @@ $(OUT)/%: $(OBJ)/tests/%.o $(TESTCOMMON) $(LIB) $(IOFILEOBJ) $(ENCODEROBJ)
 	@$(CC) $(LDFLAGS) -o $@ $< $(TESTCOMMON) $(IOFILEOBJ) $(ENCODEROBJ) $(LIB) $(LDLIBS)
 
 # --- Tool targets -------------------------------------------------------------
-tools: $(COMPRESS_TOOL) $(SCHEMA_PACK_TOOL) ## Build all tools
+tools: $(COMPRESS_TOOL) $(SCHEMA_PACK_TOOL) $(SCHEMA_VALIDATE_TOOL) ## Build all tools
 
 $(COMPRESS_TOOL): $(COMPRESS_SRC) $(COMPRESS_DEPS)
 	@mkdir -p $(OUT)
@@ -143,6 +149,11 @@ $(SCHEMA_PACK_TOOL): $(SCHEMA_PACK_SRC) $(LIB) $(IOFILEOBJ)
 	@mkdir -p $(OUT)
 	@echo "CC $(SCHEMA_PACK_TOOL)"
 	@$(CC) $(CPPFLAGS) $(CFLAGS_HOSTED) -o $@ $(SCHEMA_PACK_SRC) $(IOFILEOBJ) $(LIB)
+
+$(SCHEMA_VALIDATE_TOOL): $(SCHEMA_VALIDATE_SRC) $(LIB) $(IOFILEOBJ)
+	@mkdir -p $(OUT)
+	@echo "CC $(SCHEMA_VALIDATE_TOOL)"
+	@$(CC) $(CPPFLAGS) $(CFLAGS_HOSTED) -o $@ $(SCHEMA_VALIDATE_SRC) $(IOFILEOBJ) $(LIB)
 
 # --- Documentation target -----------------------------------------------------
 docs: ## Generate Sphinx documentation
@@ -167,6 +178,14 @@ test-asan: clean ## Rebuild tests with ASan+UBSan and run the full test suite
 		CFLAGS="-Wall -Wextra -std=c99 -O1 -g -DCFGPACK_LZ4 -DCFGPACK_HEATSHRINK -DCFGPACK_LITTLEFS $(SAN_FLAGS)" \
 		LDFLAGS="$(SAN_FLAGS)"
 	@scripts/run-tests.sh
+
+COV_FLAGS := -fprofile-instr-generate -fcoverage-mapping
+
+coverage: clean ## Rebuild with LLVM coverage, run tests, and generate report
+	@$(MAKE) tests \
+		CFLAGS="-Wall -Wextra -std=c99 -O0 -g -DCFGPACK_LZ4 -DCFGPACK_HEATSHRINK -DCFGPACK_LITTLEFS $(COV_FLAGS)" \
+		LDFLAGS="$(COV_FLAGS)"
+	@scripts/run-coverage.sh
 
 stack-usage-O0: clean ## Build with -fstack-usage at -O0 and report per-function stack sizes
 	@$(MAKE) all CFLAGS="-Wall -Wextra -std=c99 -DCFGPACK_LZ4 -DCFGPACK_HEATSHRINK -DCFGPACK_LITTLEFS -O0 -fstack-usage"
@@ -202,5 +221,5 @@ fuzz: ## Build all fuzz harnesses (requires clang with libFuzzer)
 	@$(MAKE) -C tests/fuzz fuzz ROOT=$(CURDIR) BUILD=$(CURDIR)/$(BUILD) OUT=$(CURDIR)/$(OUT) CC=$(CC)
 
 # --- Phony / Includes ---------------------------------------------------------
-.PHONY: all tests clean clean-docs help docs tools format format-check compile_commands fuzz test-asan stack-usage-O0 stack-usage-Os
+.PHONY: all tests clean clean-docs help docs tools format format-check compile_commands fuzz test-asan coverage stack-usage-O0 stack-usage-Os
 -include $(DEPS)

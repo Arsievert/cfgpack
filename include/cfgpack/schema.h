@@ -21,6 +21,10 @@
 
 /**
  * @brief Single entry within a schema.
+ *
+ * @note Entry names are limited to 5 characters (stored as char[6] with NUL
+ *       terminator). This keeps the struct compact for embedded use. Schemas
+ *       with longer names will fail to parse with CFGPACK_ERR_PARSE.
  */
 typedef struct {
     uint16_t index;

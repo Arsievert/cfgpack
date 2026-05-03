@@ -106,6 +106,56 @@ Example:
 
 The output binary can be parsed on-device with `cfgpack_schema_measure_msgpack()` and `cfgpack_schema_parse_msgpack()`. It can also be further compressed with `cfgpack-compress` for additional size savings on constrained links.
 
+## Schema Validate Tool
+
+The `cfgpack-schema-validate` CLI tool validates schema files in any supported format, with optional decompression:
+
+```bash
+make tools
+./build/out/cfgpack-schema-validate [--lz4|--heatshrink] [--format map|json|msgpack] <input>
+```
+
+The input format is auto-detected by extension: `.json` for JSON, `.msgpack`/`.bin` for MessagePack binary, all others as `.map`. Use `--format` to override.
+
+When `--lz4` or `--heatshrink` is specified, the file is decompressed first. Compressed schemas are always MessagePack binary underneath.
+
+### Examples
+
+```bash
+# Validate a .map schema
+./build/out/cfgpack-schema-validate schema.map
+
+# Validate a JSON schema
+./build/out/cfgpack-schema-validate schema.json
+
+# Validate a compressed MessagePack schema
+./build/out/cfgpack-schema-validate --lz4 schema.msgpack.lz4
+./build/out/cfgpack-schema-validate --heatshrink schema.msgpack.hs
+
+# Force format detection (useful when extension doesn't match)
+./build/out/cfgpack-schema-validate --format msgpack schema.bin
+```
+
+On success, prints schema metadata and entry type summary:
+```
+Valid: "vehicle" v3 (12 entries)
+  Types: 4 u8, 2 u16, 1 u32, 3 str, 2 fstr
+```
+
+On failure, prints the error with line number (for text formats) and exits with code 3:
+```
+Invalid: line 5: duplicate index 3
+```
+
+### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Valid schema |
+| 1 | Usage error |
+| 2 | File I/O error |
+| 3 | Validation error |
+
 ## Third-Party Libraries
 
 LZ4, heatshrink, and LittleFS sources are vendored in `third_party/` for self-contained builds:

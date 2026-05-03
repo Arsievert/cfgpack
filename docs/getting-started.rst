@@ -110,7 +110,7 @@ Building
 
    make              # builds build/out/libcfgpack.a
    make tests        # builds all test binaries
-   make tools        # builds CLI tools (compression, schema packing)
+   make tools        # builds CLI tools (compression, schema packing, validation)
 
 Build Modes
 ~~~~~~~~~~~
