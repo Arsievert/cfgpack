@@ -161,6 +161,72 @@ TEST_CASE(test_decode_int64_positive_and_errors) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+ * 2b. decode_int64 — full-width 0xd3 round-trips and high-bit payloads
+ *
+ * Regression for the signed-left-shift UB in the 0xd3 assembly loop: values
+ * with the sign bit set used to shift into the sign region of an int64_t.
+ * Assembly now happens in uint64_t, so these must decode cleanly and exactly.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_decode_int64_full_width_roundtrip) {
+    cfgpack_reader_t r;
+    int64_t out;
+
+    LOG_SECTION("decode_int64 full-width (0xd3) values");
+
+    /* A 0xd3 tag is always 8 big-endian payload bytes. Drive the assembly loop
+     * directly across the full range — including sign-bit-set values that used
+     * to overflow the signed shift — and check exact two's-complement results.
+     * (Positive values are encoded as unsigned formats by the encoder, so a
+     * true encode/decode round-trip can't reach the 0xd3 branch; building the
+     * payload by hand is what targets the fixed loop.) */
+    {
+        static const int64_t cases[] = {
+            INT64_MIN,
+            INT64_MAX,
+            INT64_MIN + 1,
+            INT64_MAX - 1,
+            -1,
+            (int64_t)INT32_MIN - 1,
+            -4000000000LL,
+            0x0123456789abcdefLL,
+            (int64_t)0xfedcba9876543210ULL,
+        };
+        size_t i;
+
+        for (i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+            uint64_t bits = (uint64_t)cases[i];
+            uint8_t data[9];
+            int j;
+
+            data[0] = 0xd3;
+            for (j = 0; j < 8; ++j) {
+                data[1 + j] = (uint8_t)(bits >> (8 * (7 - j)));
+            }
+            cfgpack_reader_init(&r, data, sizeof(data));
+            out = 0;
+            CHECK(cfgpack_msgpack_decode_int64(&r, &out) == CFGPACK_OK);
+            CHECK(out == cases[i]);
+            LOG("0xd3 %lld -> %lld (ok)", (long long)cases[i], (long long)out);
+        }
+    }
+
+    LOG_SECTION("decode_int64 raw high-bit 0xd3 payload (issue repro)");
+
+    /* The exact malformed-but-well-formed payload from the bug report. Decoding
+     * must be deterministic (no UB) and equal the two's-complement value. */
+    {
+        uint8_t data[] = {0xd3, 0xd6, 0xcb, 0xa2, 0xfb, 0x7d, 0x0a, 0x39, 0x27};
+        cfgpack_reader_init(&r, data, sizeof(data));
+        out = 0;
+        CHECK(cfgpack_msgpack_decode_int64(&r, &out) == CFGPACK_OK);
+        CHECK(out == (int64_t)0xd6cba2fb7d0a3927ULL);
+        LOG("0xd3 high-bit payload -> %lld (ok)", (long long)out);
+    }
+
+    return (TEST_OK);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
  * 3. decode_f32 — error paths
  * ═══════════════════════════════════════════════════════════════════════════ */
 TEST_CASE(test_decode_f32_errors) {
@@ -894,6 +960,9 @@ int main(void) {
                                  test_decode_uint64_errors()) != TEST_OK);
     overall |= (test_case_result("decode_int64_positive_and_errors",
                                  test_decode_int64_positive_and_errors()) !=
+                TEST_OK);
+    overall |= (test_case_result("decode_int64_full_width_roundtrip",
+                                 test_decode_int64_full_width_roundtrip()) !=
                 TEST_OK);
     overall |= (test_case_result("decode_f32_errors",
                                  test_decode_f32_errors()) != TEST_OK);

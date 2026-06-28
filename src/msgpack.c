@@ -284,7 +284,7 @@ cfgpack_err_t cfgpack_msgpack_decode_int64(cfgpack_reader_t *r, int64_t *out) {
         return (CFGPACK_OK);
     }
     if (b == 0xd3) {
-        int64_t res = 0;
+        uint64_t res = 0;
         uint8_t v[8];
 
         if (read_bytes(r, v, 8)) {
@@ -293,7 +293,7 @@ cfgpack_err_t cfgpack_msgpack_decode_int64(cfgpack_reader_t *r, int64_t *out) {
         for (int i = 0; i < 8; ++i) {
             res = (res << 8) | v[i];
         }
-        *out = res;
+        *out = (int64_t)res;
         return (CFGPACK_OK);
     }
     return (CFGPACK_ERR_DECODE);

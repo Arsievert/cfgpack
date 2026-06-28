@@ -172,7 +172,7 @@ compile_commands: $(OBJECTS) ## Generate compile_commands.json from dep JSON
 	@sed -e '1s/^/[\n/' -e '$$s/,$$/\n]/' $(JSON)/temp.json > compile_commands.json
 	@rm $(JSON)/temp.json
 
-SAN_FLAGS := -fsanitize=address,undefined -fno-omit-frame-pointer
+SAN_FLAGS := -fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer
 
 test-asan: clean ## Rebuild tests with ASan+UBSan and run the full test suite
 	@$(MAKE) tests \
