@@ -200,14 +200,14 @@ Running tests...
   json_remap:     10/10 passed
   measure:        15/15 passed
   msgpack:        16/16 passed
-  msgpack_decode: 11/11 passed
+  msgpack_decode: 12/12 passed
   msgpack_schema: 17/17 passed
   null_args:      40/40 passed
   parser_bounds:  23/23 passed
   parser:         3/3 passed
   runtime:        24/24 passed
 
-TOTAL: 241/241 passed
+TOTAL: 242/242 passed
 ```
 
 ### Fuzz Testing
