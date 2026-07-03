@@ -82,8 +82,10 @@ cfgpack_err_t cfgpack_msgpack_encode_f64(cfgpack_buf_t *buf, double v);
  * @brief Encode a string to MessagePack format.
  * @param buf Buffer to append encoded data to.
  * @param s   String to encode (not null-terminated required).
- * @param len Length of string in bytes.
- * @return CFGPACK_OK on success; CFGPACK_ERR_ENCODE if buffer capacity exceeded.
+ * @param len Length of string in bytes (max 65535 — str16 is the largest
+ *            header emitted).
+ * @return CFGPACK_OK on success; CFGPACK_ERR_ENCODE if buffer capacity is
+ *         exceeded or len > 65535.
  */
 cfgpack_err_t cfgpack_msgpack_encode_str(cfgpack_buf_t *buf,
                                          const char *s,
@@ -92,8 +94,10 @@ cfgpack_err_t cfgpack_msgpack_encode_str(cfgpack_buf_t *buf,
 /**
  * @brief Encode a MessagePack map header with the given entry count.
  * @param buf   Buffer to append encoded data to.
- * @param count Number of key-value pairs in the map.
- * @return CFGPACK_OK on success; CFGPACK_ERR_ENCODE if buffer capacity exceeded.
+ * @param count Number of key-value pairs in the map (max 65535 — map16 is
+ *              the largest header emitted).
+ * @return CFGPACK_OK on success; CFGPACK_ERR_ENCODE if buffer capacity is
+ *         exceeded or count > 65535.
  */
 cfgpack_err_t cfgpack_msgpack_encode_map_header(cfgpack_buf_t *buf,
                                                 uint32_t count);
@@ -192,12 +196,14 @@ cfgpack_err_t cfgpack_msgpack_decode_map_header(cfgpack_reader_t *r,
 /**
  * @brief Skip over a MessagePack value without decoding it.
  *
- * Advances the reader past the current value, handling all MessagePack types
- * (integers, floats, strings, arrays, maps, etc.). Useful for ignoring
- * unknown keys when loading config.
+ * Advances the reader past the current value: integers, floats, nil,
+ * booleans, strings, bin, arrays, and maps (nested up to
+ * CFGPACK_SKIP_MAX_DEPTH). Ext/fixext types are not supported and return
+ * CFGPACK_ERR_DECODE. Useful for ignoring unknown keys when loading config.
  *
  * @param r Reader positioned at the value to skip.
- * @return CFGPACK_OK on success; CFGPACK_ERR_DECODE on format error or EOF.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_DECODE on format error, EOF,
+ *         nesting deeper than CFGPACK_SKIP_MAX_DEPTH, or an ext type.
  */
 cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r);
 

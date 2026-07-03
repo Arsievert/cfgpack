@@ -137,7 +137,8 @@ void cfgpack_free(cfgpack_ctx_t *ctx);
  * @param value  Value to store (type must match schema entry).
  * @return CFGPACK_OK on success; CFGPACK_ERR_MISSING if index not in schema;
  *         CFGPACK_ERR_TYPE_MISMATCH for wrong type; CFGPACK_ERR_STR_TOO_LONG
- *         if string exceeds limits.
+ *         if string exceeds limits; CFGPACK_ERR_BOUNDS if a raw STR/FSTR
+ *         value's pool offset/length falls outside the string pool.
  */
 cfgpack_err_t cfgpack_set(cfgpack_ctx_t *ctx,
                           uint16_t index,
@@ -163,7 +164,8 @@ cfgpack_err_t cfgpack_get(const cfgpack_ctx_t *ctx,
  * @param value Value to store (type must match schema entry).
  * @return CFGPACK_OK on success; CFGPACK_ERR_MISSING if name not in schema;
  *         CFGPACK_ERR_TYPE_MISMATCH for wrong type; CFGPACK_ERR_STR_TOO_LONG
- *         if string exceeds limits.
+ *         if string exceeds limits; CFGPACK_ERR_BOUNDS if a raw STR/FSTR
+ *         value's pool offset/length falls outside the string pool.
  */
 cfgpack_err_t cfgpack_set_by_name(cfgpack_ctx_t *ctx,
                                   const char *name,
