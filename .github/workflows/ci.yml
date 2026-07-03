@@ -117,9 +117,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-s390x-linux-gnu qemu-user-static make
+      # -march=z196 pins cfgpack/test code to pre-vector scalar IEEE BFP.
+      # Newer gcc defaults s390x to a vector-capable -march where
+      # single-precision floats travel through vector registers (VXE), and
+      # qemu's emulation of that path has produced wrong f32 values (seen
+      # as a spurious in-memory f32 round-trip failure in the coverage
+      # suite).  The suite passes on gcc-13/qemu-8.2 without this pin.
+      # Do NOT also set QEMU_CPU: Ubuntu's s390x glibc needs a z13+ CPU.
       - name: Build tests for s390x (static, run via qemu binfmt)
         run: |
           make CC=s390x-linux-gnu-gcc AR=s390x-linux-gnu-ar tests \
+            CFLAGS="-Wall -Wextra -std=c99 -Os -march=z196 -DCFGPACK_LZ4 -DCFGPACK_HEATSHRINK -DCFGPACK_LITTLEFS" \
             LDFLAGS="-static"
       - name: Run tests
         run: scripts/run-tests.sh
