@@ -114,6 +114,16 @@ cfgpack_err_t cfgpack_pageout(const cfgpack_ctx_t *ctx,
         return (rc);
     }
 
+    /* On overflow buf.len exceeds out_cap (wbuf measure semantics) and only
+     * out_cap bytes were actually written — report the needed size without
+     * reading past the caller's buffer. */
+    if (buf.len + CFGPACK_CRC_SIZE > out_cap) {
+        if (out_len) {
+            *out_len = buf.len + CFGPACK_CRC_SIZE;
+        }
+        return (CFGPACK_ERR_ENCODE);
+    }
+
     crc = cfgpack_crc32c(out, buf.len);
     crc_bytes[0] = (uint8_t)(crc);
     crc_bytes[1] = (uint8_t)(crc >> 8);
@@ -124,7 +134,7 @@ cfgpack_err_t cfgpack_pageout(const cfgpack_ctx_t *ctx,
     if (out_len) {
         *out_len = buf.len;
     }
-    return (buf.len <= out_cap) ? CFGPACK_OK : CFGPACK_ERR_ENCODE;
+    return (CFGPACK_OK);
 }
 
 cfgpack_err_t cfgpack_pageout_measure(const cfgpack_ctx_t *ctx,
@@ -549,6 +559,16 @@ cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx,
 
         /* Skip reserved index 0 (schema name) */
         if (key == CFGPACK_INDEX_RESERVED_NAME) {
+            if (cfgpack_msgpack_skip_value(&r) != CFGPACK_OK) {
+                return (CFGPACK_ERR_DECODE);
+            }
+            continue;
+        }
+
+        /* Keys above the schema index range cannot come from cfgpack_pageout;
+         * skip them like any other unknown key rather than letting the
+         * uint16_t cast alias a valid index. */
+        if (key > UINT16_MAX) {
             if (cfgpack_msgpack_skip_value(&r) != CFGPACK_OK) {
                 return (CFGPACK_ERR_DECODE);
             }

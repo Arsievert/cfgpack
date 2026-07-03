@@ -387,7 +387,7 @@ All serialized blobs include a 4-byte CRC-32C (Castagnoli) trailer for data inte
 - `cfgpack_pagein_buf()` and `cfgpack_pagein_remap()` verify the CRC and return `CFGPACK_ERR_CRC` on mismatch. The CRC is stripped before decoding.
 - `cfgpack_peek_name()` strips the trailer before parsing but does not verify the CRC (it is a lightweight probe; the caller will verify CRC when they call `cfgpack_pagein_buf()` later).
 
-**CRC algorithm:** CRC-32C with polynomial 0x82F63B78 (Castagnoli, reflected). This polynomial achieves Hamming distance 6 (detects all 1–5 bit errors) for data words up to ~8KB, well within cfgpack's typical blob sizes. Implemented as a nibble-at-a-time lookup table (16 entries = 64 bytes ROM).
+**CRC algorithm:** CRC-32C with polynomial 0x82F63B78 (Castagnoli, reflected). Per Koopman's published CRC data, this polynomial achieves Hamming distance 6 (detects all 1–5 bit errors) for data words up to 5243 bits (~655 bytes) — covering typical cfgpack blobs — and HD=4 for larger blobs. Implemented as a nibble-at-a-time lookup table (16 entries = 64 bytes ROM).
 
 **Interaction with compression:** The CRC covers the uncompressed msgpack data. Decompression functions (`cfgpack_pagein_lz4`, `cfgpack_pagein_heatshrink`) decompress first, then call `cfgpack_pagein_buf` — CRC verification happens automatically on the decompressed payload.
 
@@ -412,6 +412,8 @@ cfgpack_pageout(&ctx, buf, needed, &len);
 ```
 
 Returns `CFGPACK_ERR_ARGS` if `ctx` or `out_len` is NULL. The measured size always matches the actual `cfgpack_pageout()` output length.
+
+If `cfgpack_pageout()` is called with a buffer that is too small, it returns `CFGPACK_ERR_ENCODE` and sets `*out_len` to the required size (the same value `cfgpack_pageout_measure()` reports); the buffer contents are unspecified in that case.
 
 ### Presence Bitmap
 

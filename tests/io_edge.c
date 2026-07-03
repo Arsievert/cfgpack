@@ -948,6 +948,99 @@ TEST_CASE(test_remap_decoded_overrides_default) {
     return TEST_OK;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 17. pageout with too-small buffer reports needed size without overrun
+ *
+ * Regression: when the encoded size exceeded out_cap, the CRC used to be
+ * computed over buf.len bytes of `out` — past the end of the caller's
+ * buffer (caught by ASan).  Now the size failure is reported first, with
+ * *out_len set to the required size, matching cfgpack_pageout_measure.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_pageout_small_buffer_reports_size) {
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[1];
+    cfgpack_ctx_t ctx;
+    cfgpack_value_t values[1];
+    char str_pool[1];
+    uint16_t str_offsets[1];
+    uint8_t buf[64];
+    size_t need = 0;
+    size_t len = 0;
+
+    make_schema(&schema, entries, 1);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, str_pool, sizeof(str_pool),
+                       str_offsets, 0) == CFGPACK_OK);
+    CHECK(cfgpack_set_u8(&ctx, 1, 42) == CFGPACK_OK);
+
+    CHECK(cfgpack_pageout_measure(&ctx, &need) == CFGPACK_OK);
+    CHECK(need > 12 && need <= sizeof(buf));
+    LOG("Measured size: %zu bytes", need);
+
+    /* One byte short: must fail and report the required size */
+    memset(buf, 0xAA, sizeof(buf));
+    CHECK(cfgpack_pageout(&ctx, buf, need - 1, &len) == CFGPACK_ERR_ENCODE);
+    CHECK(len == need);
+    LOG("pageout into %zu bytes: ERR_ENCODE, out_len=%zu (ok)", need - 1, len);
+
+    /* Exact fit succeeds */
+    CHECK(cfgpack_pageout(&ctx, buf, need, &len) == CFGPACK_OK);
+    CHECK(len == need);
+    CHECK(cfgpack_pagein_buf(&ctx, buf, len) == CFGPACK_OK);
+    LOG("Exact-fit pageout + pagein round-trip (ok)");
+
+    return TEST_OK;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 18. pagein_remap ignores map keys above the uint16 index range
+ *
+ * Regression: the key was truncated with a uint16_t cast before matching,
+ * so a (CRC-valid) blob key of 65537 aliased index 1.  Oversized keys must
+ * now be skipped like any other unknown key.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_pagein_key_above_uint16_skipped) {
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[1];
+    cfgpack_ctx_t ctx;
+    cfgpack_value_t values[1];
+    char str_pool[1];
+    uint16_t str_offsets[1];
+    uint8_t blob[64];
+    size_t len = 0;
+    cfgpack_value_t v;
+
+    make_schema(&schema, entries, 1);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, str_pool, sizeof(str_pool),
+                       str_offsets, 0) == CFGPACK_OK);
+
+    /* Hand-craft a blob: {0: "test", 65537: 42} + CRC.  65537 & 0xFFFF == 1,
+     * so a truncating decoder would store 42 into entry index 1. */
+    blob[len++] = 0x82; /* fixmap, 2 entries */
+    blob[len++] = 0x00; /* key 0 (reserved name) */
+    blob[len++] = 0xa4; /* fixstr len 4 */
+    blob[len++] = 't';
+    blob[len++] = 'e';
+    blob[len++] = 's';
+    blob[len++] = 't';
+    blob[len++] = 0xce; /* uint32 key */
+    blob[len++] = 0x00;
+    blob[len++] = 0x01;
+    blob[len++] = 0x00;
+    blob[len++] = 0x01; /* 65537 */
+    blob[len++] = 0x2a; /* value 42 */
+    test_append_crc(blob, &len);
+    LOG_HEX("Crafted blob", blob, len);
+
+    CHECK(cfgpack_pagein_buf(&ctx, blob, len) == CFGPACK_OK);
+    LOG("Pagein succeeded (oversized key tolerated)");
+
+    /* Entry 1 has no default and must NOT have been aliased by key 65537 */
+    CHECK(cfgpack_get(&ctx, 1, &v) == CFGPACK_ERR_MISSING);
+    LOG("Entry 1 still absent: key 65537 did not alias index 1 (ok)");
+
+    return TEST_OK;
+}
+
 int main(void) {
     test_result_t overall = TEST_OK;
 
@@ -988,6 +1081,12 @@ int main(void) {
                 TEST_OK);
     overall |= (test_case_result("remap_decoded_overrides_default",
                                  test_remap_decoded_overrides_default()) !=
+                TEST_OK);
+    overall |= (test_case_result("pageout_small_buffer_reports_size",
+                                 test_pageout_small_buffer_reports_size()) !=
+                TEST_OK);
+    overall |= (test_case_result("pagein_key_above_uint16_skipped",
+                                 test_pagein_key_above_uint16_skipped()) !=
                 TEST_OK);
 
     if (overall == TEST_OK) {

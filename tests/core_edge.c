@@ -396,6 +396,55 @@ TEST_CASE(test_get_size) {
     return TEST_OK;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 12. cfgpack_set with a raw STR/FSTR value carrying a bogus pool offset
+ *
+ * Regression: the offset was stored unvalidated, so a later cfgpack_get_str
+ * returned str_pool + offset — up to 64 KB past the pool.  The setter must
+ * reject offsets whose string (plus NUL) does not fit the pool, and the
+ * getter must refuse to hand out an out-of-bounds pointer.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_set_raw_str_bogus_offset) {
+    LOG_SECTION("cfgpack_set with out-of-range str offset");
+
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[1];
+    cfgpack_ctx_t ctx;
+    cfgpack_value_t values[1];
+    char str_pool[CFGPACK_STR_MAX + 1];
+    uint16_t str_offsets[1];
+    cfgpack_value_t v;
+    const char *out = NULL;
+    uint16_t out_len = 0;
+
+    make_schema(&schema, entries, 1);
+    entries[0].type = CFGPACK_TYPE_STR;
+
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, str_pool, sizeof(str_pool),
+                       str_offsets, 1) == CFGPACK_OK);
+
+    memset(&v, 0, sizeof(v));
+    v.type = CFGPACK_TYPE_STR;
+    v.v.str.offset = 0xFFFF; /* far past the pool */
+    v.v.str.len = 4;
+    CHECK(cfgpack_set(&ctx, 1, &v) == CFGPACK_ERR_BOUNDS);
+    LOG("Bogus offset rejected by cfgpack_set: ERR_BOUNDS (ok)");
+
+    /* Offset in range but string overhangs the pool end */
+    v.v.str.offset = (uint16_t)(sizeof(str_pool) - 2);
+    v.v.str.len = 4;
+    CHECK(cfgpack_set(&ctx, 1, &v) == CFGPACK_ERR_BOUNDS);
+    LOG("Overhanging string rejected: ERR_BOUNDS (ok)");
+
+    /* A legitimate value set through the pool API still works */
+    CHECK(cfgpack_set_str(&ctx, 1, "ok") == CFGPACK_OK);
+    CHECK(cfgpack_get_str(&ctx, 1, &out, &out_len) == CFGPACK_OK);
+    CHECK(out_len == 2 && strcmp(out, "ok") == 0);
+    LOG("Valid pool string round-trips (ok)");
+
+    return TEST_OK;
+}
+
 int main(void) {
     test_result_t overall = TEST_OK;
 
@@ -419,6 +468,8 @@ int main(void) {
                 TEST_OK);
     overall |= (test_case_result("get_version", test_get_version()) != TEST_OK);
     overall |= (test_case_result("get_size", test_get_size()) != TEST_OK);
+    overall |= (test_case_result("set_raw_str_bogus_offset",
+                                 test_set_raw_str_bogus_offset()) != TEST_OK);
 
     if (overall == TEST_OK) {
         printf(COLOR_GREEN "ALL PASS" COLOR_RESET "\n");

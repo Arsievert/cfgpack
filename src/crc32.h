@@ -14,7 +14,8 @@
  * @brief Compute CRC-32C (Castagnoli) over a byte buffer.
  *
  * Uses the reflected polynomial 0x82F63B78 with a nibble-at-a-time table
- * (16 entries, 64 bytes).  Achieves HD=6 for data words up to ~8 KB.
+ * (16 entries, 64 bytes). CRC-32C sustains HD=6
+ * for data words up to 5243 bits (~655 bytes) and HD=4 beyond that.
  *
  * @param data  Input bytes (may be NULL when @p len is 0).
  * @param len   Number of bytes to checksum.

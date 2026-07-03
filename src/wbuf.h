@@ -114,9 +114,12 @@ void wbuf_put_float(wbuf_t *w, float val);
  * @brief Append @p n bytes from @p src, failing on overflow.
  *
  * Unlike @ref wbuf_append, this function does @b not perform partial writes.
- * If the data does not fit, the buffer is left unchanged and an error is
- * returned.  This is intended for binary serialization (e.g. MessagePack)
- * where truncation would produce corrupt output.
+ * If the data does not fit, no bytes are written and an error is returned,
+ * but @c w->len is still advanced by @p n so that it tracks the total size
+ * needed (the measure pattern used by cfgpack_pageout_measure).  Once
+ * overflowed, @c w->len exceeds @c w->cap and must not be used as a count of
+ * bytes actually written.  This is intended for binary serialization
+ * (e.g. MessagePack) where truncation would produce corrupt output.
  *
  * @param w   Write buffer.
  * @param src Source data to append.

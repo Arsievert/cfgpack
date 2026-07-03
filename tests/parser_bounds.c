@@ -982,6 +982,44 @@ TEST_CASE(test_reserved_index_zero_json) {
     return (TEST_OK);
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Negative literal for an unsigned type -> ERR_BOUNDS
+ *
+ * Regression: strtoull silently wraps "-1" to ULLONG_MAX, so a u64 entry
+ * accepted -1 as UINT64_MAX (and smaller unsigned types only failed by
+ * accident of the wrap value).  A leading '-' must be rejected outright.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_negative_unsigned_default) {
+    LOG_SECTION("Negative default for unsigned type");
+
+    const char *path = "tests/data/neg_unsigned.map";
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[8];
+    cfgpack_value_t values[8];
+    char str_pool[256];
+    uint16_t str_offsets[8];
+    cfgpack_parse_error_t err;
+    cfgpack_err_t rc;
+    cfgpack_parse_opts_t opts = {&schema,     entries,  8,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 8,        &err};
+
+    LOG("Creating test file with 'u64 -1' (would wrap to UINT64_MAX)");
+    CHECK(write_file(path, "demo 1\n1 foo u64 -1\n") == TEST_OK);
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
+    CHECK(rc == CFGPACK_ERR_BOUNDS);
+    LOG("u64 default -1: CFGPACK_ERR_BOUNDS (ok)");
+
+    LOG("Creating test file with 'u8 -5'");
+    CHECK(write_file(path, "demo 1\n1 foo u8 -5\n") == TEST_OK);
+    rc = cfgpack_parse_schema_file(path, &opts, scratch, sizeof(scratch));
+    CHECK(rc == CFGPACK_ERR_BOUNDS);
+    LOG("u8 default -5: CFGPACK_ERR_BOUNDS (ok)");
+
+    LOG("Test completed successfully");
+    return (TEST_OK);
+}
+
 int main(void) {
     test_result_t overall = TEST_OK;
 
@@ -1029,6 +1067,8 @@ int main(void) {
                                  test_json_parse_direct()) != TEST_OK);
     overall |= (test_case_result("reserved_index_zero_map",
                                  test_reserved_index_zero_map()) != TEST_OK);
+    overall |= (test_case_result("negative_unsigned_default",
+                                 test_negative_unsigned_default()) != TEST_OK);
     overall |= (test_case_result("reserved_index_zero_json",
                                  test_reserved_index_zero_json()) != TEST_OK);
 

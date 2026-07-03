@@ -730,7 +730,9 @@ cfgpack_err_t cfgpack_get_fstr_by_name(const cfgpack_ctx_t *ctx,
  * @param ctx      Initialized context.
  * @param out      Output buffer for MessagePack payload.
  * @param out_cap  Capacity of @p out in bytes.
- * @param out_len  Optional length written (set on success).
+ * @param out_len  Optional length written (set on success).  On
+ *                 CFGPACK_ERR_ENCODE it receives the required size instead,
+ *                 matching cfgpack_pageout_measure().
  * @return CFGPACK_OK on success; CFGPACK_ERR_ENCODE if buffer too small.
  */
 cfgpack_err_t cfgpack_pageout(const cfgpack_ctx_t *ctx,

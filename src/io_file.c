@@ -24,6 +24,10 @@ static cfgpack_err_t read_file(const char *path,
                                char *scratch,
                                size_t scratch_cap,
                                size_t *out_len) {
+    if (!scratch || scratch_cap == 0) {
+        return (CFGPACK_ERR_IO); /* scratch_cap - 1 below would wrap */
+    }
+
     FILE *f = fopen(path, "r");
     if (!f) {
         return (CFGPACK_ERR_IO);
@@ -55,6 +59,10 @@ static cfgpack_err_t read_file_binary(const char *path,
                                       uint8_t *scratch,
                                       size_t scratch_cap,
                                       size_t *out_len) {
+    if (!scratch || scratch_cap == 0) {
+        return (CFGPACK_ERR_IO);
+    }
+
     FILE *f = fopen(path, "rb");
     if (!f) {
         return (CFGPACK_ERR_IO);

@@ -105,6 +105,11 @@ cfgpack_err_t cfgpack_msgpack_encode_str(cfgpack_buf_t *buf,
     size_t hlen = 0;
     cfgpack_err_t rc;
     uint8_t hdr[3];
+    if (len > 0xffffu) {
+        /* str16 is the largest header emitted; a longer string would get a
+         * wrapped length header followed by all len bytes (corrupt output). */
+        return (CFGPACK_ERR_ENCODE);
+    }
     if (len <= 31) {
         hdr[hlen++] = (uint8_t)(0xa0 | (uint8_t)len);
     } else if (len <= 255) {
@@ -126,6 +131,10 @@ cfgpack_err_t cfgpack_msgpack_encode_map_header(cfgpack_buf_t *buf,
                                                 uint32_t count) {
     uint8_t tmp[3];
     size_t n = 0;
+    if (count > 0xffffu) {
+        /* map16 is the largest header emitted */
+        return (CFGPACK_ERR_ENCODE);
+    }
     if (count <= 15) {
         tmp[n++] = (uint8_t)(0x80 | count);
     } else {
@@ -262,13 +271,14 @@ cfgpack_err_t cfgpack_msgpack_decode_int64(cfgpack_reader_t *r, int64_t *out) {
         return (CFGPACK_OK);
     }
     if (b == 0xd1) {
-        int16_t v;
-        if (read_bytes(r, &v, 2)) {
+        uint8_t v[2];
+        int16_t res;
+
+        if (read_bytes(r, v, 2)) {
             return (CFGPACK_ERR_DECODE);
         }
-        v = (int16_t)((uint16_t)(uint8_t)(v >> 8) |
-                      ((uint16_t)(uint8_t)v << 8));
-        *out = v;
+        res = (int16_t)(((uint16_t)v[0] << 8) | v[1]);
+        *out = res;
         return (CFGPACK_OK);
     }
     if (b == 0xd2) {
@@ -364,7 +374,7 @@ cfgpack_err_t cfgpack_msgpack_decode_str(cfgpack_reader_t *r,
     } else {
         return (CFGPACK_ERR_DECODE);
     }
-    if (r->pos + *len > r->len) {
+    if (*len > r->len - r->pos) {
         return (CFGPACK_ERR_DECODE);
     }
     *ptr = r->data + r->pos;
@@ -405,7 +415,7 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
         /* Fixstr (0xa0-0xbf): length in low 5 bits */
         if ((b & 0xe0) == 0xa0) {
             uint32_t len = b & 0x1f;
-            if (r->pos + len > r->len) {
+            if (len > r->len - r->pos) {
                 return (CFGPACK_ERR_DECODE);
             }
             r->pos += len;
@@ -456,7 +466,7 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
                 return (CFGPACK_ERR_DECODE);
             }
             len = r->data[r->pos++];
-            if (r->pos + len > r->len) {
+            if (len > r->len - r->pos) {
                 return (CFGPACK_ERR_DECODE);
             }
             r->pos += len;
@@ -473,7 +483,7 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
             }
             len = ((uint32_t)r->data[r->pos] << 8) | r->data[r->pos + 1];
             r->pos += 2;
-            if (r->pos + len > r->len) {
+            if (len > r->len - r->pos) {
                 return (CFGPACK_ERR_DECODE);
             }
             r->pos += len;
@@ -492,7 +502,9 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
                   ((uint32_t)r->data[r->pos + 1] << 16) |
                   ((uint32_t)r->data[r->pos + 2] << 8) | r->data[r->pos + 3];
             r->pos += 4;
-            if (r->pos + len > r->len) {
+            /* len is attacker-controlled up to 0xFFFFFFFF: compare by
+             * subtraction so the check cannot wrap on 32-bit size_t. */
+            if (len > r->len - r->pos) {
                 return (CFGPACK_ERR_DECODE);
             }
             r->pos += len;

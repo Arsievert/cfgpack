@@ -243,6 +243,68 @@ TEST_CASE(test_json_parse_reserved_index) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+ * 7b. JSON numeric defaults must respect the declared type's range
+ *
+ * Regression: JSON defaults were stored with a raw cast, so u8 accepted
+ * 9999 (truncated), unsigned types accepted negative values, and a float
+ * literal for an integer type silently stored garbage.  The JSON parser
+ * must enforce the same per-type validation as the .map parser.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_json_parse_default_range) {
+    LOG_SECTION("JSON default range/type validation");
+
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[8];
+    cfgpack_value_t values[8];
+    char str_pool[256];
+    uint16_t str_offsets[4];
+    cfgpack_parse_error_t err;
+    cfgpack_parse_opts_t opts = {&schema,     entries,  8,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 4,        &err};
+
+    /* u8 default above 255 */
+    const char *too_big =
+        "{\"name\":\"t\",\"version\":1,\"entries\":["
+        "{\"index\":1,\"name\":\"a\",\"type\":\"u8\",\"value\":9999}]}";
+    CHECK(parse_json(too_big, &opts) == CFGPACK_ERR_BOUNDS);
+    LOG("u8 default 9999: ERR_BOUNDS (ok)");
+
+    /* negative default for unsigned type */
+    const char *negative =
+        "{\"name\":\"t\",\"version\":1,\"entries\":["
+        "{\"index\":1,\"name\":\"a\",\"type\":\"u16\",\"value\":-1}]}";
+    CHECK(parse_json(negative, &opts) == CFGPACK_ERR_BOUNDS);
+    LOG("u16 default -1: ERR_BOUNDS (ok)");
+
+    /* i8 default below -128 */
+    const char *too_small =
+        "{\"name\":\"t\",\"version\":1,\"entries\":["
+        "{\"index\":1,\"name\":\"a\",\"type\":\"i8\",\"value\":-200}]}";
+    CHECK(parse_json(too_small, &opts) == CFGPACK_ERR_BOUNDS);
+    LOG("i8 default -200: ERR_BOUNDS (ok)");
+
+    /* float literal for an integer type */
+    const char *float_for_int =
+        "{\"name\":\"t\",\"version\":1,\"entries\":["
+        "{\"index\":1,\"name\":\"a\",\"type\":\"u32\",\"value\":3.5}]}";
+    CHECK(parse_json(float_for_int, &opts) == CFGPACK_ERR_PARSE);
+    LOG("u32 default 3.5: ERR_PARSE (ok)");
+
+    /* boundary values still accepted */
+    const char *at_bounds =
+        "{\"name\":\"t\",\"version\":1,\"entries\":["
+        "{\"index\":1,\"name\":\"a\",\"type\":\"u8\",\"value\":255},"
+        "{\"index\":2,\"name\":\"b\",\"type\":\"i8\",\"value\":-128}]}";
+    CHECK(parse_json(at_bounds, &opts) == CFGPACK_OK);
+    CHECK(values[0].v.u64 == 255);
+    CHECK(values[1].v.i64 == -128);
+    LOG("u8 255 / i8 -128 accepted and stored exactly (ok)");
+
+    return TEST_OK;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
  * 8. cfgpack_schema_write_json with tiny output buffer -> ERR_BOUNDS
  * ═══════════════════════════════════════════════════════════════════════════ */
 TEST_CASE(test_json_writer_small_buffer) {
@@ -306,6 +368,8 @@ int main(void) {
                 TEST_OK);
     overall |= (test_case_result("json_parse_reserved_index",
                                  test_json_parse_reserved_index()) != TEST_OK);
+    overall |= (test_case_result("json_parse_default_range",
+                                 test_json_parse_default_range()) != TEST_OK);
     overall |= (test_case_result("json_writer_small_buffer",
                                  test_json_writer_small_buffer()) != TEST_OK);
 

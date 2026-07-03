@@ -84,6 +84,69 @@ jobs:
           path: build/test.log
           if-no-files-found: ignore
 
+  test-32bit:
+    name: Build + tests (32-bit x86, -m32)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install multilib toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-multilib make
+      - name: Build tests with 32-bit size_t
+        run: |
+          make CC=gcc tests \
+            CFLAGS="-Wall -Wextra -std=c99 -Os -m32 -DCFGPACK_LZ4 -DCFGPACK_HEATSHRINK -DCFGPACK_LITTLEFS" \
+            LDFLAGS="-m32"
+      - name: Run tests
+        run: scripts/run-tests.sh
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-log-32bit
+          path: build/test.log
+          if-no-files-found: ignore
+
+  test-bigendian:
+    name: Build + tests (big-endian s390x, qemu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install s390x cross toolchain + qemu
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-s390x-linux-gnu qemu-user-static make
+      - name: Build tests for s390x (static, run via qemu binfmt)
+        run: |
+          make CC=s390x-linux-gnu-gcc AR=s390x-linux-gnu-ar tests \
+            LDFLAGS="-static"
+      - name: Run tests
+        run: scripts/run-tests.sh
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-log-bigendian
+          path: build/test.log
+          if-no-files-found: ignore
+
+  cross-compile-arm:
+    name: Cross-compile (arm-none-eabi, build only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install ARM embedded toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi make
+      - name: Build library for Cortex-M (freestanding)
+        run: |
+          make CC=arm-none-eabi-gcc AR=arm-none-eabi-ar \
+            CFLAGS="-Wall -Wextra -std=c99 -Os -mcpu=cortex-m4 -mthumb -DCFGPACK_LZ4 -DCFGPACK_HEATSHRINK -DCFGPACK_LITTLEFS"
+      - name: Report library size
+        run: arm-none-eabi-size -t build/obj/src/*.o
+
   fuzz-smoke:
     name: Fuzz smoke (30s per target)
     runs-on: ubuntu-latest

@@ -366,6 +366,11 @@ static cfgpack_err_t parse_uint(const char *tok,
     uint64_t max_val;
     uint64_t val;
 
+    /* strtoull silently wraps negative literals ("-1" -> ULLONG_MAX) */
+    if (tok[0] == '-') {
+        return (CFGPACK_ERR_BOUNDS);
+    }
+
     errno = 0;
     val = strtoull(tok, &endp, 0); /* base 0 handles 0x prefix */
     if (tok[0] == '\0' || (endp && *endp != '\0') || errno == ERANGE) {
@@ -604,10 +609,26 @@ static void fat_str_to_pool(const cfgpack_fat_value_t *fat,
 static cfgpack_err_t schema_finalize(const cfgpack_parse_opts_t *opts,
                                      size_t count) {
     size_t pool_needed;
+    size_t str_slots = 0;
 
     sort_entries(opts->entries, opts->values, count);
     opts->out_schema->entries = opts->entries;
     opts->out_schema->entry_count = count;
+
+    /* Every string entry needs a slot in str_offsets; compute_str_offsets
+     * skips out-of-range writes, so an undersized array would otherwise be
+     * read out of bounds later by fat_str_to_pool. */
+    for (size_t i = 0; i < count; ++i) {
+        cfgpack_type_t t = opts->entries[i].type;
+        if (t == CFGPACK_TYPE_STR || t == CFGPACK_TYPE_FSTR) {
+            str_slots++;
+        }
+    }
+    if (str_slots > opts->str_offsets_count ||
+        str_slots >= CFGPACK_STR_SLOT_NONE) {
+        set_err(opts->err, 0, "str_offsets array too small");
+        return (CFGPACK_ERR_BOUNDS);
+    }
 
     pool_needed = compute_str_offsets(opts->entries, count, opts->str_offsets,
                                       opts->str_offsets_count);
@@ -1611,6 +1632,15 @@ static cfgpack_err_t json_store_entry_defaults(parse_ctx_t *ctx,
             }
         }
     } else if (f->default_is_number) {
+        /* Match the .map parser: integer types reject float literals and
+         * enforce per-type ranges instead of storing a raw cast. */
+        static const int64_t int_min[] = {-128, -32768, -2147483648LL,
+                                          INT64_MIN};
+        static const int64_t int_max[] = {127, 32767, 2147483647LL, INT64_MAX};
+        static const uint64_t uint_max[] = {0xFFULL, 0xFFFFULL, 0xFFFFFFFFULL,
+                                            0xFFFFFFFFFFFFFFFFULL};
+        int64_t iv = f->default_ival;
+
         e->has_default = 1;
         ctx->values[ctx->count].type = e->type;
         switch (e->type) {
@@ -1618,13 +1648,30 @@ static cfgpack_err_t json_store_entry_defaults(parse_ctx_t *ctx,
         case CFGPACK_TYPE_U16:
         case CFGPACK_TYPE_U32:
         case CFGPACK_TYPE_U64:
-            ctx->values[ctx->count].v.u64 = (uint64_t)f->default_ival;
+            if (f->default_is_float) {
+                set_err(ctx->err, p->line, "invalid default value");
+                return (CFGPACK_ERR_PARSE);
+            }
+            if (iv < 0 || (uint64_t)iv > uint_max[e->type - CFGPACK_TYPE_U8]) {
+                set_err(ctx->err, p->line, "default out of range");
+                return (CFGPACK_ERR_BOUNDS);
+            }
+            ctx->values[ctx->count].v.u64 = (uint64_t)iv;
             break;
         case CFGPACK_TYPE_I8:
         case CFGPACK_TYPE_I16:
         case CFGPACK_TYPE_I32:
         case CFGPACK_TYPE_I64:
-            ctx->values[ctx->count].v.i64 = f->default_ival;
+            if (f->default_is_float) {
+                set_err(ctx->err, p->line, "invalid default value");
+                return (CFGPACK_ERR_PARSE);
+            }
+            if (iv < int_min[e->type - CFGPACK_TYPE_I8] ||
+                iv > int_max[e->type - CFGPACK_TYPE_I8]) {
+                set_err(ctx->err, p->line, "default out of range");
+                return (CFGPACK_ERR_BOUNDS);
+            }
+            ctx->values[ctx->count].v.i64 = iv;
             break;
         case CFGPACK_TYPE_F32:
             ctx->values[ctx->count].v.f32 = f->default_is_float
@@ -1804,7 +1851,14 @@ static void json_phase2(parse_ctx_t *ctx, const char *data, size_t data_len) {
                 }
                 json_expect(jp, '}');
 
-                /* Write string default to pool if applicable */
+                /* Write string default to pool if applicable.  Phase 1
+                 * already rejected oversized fstr defaults, but re-check
+                 * independently: fat.v.fstr.data is only FSTR_MAX+1 bytes
+                 * while str_data holds up to STR_MAX. */
+                if (entry_type == CFGPACK_TYPE_FSTR &&
+                    str_len > CFGPACK_FSTR_MAX) {
+                    has_string_default = 0;
+                }
                 if (has_string_default && entry_has_default &&
                     (entry_type == CFGPACK_TYPE_STR ||
                      entry_type == CFGPACK_TYPE_FSTR)) {

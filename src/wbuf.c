@@ -57,11 +57,13 @@ void wbuf_put_uint(wbuf_t *w, unsigned long long val) {
 
 /** @copydoc wbuf_put_int */
 void wbuf_put_int(wbuf_t *w, long long val) {
+    /* Negate in unsigned arithmetic: -val overflows for LLONG_MIN */
+    unsigned long long mag = (unsigned long long)val;
     if (val < 0) {
         wbuf_putc(w, '-');
-        val = -val;
+        mag = 0ULL - mag;
     }
-    wbuf_put_uint(w, (unsigned long long)val);
+    wbuf_put_uint(w, mag);
 }
 
 /** @copydoc wbuf_put_double */
@@ -80,18 +82,36 @@ void wbuf_put_double(wbuf_t *w, double val) {
     char digits[9];
     int ndigits;
 
+    /* NaN and infinity: match what the hosted %g path prints.  Casting
+     * either to uint64_t is undefined behavior, so handle them first. */
+    if (val != val) {
+        wbuf_puts(w, "nan");
+        return;
+    }
     if (val < 0) {
         wbuf_putc(w, '-');
         val = -val;
     }
+    /* Values >= 2^64 (including +inf) are outside this formatter's domain;
+     * the uint64_t cast below would be UB. */
+    if (val >= 18446744073709551616.0) {
+        wbuf_puts(w, "inf");
+        return;
+    }
     ipart = (uint64_t)val;
+    frac = val - (double)ipart;
+    /* Multiply by 10^9 and round to get all digits at once - avoids
+     * accumulated error.  Rounding can carry all the way into the integer
+     * part (e.g. 1.9999999999 -> 2), so compute before printing ipart. */
+    frac_int = (uint64_t)(frac * 1000000000.0 + 0.5);
+    if (frac_int >= 1000000000ULL) {
+        ipart++;
+        frac_int = 0;
+    }
     wbuf_put_uint(w, ipart);
 
-    frac = val - (double)ipart;
-    if (frac > 1e-10) { /* Skip if essentially zero */
+    if (frac_int > 0) {
         wbuf_putc(w, '.');
-        /* Multiply by 10^9 and round to get all digits at once - avoids accumulated error */
-        frac_int = (uint64_t)(frac * 1000000000.0 + 0.5);
         /* Extract up to 9 digits */
         ndigits = 9;
         for (int i = 8; i >= 0; i--) {

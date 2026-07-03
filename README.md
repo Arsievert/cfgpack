@@ -191,23 +191,23 @@ Output:
 Running tests...
 
   basic:          4/4 passed
-  core_edge:      11/11 passed
+  core_edge:      12/12 passed
   coverage:       27/27 passed
   decompress:     8/8 passed
-  io_edge:        16/16 passed
+  io_edge:        18/18 passed
   io_littlefs:    8/8 passed
-  json_edge:      8/8 passed
+  json_edge:      9/9 passed
   json_remap:     10/10 passed
   measure:        15/15 passed
   msgpack:        16/16 passed
-  msgpack_decode: 12/12 passed
+  msgpack_decode: 15/15 passed
   msgpack_schema: 17/17 passed
   null_args:      40/40 passed
-  parser_bounds:  23/23 passed
+  parser_bounds:  24/24 passed
   parser:         3/3 passed
   runtime:        24/24 passed
 
-TOTAL: 242/242 passed
+TOTAL: 250/250 passed
 ```
 
 ### Fuzz Testing

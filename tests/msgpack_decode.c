@@ -227,6 +227,126 @@ TEST_CASE(test_decode_int64_full_width_roundtrip) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+ * 2c. decode_int64 — int16 (0xd1) byte-order regression
+ *
+ * The 0xd1 path used to memcpy the two big-endian wire bytes into a native
+ * int16_t and byte-swap unconditionally, which is only correct on
+ * little-endian hosts.  Assembly now composes from uint8_t bytes like every
+ * other integer decoder, so these exact values must decode identically on
+ * any host endianness (exercised by the big-endian CI leg).
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_decode_int16_byte_order) {
+    cfgpack_reader_t r;
+    int64_t out;
+
+    LOG_SECTION("decode_int64 int16 (0xd1) exact values");
+
+    {
+        static const struct {
+            uint8_t hi;
+            uint8_t lo;
+            int64_t expect;
+        } cases[] = {
+            {0x12, 0x34, 0x1234}, {0xff, 0xfe, -2},   {0x80, 0x00, -32768},
+            {0x7f, 0xff, 32767},  {0xff, 0x7f, -129}, {0x00, 0x80, 128},
+        };
+        size_t i;
+
+        for (i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+            uint8_t data[] = {0xd1, cases[i].hi, cases[i].lo};
+            cfgpack_reader_init(&r, data, sizeof(data));
+            out = 0;
+            CHECK(cfgpack_msgpack_decode_int64(&r, &out) == CFGPACK_OK);
+            CHECK(out == cases[i].expect);
+            LOG("0xd1 %02x %02x -> %lld (ok)", cases[i].hi, cases[i].lo,
+                (long long)out);
+        }
+    }
+
+    return (TEST_OK);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 2d. skip_value — 32-bit length-field bounds
+ *
+ * str32/bin32 lengths are attacker-controlled up to 0xFFFFFFFF.  The bounds
+ * check used to be written as pos + len > total, which wraps on 32-bit
+ * size_t and lets the cursor move backwards.  The check is now written by
+ * subtraction; a huge declared length must be rejected on every platform
+ * (exercised by the 32-bit CI leg).
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_skip_len32_overflow) {
+    cfgpack_reader_t r;
+
+    LOG_SECTION("skip_value str32/bin32 with near-UINT32_MAX lengths");
+
+    /* str 32 declaring 0xFFFFFFFF bytes in a 6-byte buffer */
+    {
+        uint8_t data[] = {0xdb, 0xff, 0xff, 0xff, 0xff, 0x00};
+        cfgpack_reader_init(&r, data, sizeof(data));
+        CHECK(cfgpack_msgpack_skip_value(&r) == CFGPACK_ERR_DECODE);
+        LOG("str32 len=0xffffffff: ERR_DECODE (ok)");
+    }
+
+    /* bin 32 declaring 0xFFFFFFFB bytes: on 32-bit size_t, pos(5) + len
+     * used to wrap to 0 and pass the old additive check */
+    {
+        uint8_t data[] = {0xc6, 0xff, 0xff, 0xff, 0xfb, 0x00};
+        cfgpack_reader_init(&r, data, sizeof(data));
+        CHECK(cfgpack_msgpack_skip_value(&r) == CFGPACK_ERR_DECODE);
+        LOG("bin32 len=0xfffffffb: ERR_DECODE (ok)");
+    }
+
+    /* str 32 nested one level down: same rejection inside a container */
+    {
+        uint8_t data[] = {0x91, 0xdb, 0xff, 0xff, 0xff, 0xfa};
+        cfgpack_reader_init(&r, data, sizeof(data));
+        CHECK(cfgpack_msgpack_skip_value(&r) == CFGPACK_ERR_DECODE);
+        LOG("nested str32 huge len: ERR_DECODE (ok)");
+    }
+
+    return (TEST_OK);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 2e. encoders — length caps
+ *
+ * encode_str and encode_map_header emit at most 16-bit length headers; a
+ * larger length used to be silently truncated into the header while all the
+ * payload bytes were appended (corrupt output).  They must now refuse.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_encode_length_caps) {
+    uint8_t storage[16];
+    cfgpack_buf_t buf;
+    char dummy = 'x';
+
+    LOG_SECTION("encode_str / encode_map_header reject > 16-bit lengths");
+
+    /* Length is validated before the source pointer is read, so a 1-byte
+     * source with an oversized length is safe here. */
+    cfgpack_buf_init(&buf, storage, sizeof(storage));
+    CHECK(cfgpack_msgpack_encode_str(&buf, &dummy, 0x10000) ==
+          CFGPACK_ERR_ENCODE);
+    CHECK(buf.len == 0);
+    LOG("encode_str len=0x10000: ERR_ENCODE, nothing written (ok)");
+
+    cfgpack_buf_init(&buf, storage, sizeof(storage));
+    CHECK(cfgpack_msgpack_encode_map_header(&buf, 0x10000) ==
+          CFGPACK_ERR_ENCODE);
+    CHECK(buf.len == 0);
+    LOG("encode_map_header count=0x10000: ERR_ENCODE, nothing written (ok)");
+
+    /* Boundary: exactly 0xffff is still legal for a map header */
+    cfgpack_buf_init(&buf, storage, sizeof(storage));
+    CHECK(cfgpack_msgpack_encode_map_header(&buf, 0xffff) == CFGPACK_OK);
+    CHECK(buf.len == 3 && storage[0] == 0xde && storage[1] == 0xff &&
+          storage[2] == 0xff);
+    LOG("encode_map_header count=0xffff: map16 header (ok)");
+
+    return (TEST_OK);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
  * 3. decode_f32 — error paths
  * ═══════════════════════════════════════════════════════════════════════════ */
 TEST_CASE(test_decode_f32_errors) {
@@ -964,6 +1084,12 @@ int main(void) {
     overall |= (test_case_result("decode_int64_full_width_roundtrip",
                                  test_decode_int64_full_width_roundtrip()) !=
                 TEST_OK);
+    overall |= (test_case_result("decode_int16_byte_order",
+                                 test_decode_int16_byte_order()) != TEST_OK);
+    overall |= (test_case_result("skip_len32_overflow",
+                                 test_skip_len32_overflow()) != TEST_OK);
+    overall |= (test_case_result("encode_length_caps",
+                                 test_encode_length_caps()) != TEST_OK);
     overall |= (test_case_result("decode_f32_errors",
                                  test_decode_f32_errors()) != TEST_OK);
     overall |= (test_case_result("decode_f64_errors",

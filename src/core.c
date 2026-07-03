@@ -86,7 +86,8 @@ cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx,
     for (size_t i = 0; i < schema->entry_count; ++i) {
         cfgpack_type_t t = schema->entries[i].type;
         if (t == CFGPACK_TYPE_STR) {
-            if (str_slot >= str_offsets_count) {
+            if (str_slot >= str_offsets_count ||
+                str_slot >= CFGPACK_STR_SLOT_NONE) {
                 return (CFGPACK_ERR_BOUNDS);
             }
             if (pool_offset > UINT16_MAX) {
@@ -97,7 +98,8 @@ cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx,
             str_slot++;
             pool_offset += CFGPACK_STR_MAX + 1;
         } else if (t == CFGPACK_TYPE_FSTR) {
-            if (str_slot >= str_offsets_count) {
+            if (str_slot >= str_offsets_count ||
+                str_slot >= CFGPACK_STR_SLOT_NONE) {
                 return (CFGPACK_ERR_BOUNDS);
             }
             if (pool_offset > UINT16_MAX) {
@@ -144,10 +146,46 @@ static int type_matches(cfgpack_type_t expect, const cfgpack_value_t *v) {
     return (expect == v->type);
 }
 
+/**
+ * @brief Validate a raw STR/FSTR value's pool reference before storing it.
+ *
+ * A caller-constructed value can carry an arbitrary offset; getters and
+ * encoders hand out str_pool + offset, so it must be checked here.
+ * Non-string types pass trivially.
+ */
+static cfgpack_err_t check_str_value(const cfgpack_ctx_t *ctx,
+                                     const cfgpack_value_t *value) {
+    size_t offset;
+    size_t len;
+
+    if (value->type == CFGPACK_TYPE_STR) {
+        offset = value->v.str.offset;
+        len = value->v.str.len;
+        if (len > CFGPACK_STR_MAX) {
+            return (CFGPACK_ERR_STR_TOO_LONG);
+        }
+    } else if (value->type == CFGPACK_TYPE_FSTR) {
+        offset = value->v.fstr.offset;
+        len = value->v.fstr.len;
+        if (len > CFGPACK_FSTR_MAX) {
+            return (CFGPACK_ERR_STR_TOO_LONG);
+        }
+    } else {
+        return (CFGPACK_OK);
+    }
+
+    /* +1 for the NUL terminator the pool invariant guarantees */
+    if (offset + len + 1 > ctx->str_pool_cap) {
+        return (CFGPACK_ERR_BOUNDS);
+    }
+    return (CFGPACK_OK);
+}
+
 cfgpack_err_t cfgpack_set(cfgpack_ctx_t *ctx,
                           uint16_t index,
                           const cfgpack_value_t *value) {
     const cfgpack_entry_t *entry;
+    cfgpack_err_t rc;
     size_t off;
 
     if (!ctx || !value) {
@@ -164,12 +202,9 @@ cfgpack_err_t cfgpack_set(cfgpack_ctx_t *ctx,
     if (!type_matches(entry->type, value)) {
         return (CFGPACK_ERR_TYPE_MISMATCH);
     }
-    if (value->type == CFGPACK_TYPE_STR && value->v.str.len > CFGPACK_STR_MAX) {
-        return (CFGPACK_ERR_STR_TOO_LONG);
-    }
-    if (value->type == CFGPACK_TYPE_FSTR &&
-        value->v.fstr.len > CFGPACK_FSTR_MAX) {
-        return (CFGPACK_ERR_STR_TOO_LONG);
+    rc = check_str_value(ctx, value);
+    if (rc != CFGPACK_OK) {
+        return (rc);
     }
     off = entry_offset(ctx->schema, entry);
     ctx->values[off] = *value;
@@ -206,6 +241,7 @@ cfgpack_err_t cfgpack_set_by_name(cfgpack_ctx_t *ctx,
                                   const char *name,
                                   const cfgpack_value_t *value) {
     const cfgpack_entry_t *entry;
+    cfgpack_err_t rc;
     size_t off;
 
     if (!ctx || !name || !value) {
@@ -219,12 +255,9 @@ cfgpack_err_t cfgpack_set_by_name(cfgpack_ctx_t *ctx,
     if (!type_matches(entry->type, value)) {
         return (CFGPACK_ERR_TYPE_MISMATCH);
     }
-    if (value->type == CFGPACK_TYPE_STR && value->v.str.len > CFGPACK_STR_MAX) {
-        return (CFGPACK_ERR_STR_TOO_LONG);
-    }
-    if (value->type == CFGPACK_TYPE_FSTR &&
-        value->v.fstr.len > CFGPACK_FSTR_MAX) {
-        return (CFGPACK_ERR_STR_TOO_LONG);
+    rc = check_str_value(ctx, value);
+    if (rc != CFGPACK_OK) {
+        return (rc);
     }
     off = entry_offset(ctx->schema, entry);
     ctx->values[off] = *value;
@@ -421,6 +454,9 @@ cfgpack_err_t cfgpack_get_str(const cfgpack_ctx_t *ctx,
     if (!cfgpack_presence_get(ctx, off)) {
         return (CFGPACK_ERR_MISSING);
     }
+    if (check_str_value(ctx, &ctx->values[off]) != CFGPACK_OK) {
+        return (CFGPACK_ERR_BOUNDS);
+    }
 
     *out = ctx->str_pool + ctx->values[off].v.str.offset;
     *len = ctx->values[off].v.str.len;
@@ -453,6 +489,9 @@ cfgpack_err_t cfgpack_get_fstr(const cfgpack_ctx_t *ctx,
     off = entry_offset(ctx->schema, entry);
     if (!cfgpack_presence_get(ctx, off)) {
         return (CFGPACK_ERR_MISSING);
+    }
+    if (check_str_value(ctx, &ctx->values[off]) != CFGPACK_OK) {
+        return (CFGPACK_ERR_BOUNDS);
     }
 
     *out = ctx->str_pool + ctx->values[off].v.fstr.offset;
