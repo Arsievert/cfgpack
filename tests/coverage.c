@@ -499,6 +499,13 @@ TEST_CASE(test_typed_getters_by_name) {
     int64_t i64_val;
     float f32_val;
     double f64_val;
+    /* Compare against variables, not literals: on x87 targets
+     * (FLT_EVAL_METHOD=2, e.g. gcc -m32 -std=c99) a float literal legally
+     * keeps 80-bit excess precision, so `f32_val == 3.14f` is false even
+     * though the round-trip is bit-exact.  Assignment discards the excess
+     * precision; variable-vs-variable comparison widens both identically. */
+    float f32_expect = 3.14f;
+    double f64_expect = 2.71828;
 
     CHECK(cfgpack_get_u16_by_name(&ctx, "t1", &u16_val) == CFGPACK_OK);
     CHECK(u16_val == 65535);
@@ -515,9 +522,9 @@ TEST_CASE(test_typed_getters_by_name) {
     CHECK(cfgpack_get_i64_by_name(&ctx, "t7", &i64_val) == CFGPACK_OK);
     CHECK(i64_val == -9000000000LL);
     CHECK(cfgpack_get_f32_by_name(&ctx, "t8", &f32_val) == CFGPACK_OK);
-    CHECK(f32_val == 3.14f);
+    CHECK(f32_val == f32_expect);
     CHECK(cfgpack_get_f64_by_name(&ctx, "t9", &f64_val) == CFGPACK_OK);
-    CHECK(f64_val == 2.71828);
+    CHECK(f64_val == f64_expect);
     LOG("All 9 typed get_*_by_name calls verified correct values");
 
     return TEST_OK;
