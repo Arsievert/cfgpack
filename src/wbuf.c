@@ -1,3 +1,5 @@
+#include "wbuf.h"
+
 #include "cfgpack/config.h"
 
 #include <stdint.h>
@@ -6,8 +8,6 @@
 #ifdef CFGPACK_HOSTED
   #include <stdio.h>
 #endif
-
-#include "wbuf.h"
 
 /** @copydoc wbuf_init */
 void wbuf_init(wbuf_t *w, char *buf, size_t cap) {

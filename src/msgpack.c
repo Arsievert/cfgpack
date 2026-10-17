@@ -2,18 +2,29 @@
 
 #include "cfgpack/config.h"
 
-#include "wbuf.h"
-
 #include <string.h>
 
 void cfgpack_buf_init(cfgpack_buf_t *buf, uint8_t *storage, size_t cap) {
-    wbuf_init((wbuf_t *)buf, (char *)storage, cap);
+    buf->data = storage;
+    buf->cap = cap;
+    buf->len = 0;
 }
 
+/* Measure semantics, matching wbuf_try_append: on overflow nothing is
+ * written but len still advances, so a caller can learn the required size
+ * from a buffer that was too small. */
 cfgpack_err_t cfgpack_buf_append(cfgpack_buf_t *buf,
                                  const void *src,
                                  size_t len) {
-    return (wbuf_try_append((wbuf_t *)buf, src, len));
+    if (buf->len + len > buf->cap) {
+        buf->len += len;
+        return (CFGPACK_ERR_ENCODE);
+    }
+    if (len > 0) {
+        memcpy(buf->data + buf->len, src, len);
+    }
+    buf->len += len;
+    return (CFGPACK_OK);
 }
 
 cfgpack_err_t cfgpack_msgpack_encode_uint64(cfgpack_buf_t *buf, uint64_t v) {
@@ -198,6 +209,36 @@ cfgpack_err_t cfgpack_msgpack_decode_map_header(cfgpack_reader_t *r,
     return (CFGPACK_ERR_DECODE);
 }
 
+/**
+ * @brief Decode the payload of a uint 8/16/32/64 value whose format byte
+ *        @p b has already been consumed.
+ * @return CFGPACK_OK; CFGPACK_ERR_DECODE if @p b is not a uint format or
+ *         the payload is truncated.
+ */
+static cfgpack_err_t decode_uint_payload(cfgpack_reader_t *r,
+                                         uint8_t b,
+                                         uint64_t *out) {
+    uint64_t res = 0;
+    uint8_t v[8];
+    size_t n;
+
+    switch (b) {
+    case 0xcc: n = 1; break;
+    case 0xcd: n = 2; break;
+    case 0xce: n = 4; break;
+    case 0xcf: n = 8; break;
+    default: return (CFGPACK_ERR_DECODE);
+    }
+    if (read_bytes(r, v, n)) {
+        return (CFGPACK_ERR_DECODE);
+    }
+    for (size_t i = 0; i < n; ++i) {
+        res = (res << 8) | v[i];
+    }
+    *out = res;
+    return (CFGPACK_OK);
+}
+
 cfgpack_err_t cfgpack_msgpack_decode_uint64(cfgpack_reader_t *r,
                                             uint64_t *out) {
     uint8_t b;
@@ -208,48 +249,11 @@ cfgpack_err_t cfgpack_msgpack_decode_uint64(cfgpack_reader_t *r,
         *out = b;
         return (CFGPACK_OK);
     }
-    if (b == 0xcc) {
-        uint8_t v;
-        if (read_bytes(r, &v, 1)) {
-            return (CFGPACK_ERR_DECODE);
-        }
-        *out = v;
-        return (CFGPACK_OK);
-    }
-    if (b == 0xcd) {
-        uint8_t v[2];
-        if (read_bytes(r, v, 2)) {
-            return (CFGPACK_ERR_DECODE);
-        }
-        *out = ((uint16_t)v[0] << 8) | v[1];
-        return (CFGPACK_OK);
-    }
-    if (b == 0xce) {
-        uint8_t v[4];
-        if (read_bytes(r, v, 4)) {
-            return (CFGPACK_ERR_DECODE);
-        }
-        *out = ((uint32_t)v[0] << 24) | ((uint32_t)v[1] << 16) |
-               ((uint32_t)v[2] << 8) | v[3];
-        return (CFGPACK_OK);
-    }
-    if (b == 0xcf) {
-        uint64_t res = 0;
-        uint8_t v[8];
-
-        if (read_bytes(r, v, 8)) {
-            return (CFGPACK_ERR_DECODE);
-        }
-        for (int i = 0; i < 8; ++i) {
-            res = (res << 8) | v[i];
-        }
-        *out = res;
-        return (CFGPACK_OK);
-    }
-    return (CFGPACK_ERR_DECODE);
+    return (decode_uint_payload(r, b, out));
 }
 
 cfgpack_err_t cfgpack_msgpack_decode_int64(cfgpack_reader_t *r, int64_t *out) {
+    uint64_t u;
     uint8_t b;
     if (read_bytes(r, &b, 1)) {
         return (CFGPACK_ERR_DECODE);
@@ -306,7 +310,16 @@ cfgpack_err_t cfgpack_msgpack_decode_int64(cfgpack_reader_t *r, int64_t *out) {
         *out = (int64_t)res;
         return (CFGPACK_OK);
     }
-    return (CFGPACK_ERR_DECODE);
+    /* cfgpack_msgpack_encode_int64 emits non-negative values in the uint
+     * formats, so accept them here as long as the value fits int64_t. */
+    if (decode_uint_payload(r, b, &u) != CFGPACK_OK) {
+        return (CFGPACK_ERR_DECODE);
+    }
+    if (u > (uint64_t)INT64_MAX) {
+        return (CFGPACK_ERR_DECODE);
+    }
+    *out = (int64_t)u;
+    return (CFGPACK_OK);
 }
 
 cfgpack_err_t cfgpack_msgpack_decode_f32(cfgpack_reader_t *r, float *out) {
@@ -382,6 +395,119 @@ cfgpack_err_t cfgpack_msgpack_decode_str(cfgpack_reader_t *r,
     return (CFGPACK_OK);
 }
 
+/**
+ * @brief Advance past @p len payload bytes, refusing to run off the end.
+ *
+ * @p len may be attacker-controlled up to UINT32_MAX; comparing against the
+ * remaining byte count cannot wrap on a 32-bit size_t.
+ */
+static cfgpack_err_t skip_payload(cfgpack_reader_t *r, uint32_t len) {
+    if (len > r->len - r->pos) {
+        return (CFGPACK_ERR_DECODE);
+    }
+    r->pos += len;
+    return (CFGPACK_OK);
+}
+
+/**
+ * @brief Read an @p n byte big-endian unsigned field (n <= 4).
+ * @return CFGPACK_OK, or CFGPACK_ERR_DECODE if the input is truncated.
+ */
+static cfgpack_err_t read_be32(cfgpack_reader_t *r, size_t n, uint32_t *out) {
+    uint32_t res = 0;
+    uint8_t v[4];
+
+    if (read_bytes(r, v, n)) {
+        return (CFGPACK_ERR_DECODE);
+    }
+    for (size_t i = 0; i < n; ++i) {
+        res = (res << 8) | v[i];
+    }
+    *out = res;
+    return (CFGPACK_OK);
+}
+
+/**
+ * @brief Consume one value's format byte and any inline payload.
+ *
+ * Scalars, str and bin values are consumed entirely and @p child_count is
+ * set to 0.  For a non-empty map or array only the header is consumed and
+ * @p child_count receives the number of child values still to skip (map
+ * entries count twice).  Ext types are not supported.
+ */
+static cfgpack_err_t skip_header(cfgpack_reader_t *r, uint32_t *child_count) {
+    cfgpack_err_t rc;
+    uint32_t len;
+    uint8_t b;
+
+    *child_count = 0;
+    if (r->pos >= r->len) {
+        return (CFGPACK_ERR_DECODE);
+    }
+    b = r->data[r->pos++];
+
+    if (b <= 0x7f || b >= 0xe0) {
+        return (CFGPACK_OK); /* positive / negative fixint */
+    }
+    if ((b & 0xe0) == 0xa0) {
+        return (skip_payload(r, b & 0x1f)); /* fixstr */
+    }
+    if ((b & 0xf0) == 0x80) {
+        *child_count = (uint32_t)(b & 0x0f) * 2; /* fixmap */
+        return (CFGPACK_OK);
+    }
+    if ((b & 0xf0) == 0x90) {
+        *child_count = b & 0x0f; /* fixarray */
+        return (CFGPACK_OK);
+    }
+
+    switch (b) {
+    case 0xc0: /* nil */
+    case 0xc2: /* false */
+    case 0xc3: /* true */ return (CFGPACK_OK);
+
+    case 0xcc: /* uint 8 */
+    case 0xd0: /* int 8 */ return (skip_payload(r, 1));
+    case 0xcd: /* uint 16 */
+    case 0xd1: /* int 16 */ return (skip_payload(r, 2));
+    case 0xca: /* float 32 */
+    case 0xce: /* uint 32 */
+    case 0xd2: /* int 32 */ return (skip_payload(r, 4));
+    case 0xcb: /* float 64 */
+    case 0xcf: /* uint 64 */
+    case 0xd3: /* int 64 */ return (skip_payload(r, 8));
+
+    case 0xc4: /* bin 8 */
+    case 0xd9: /* str 8 */
+        rc = read_be32(r, 1, &len);
+        return (rc != CFGPACK_OK ? rc : skip_payload(r, len));
+    case 0xc5: /* bin 16 */
+    case 0xda: /* str 16 */
+        rc = read_be32(r, 2, &len);
+        return (rc != CFGPACK_OK ? rc : skip_payload(r, len));
+    case 0xc6: /* bin 32 */
+    case 0xdb: /* str 32 */
+        rc = read_be32(r, 4, &len);
+        return (rc != CFGPACK_OK ? rc : skip_payload(r, len));
+
+    case 0xdc: /* array 16 */ rc = read_be32(r, 2, child_count); return (rc);
+    case 0xdd: /* array 32 */ rc = read_be32(r, 4, child_count); return (rc);
+    case 0xde: /* map 16 */
+        rc = read_be32(r, 2, &len);
+        *child_count = len * 2;
+        return (rc);
+    case 0xdf: /* map 32 */
+        rc = read_be32(r, 4, &len);
+        if (rc != CFGPACK_OK || len > UINT32_MAX / 2) {
+            return (CFGPACK_ERR_DECODE);
+        }
+        *child_count = len * 2;
+        return (CFGPACK_OK);
+
+    default: return (CFGPACK_ERR_DECODE);
+    }
+}
+
 cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
     /*
      * Iterative msgpack value skipper with bounded stack usage.
@@ -396,258 +522,34 @@ cfgpack_err_t cfgpack_msgpack_skip_value(cfgpack_reader_t *r) {
      * Default 32 levels = 128 bytes, which is safe for embedded targets.
      */
     uint32_t remaining[CFGPACK_SKIP_MAX_DEPTH];
+    uint32_t children;
     uint32_t depth = 0;
+    cfgpack_err_t rc;
+
     remaining[0] = 1; /* skip exactly one top-level value */
 
     do {
-        uint8_t b;
-
-        if (r->pos >= r->len) {
-            return (CFGPACK_ERR_DECODE);
+        rc = skip_header(r, &children);
+        if (rc != CFGPACK_OK) {
+            return (rc);
         }
-        b = r->data[r->pos++];
-
-        /* Positive fixint (0x00-0x7f) and negative fixint (0xe0-0xff) */
-        if (b <= 0x7f || b >= 0xe0) {
-            goto value_done;
-        }
-
-        /* Fixstr (0xa0-0xbf): length in low 5 bits */
-        if ((b & 0xe0) == 0xa0) {
-            uint32_t len = b & 0x1f;
-            if (len > r->len - r->pos) {
-                return (CFGPACK_ERR_DECODE);
-            }
-            r->pos += len;
-            goto value_done;
-        }
-
-        /* Fixmap (0x80-0x8f): count in low 4 bits, each entry = 2 values */
-        if ((b & 0xf0) == 0x80) {
-            uint32_t count = (uint32_t)(b & 0x0f) * 2;
-            if (count == 0) {
-                goto value_done;
-            }
+        if (children > 0) {
             if (depth + 1 >= CFGPACK_SKIP_MAX_DEPTH) {
                 return (CFGPACK_ERR_DECODE);
             }
-            remaining[depth + 1] = count;
-            depth++;
+            remaining[++depth] = children;
             continue;
         }
 
-        /* Fixarray (0x90-0x9f): count in low 4 bits */
-        if ((b & 0xf0) == 0x90) {
-            uint32_t count = b & 0x0f;
-            if (count == 0) {
-                goto value_done;
-            }
-            if (depth + 1 >= CFGPACK_SKIP_MAX_DEPTH) {
-                return (CFGPACK_ERR_DECODE);
-            }
-            remaining[depth + 1] = count;
-            depth++;
-            continue;
-        }
-
-        /* Handle other types by format byte */
-        switch (b) {
-        /* nil, false, true */
-        case 0xc0:
-        case 0xc2:
-        case 0xc3: goto value_done;
-
-        /* bin 8, str 8 */
-        case 0xc4:
-        case 0xd9: {
-            uint8_t len;
-
-            if (r->pos >= r->len) {
-                return (CFGPACK_ERR_DECODE);
-            }
-            len = r->data[r->pos++];
-            if (len > r->len - r->pos) {
-                return (CFGPACK_ERR_DECODE);
-            }
-            r->pos += len;
-            goto value_done;
-        }
-
-        /* bin 16, str 16 */
-        case 0xc5:
-        case 0xda: {
-            uint32_t len;
-
-            if (r->pos + 2 > r->len) {
-                return (CFGPACK_ERR_DECODE);
-            }
-            len = ((uint32_t)r->data[r->pos] << 8) | r->data[r->pos + 1];
-            r->pos += 2;
-            if (len > r->len - r->pos) {
-                return (CFGPACK_ERR_DECODE);
-            }
-            r->pos += len;
-            goto value_done;
-        }
-
-        /* bin 32, str 32 */
-        case 0xc6:
-        case 0xdb: {
-            uint32_t len;
-
-            if (r->pos + 4 > r->len) {
-                return (CFGPACK_ERR_DECODE);
-            }
-            len = ((uint32_t)r->data[r->pos] << 24) |
-                  ((uint32_t)r->data[r->pos + 1] << 16) |
-                  ((uint32_t)r->data[r->pos + 2] << 8) | r->data[r->pos + 3];
-            r->pos += 4;
-            /* len is attacker-controlled up to 0xFFFFFFFF: compare by
-             * subtraction so the check cannot wrap on 32-bit size_t. */
-            if (len > r->len - r->pos) {
-                return (CFGPACK_ERR_DECODE);
-            }
-            r->pos += len;
-            goto value_done;
-        }
-
-        /* float 32, uint 32, int 32 */
-        case 0xca:
-        case 0xce:
-        case 0xd2:
-            if (r->pos + 4 > r->len) {
-                return (CFGPACK_ERR_DECODE);
-            }
-            r->pos += 4;
-            goto value_done;
-
-        /* float 64, uint 64, int 64 */
-        case 0xcb:
-        case 0xcf:
-        case 0xd3:
-            if (r->pos + 8 > r->len) {
-                return (CFGPACK_ERR_DECODE);
-            }
-            r->pos += 8;
-            goto value_done;
-
-        /* uint 8, int 8 */
-        case 0xcc:
-        case 0xd0:
-            if (r->pos + 1 > r->len) {
-                return (CFGPACK_ERR_DECODE);
-            }
-            r->pos += 1;
-            goto value_done;
-
-        /* uint 16, int 16 */
-        case 0xcd:
-        case 0xd1:
-            if (r->pos + 2 > r->len) {
-                return (CFGPACK_ERR_DECODE);
-            }
-            r->pos += 2;
-            goto value_done;
-
-        /* array 16 */
-        case 0xdc: {
-            uint32_t count;
-
-            if (r->pos + 2 > r->len) {
-                return (CFGPACK_ERR_DECODE);
-            }
-            count = ((uint32_t)r->data[r->pos] << 8) | r->data[r->pos + 1];
-            r->pos += 2;
-            if (count == 0) {
-                goto value_done;
-            }
-            if (depth + 1 >= CFGPACK_SKIP_MAX_DEPTH) {
-                return (CFGPACK_ERR_DECODE);
-            }
-            remaining[depth + 1] = count;
-            depth++;
-            continue;
-        }
-
-        /* array 32 */
-        case 0xdd: {
-            uint32_t count;
-
-            if (r->pos + 4 > r->len) {
-                return (CFGPACK_ERR_DECODE);
-            }
-            count = ((uint32_t)r->data[r->pos] << 24) |
-                    ((uint32_t)r->data[r->pos + 1] << 16) |
-                    ((uint32_t)r->data[r->pos + 2] << 8) | r->data[r->pos + 3];
-            r->pos += 4;
-            if (count == 0) {
-                goto value_done;
-            }
-            if (depth + 1 >= CFGPACK_SKIP_MAX_DEPTH) {
-                return (CFGPACK_ERR_DECODE);
-            }
-            remaining[depth + 1] = count;
-            depth++;
-            continue;
-        }
-
-        /* map 16 */
-        case 0xde: {
-            uint32_t count;
-
-            if (r->pos + 2 > r->len) {
-                return (CFGPACK_ERR_DECODE);
-            }
-            count = ((uint32_t)r->data[r->pos] << 8) | r->data[r->pos + 1];
-            r->pos += 2;
-            if (count == 0) {
-                goto value_done;
-            }
-            if (depth + 1 >= CFGPACK_SKIP_MAX_DEPTH) {
-                return (CFGPACK_ERR_DECODE);
-            }
-            remaining[depth + 1] = count * 2;
-            depth++;
-            continue;
-        }
-
-        /* map 32 */
-        case 0xdf: {
-            uint32_t count;
-
-            if (r->pos + 4 > r->len) {
-                return (CFGPACK_ERR_DECODE);
-            }
-            count = ((uint32_t)r->data[r->pos] << 24) |
-                    ((uint32_t)r->data[r->pos + 1] << 16) |
-                    ((uint32_t)r->data[r->pos + 2] << 8) | r->data[r->pos + 3];
-            r->pos += 4;
-            if (count == 0) {
-                goto value_done;
-            }
-            if (count > UINT32_MAX / 2) {
-                return (CFGPACK_ERR_DECODE);
-            }
-            if (depth + 1 >= CFGPACK_SKIP_MAX_DEPTH) {
-                return (CFGPACK_ERR_DECODE);
-            }
-            remaining[depth + 1] = count * 2;
-            depth++;
-            continue;
-        }
-
-        default: return CFGPACK_ERR_DECODE;
-        }
-
-    value_done:
-        /* Decrement the current container's remaining count and unwind. */
+        /* One value finished: decrement the current container's count and
+         * unwind every container that just became empty. */
         while (remaining[depth] > 0) {
             remaining[depth]--;
             if (remaining[depth] > 0) {
                 break; /* more values to skip at this level */
             }
             if (depth == 0) {
-                return CFGPACK_OK; /* all done */
+                return (CFGPACK_OK); /* all done */
             }
             depth--; /* pop to parent container */
         }

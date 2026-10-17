@@ -201,7 +201,7 @@ typedef struct {
  *
  * @param schema Parsed schema.
  * @param out    Filled with sizing information.
- * @return CFGPACK_OK on success.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_ARGS if either pointer is NULL.
  */
 cfgpack_err_t cfgpack_schema_get_sizing(const cfgpack_schema_t *schema,
                                         cfgpack_schema_sizing_t *out);
@@ -262,7 +262,8 @@ cfgpack_err_t cfgpack_schema_measure_json(const char *data,
  * Default values are written directly into opts->values and opts->str_pool.
  * Entries with defaults are marked present in the output.
  *
- * @param data     Input buffer containing schema data (null-terminated).
+ * @param data     Input buffer containing schema data (length given by
+ *                 @p data_len; no NUL terminator required).
  * @param data_len Length of data in bytes.
  * @param opts     Parse options containing output buffers and error pointer.
  * @return CFGPACK_OK on success; CFGPACK_ERR_* on failure.
@@ -303,7 +304,8 @@ typedef struct cfgpack_ctx cfgpack_ctx_t;
  * @param out_cap  Capacity of @p out in bytes.
  * @param out_len  Output: bytes written (always set, even if > out_cap to indicate needed size).
  * @param err      Optional error info on failure.
- * @return CFGPACK_OK on success; CFGPACK_ERR_BOUNDS if buffer too small.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_ARGS if ctx is NULL;
+ *         CFGPACK_ERR_BOUNDS if buffer too small.
  */
 cfgpack_err_t cfgpack_schema_write_json(const cfgpack_ctx_t *ctx,
                                         char *out,
@@ -375,9 +377,13 @@ cfgpack_err_t cfgpack_schema_parse_msgpack(const uint8_t *data,
  * @param ctx      Initialized context containing schema and values.
  * @param out      Output buffer for msgpack binary.
  * @param out_cap  Capacity of @p out in bytes.
- * @param out_len  Output: bytes written.
+ * @param out_len  Output: bytes written (always set, even if > out_cap to
+ *                 indicate the needed size, matching
+ *                 cfgpack_schema_write_json()).
  * @param err      Optional error info on failure.
- * @return CFGPACK_OK on success; CFGPACK_ERR_ENCODE if buffer too small.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_ARGS if ctx is NULL;
+ *         CFGPACK_ERR_ENCODE if buffer too small or the schema has more
+ *         entries than the msgpack array header can describe.
  */
 cfgpack_err_t cfgpack_schema_write_msgpack(const cfgpack_ctx_t *ctx,
                                            uint8_t *out,

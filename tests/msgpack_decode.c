@@ -147,14 +147,38 @@ TEST_CASE(test_decode_int64_positive_and_errors) {
         LOG("0xd3 truncated: ERR_DECODE (ok)");
     }
 
-    LOG_SECTION("decode_int64 invalid format");
+    LOG_SECTION("decode_int64 accepts the uint formats the encoder emits");
 
-    /* 0xcc (uint8) is not handled by int64 decoder */
+    /* cfgpack_msgpack_encode_int64 writes non-negative values as uint 8/16/
+     * 32/64, so the signed decoder must read them back. */
     {
-        uint8_t data[] = {0xcc, 0x05};
-        cfgpack_reader_init(&r, data, sizeof(data));
+        uint8_t u8[] = {0xcc, 0xc8};
+        uint8_t u16[] = {0xcd, 0x01, 0x2c};
+        uint8_t u64_max_ok[] = {0xcf, 0x7f, 0xff, 0xff, 0xff,
+                                0xff, 0xff, 0xff, 0xff};
+        uint8_t u64_too_big[] = {0xcf, 0x80, 0x00, 0x00, 0x00,
+                                 0x00, 0x00, 0x00, 0x00};
+        uint8_t truncated[] = {0xcd, 0x01};
+        uint8_t not_an_int[] = {0xca, 0x00, 0x00, 0x00, 0x00};
+
+        cfgpack_reader_init(&r, u8, sizeof(u8));
+        CHECK(cfgpack_msgpack_decode_int64(&r, &out) == CFGPACK_OK);
+        CHECK(out == 200);
+        cfgpack_reader_init(&r, u16, sizeof(u16));
+        CHECK(cfgpack_msgpack_decode_int64(&r, &out) == CFGPACK_OK);
+        CHECK(out == 300);
+        cfgpack_reader_init(&r, u64_max_ok, sizeof(u64_max_ok));
+        CHECK(cfgpack_msgpack_decode_int64(&r, &out) == CFGPACK_OK);
+        CHECK(out == INT64_MAX);
+        LOG("uint8 200, uint16 300, uint64 INT64_MAX decode (ok)");
+
+        cfgpack_reader_init(&r, u64_too_big, sizeof(u64_too_big));
         CHECK(cfgpack_msgpack_decode_int64(&r, &out) == CFGPACK_ERR_DECODE);
-        LOG("Invalid format 0xcc: ERR_DECODE (ok)");
+        cfgpack_reader_init(&r, truncated, sizeof(truncated));
+        CHECK(cfgpack_msgpack_decode_int64(&r, &out) == CFGPACK_ERR_DECODE);
+        cfgpack_reader_init(&r, not_an_int, sizeof(not_an_int));
+        CHECK(cfgpack_msgpack_decode_int64(&r, &out) == CFGPACK_ERR_DECODE);
+        LOG("uint64 2^63, truncated uint16, float32: ERR_DECODE (ok)");
     }
 
     return (TEST_OK);

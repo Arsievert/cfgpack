@@ -65,6 +65,7 @@ static cfgpack_err_t encode_value(cfgpack_buf_t *buf,
 static cfgpack_err_t pageout_impl(const cfgpack_ctx_t *ctx,
                                   cfgpack_buf_t *buf) {
     size_t present_count = 0;
+    cfgpack_err_t err;
 
     for (size_t i = 0; i < ctx->schema->entry_count; ++i) {
         if (cfgpack_presence_get(ctx, i)) {
@@ -72,14 +73,19 @@ static cfgpack_err_t pageout_impl(const cfgpack_ctx_t *ctx,
         }
     }
 
-    cfgpack_msgpack_encode_map_header(buf, (uint32_t)(present_count + 1));
+    /* Overflow (ERR_ENCODE) is tolerated everywhere below: the buffer keeps
+     * counting so the caller learns the required size.  Any other error
+     * from the header encoder (count out of range) is real. */
+    err = cfgpack_msgpack_encode_map_header(buf, (uint32_t)(present_count + 1));
+    if (err != CFGPACK_OK && err != CFGPACK_ERR_ENCODE) {
+        return (err);
+    }
     cfgpack_msgpack_encode_uint_key(buf, CFGPACK_INDEX_RESERVED_NAME);
     cfgpack_msgpack_encode_str(buf, ctx->schema->map_name,
                                strlen(ctx->schema->map_name));
 
     for (size_t i = 0; i < ctx->schema->entry_count; ++i) {
         const cfgpack_entry_t *e = &ctx->schema->entries[i];
-        cfgpack_err_t err;
         if (!cfgpack_presence_get(ctx, i)) {
             continue;
         }
@@ -331,8 +337,7 @@ static cfgpack_err_t decode_value(cfgpack_reader_t *r,
  * - String widening: fstr->str.
  */
 /* clang-format off */
-#define _N  12  /* Number of cfgpack types */
-static const uint8_t coerce_table[_N][_N] = {
+static const uint8_t coerce_table[CFGPACK_TYPE_COUNT][CFGPACK_TYPE_COUNT] = {
     /*               U8 U16 U32 U64  I8 I16 I32 I64 F32 F64 STR FSTR */
     /* U8   */ {      1,  1,  1,  1,  1,  1,  1,  1,  0,  0,  0,  0 },
     /* U16  */ {      0,  1,  1,  1,  0,  1,  1,  1,  0,  0,  0,  0 },
@@ -347,7 +352,6 @@ static const uint8_t coerce_table[_N][_N] = {
     /* STR  */ {      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0 },
     /* FSTR */ {      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1 },
 };
-#undef _N
 /* clang-format on */
 
 /**
@@ -359,7 +363,8 @@ static const uint8_t coerce_table[_N][_N] = {
  */
 static int can_coerce_type(cfgpack_type_t wire_type,
                            cfgpack_type_t schema_type) {
-    if ((unsigned)wire_type >= 12 || (unsigned)schema_type >= 12) {
+    if ((unsigned)wire_type >= CFGPACK_TYPE_COUNT ||
+        (unsigned)schema_type >= CFGPACK_TYPE_COUNT) {
         return (0);
     }
     return (coerce_table[wire_type][schema_type]);
@@ -449,15 +454,11 @@ static cfgpack_err_t decode_value_with_coercion(cfgpack_reader_t *r,
     }
 
     /*
-     * Cross-type coercion: decode using the wire type first, then convert.
-     *
-     * Unsigned widening (u8->u16, etc.) and signed widening (i8->i16, etc.)
-     * work via decode_value directly because decode_uint64 handles all
-     * unsigned formats and decode_int64 handles all signed formats.
-     *
-     * The cases that need explicit conversion:
-     *   - unsigned wire -> signed schema (decode_int64 can't parse 0xcc-0xcf)
-     *   - f32 wire -> f64 schema (decode_f64 can't parse 0xca)
+     * Cross-type coercion.  Same-family widening (u8->u16, i8->i16, ...)
+     * decodes directly with the schema type.  Two cases are handled
+     * explicitly: unsigned wire -> signed schema, so that a value above the
+     * signed width reports TYPE_MISMATCH rather than the decoder's generic
+     * DECODE, and f32 wire -> f64 schema, which needs a float widening.
      */
     wire_is_unsigned = (wire_type == CFGPACK_TYPE_U8 ||
                         wire_type == CFGPACK_TYPE_U16 ||

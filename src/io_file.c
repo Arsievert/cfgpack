@@ -24,8 +24,8 @@
  * @param scratch_cap Capacity of scratch buffer.
  * @param binary      Non-zero to open in binary mode without a terminator.
  * @param out_len     Output: bytes read.
- * @return CFGPACK_OK on success, CFGPACK_ERR_IO on open/read error or if
- *         the file does not fit.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_ARGS on NULL path or scratch;
+ *         CFGPACK_ERR_IO on open/read error or if the file does not fit.
  */
 static cfgpack_err_t read_file_impl(const char *path,
                                     void *scratch,
@@ -36,8 +36,8 @@ static cfgpack_err_t read_file_impl(const char *path,
     size_t n;
     FILE *f;
 
-    if (!scratch || scratch_cap == 0) {
-        return (CFGPACK_ERR_IO);
+    if (!path || !scratch || scratch_cap == 0) {
+        return (CFGPACK_ERR_ARGS);
     }
     want = binary ? scratch_cap : scratch_cap - 1;
 
@@ -96,7 +96,12 @@ static cfgpack_err_t write_file_impl(const char *path,
                                      const void *data,
                                      size_t len,
                                      int binary) {
-    FILE *f = fopen(path, binary ? "wb" : "w");
+    FILE *f;
+
+    if (!path || (!data && len > 0)) {
+        return (CFGPACK_ERR_ARGS);
+    }
+    f = fopen(path, binary ? "wb" : "w");
     if (!f) {
         return (CFGPACK_ERR_IO);
     }
@@ -168,6 +173,9 @@ cfgpack_err_t cfgpack_parse_schema_file(const char *path,
     cfgpack_err_t rc;
     size_t len = 0;
 
+    if (!opts) {
+        return (CFGPACK_ERR_ARGS);
+    }
     rc = read_file(path, scratch, scratch_cap, &len);
     if (rc != CFGPACK_OK) {
         if (opts->err) {
@@ -186,6 +194,9 @@ cfgpack_err_t cfgpack_schema_parse_json_file(const char *path,
     cfgpack_err_t rc;
     size_t len = 0;
 
+    if (!opts) {
+        return (CFGPACK_ERR_ARGS);
+    }
     rc = read_file(path, scratch, scratch_cap, &len);
     if (rc != CFGPACK_OK) {
         if (opts->err) {

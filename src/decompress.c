@@ -22,7 +22,7 @@ cfgpack_err_t cfgpack_pagein_lz4(cfgpack_ctx_t *ctx,
     int result;
 
     if (!ctx || !data || !scratch) {
-        return (CFGPACK_ERR_DECODE);
+        return (CFGPACK_ERR_ARGS);
     }
     if (decompressed_size > scratch_cap) {
         return (CFGPACK_ERR_BOUNDS);
@@ -112,7 +112,7 @@ cfgpack_err_t cfgpack_pagein_heatshrink(cfgpack_ctx_t *ctx,
     size_t sunk;
 
     if (!ctx || !data || !scratch) {
-        return (CFGPACK_ERR_DECODE);
+        return (CFGPACK_ERR_ARGS);
     }
 
     heatshrink_decoder_reset(&hs_decoder);

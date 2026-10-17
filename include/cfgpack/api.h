@@ -21,7 +21,6 @@
 
 #include <limits.h>
 #include <stddef.h>
-#include <string.h>
 
 /**
  * @brief Reserved index for schema name.
@@ -110,8 +109,10 @@ static inline void cfgpack_presence_clear(cfgpack_ctx_t *ctx, size_t idx) {
  * @param str_pool_cap     Capacity of @p str_pool in bytes.
  * @param str_offsets      Caller-owned array for string offsets (str_count + fstr_count).
  * @param str_offsets_count Number of elements in @p str_offsets.
- * @return CFGPACK_OK on success; CFGPACK_ERR_BOUNDS if buffers are too small
- *         or schema has more than CFGPACK_MAX_ENTRIES entries.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_ARGS if ctx or schema is NULL,
+ *         or a buffer pointer is NULL while its count/capacity is non-zero;
+ *         CFGPACK_ERR_BOUNDS if buffers are too small or schema has more
+ *         than CFGPACK_MAX_ENTRIES entries.
  */
 cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx,
                            cfgpack_schema_t *schema,
@@ -839,13 +840,14 @@ cfgpack_err_t cfgpack_pagein_buf(cfgpack_ctx_t *ctx,
  * @brief Print a single present value by index to stdout.
  *
  * @note In embedded mode (CFGPACK_EMBEDDED, the default), this function
- *       is a silent no-op that returns CFGPACK_OK. Compile with
- *       -DCFGPACK_HOSTED to enable actual printf output.
+ *       prints nothing. Compile with -DCFGPACK_HOSTED to enable printf
+ *       output. Argument validation is identical in both modes.
  *
  * @param ctx   Initialized context.
  * @param index Schema index to print.
- * @return CFGPACK_OK on success; CFGPACK_ERR_MISSING if absent or unknown
- *         (hosted mode only).
+ * @return CFGPACK_OK on success; CFGPACK_ERR_ARGS if ctx is NULL;
+ *         CFGPACK_ERR_RESERVED_INDEX for index 0; CFGPACK_ERR_MISSING if
+ *         absent or unknown (hosted mode only).
  */
 cfgpack_err_t cfgpack_print(const cfgpack_ctx_t *ctx, uint16_t index);
 
@@ -853,25 +855,25 @@ cfgpack_err_t cfgpack_print(const cfgpack_ctx_t *ctx, uint16_t index);
  * @brief Print all present values to stdout.
  *
  * @note In embedded mode (CFGPACK_EMBEDDED, the default), this function
- *       is a silent no-op that returns CFGPACK_OK. Compile with
- *       -DCFGPACK_HOSTED to enable actual printf output.
+ *       prints nothing. Compile with -DCFGPACK_HOSTED to enable printf
+ *       output.
  *
  * @param ctx Initialized context.
- * @return CFGPACK_OK on success.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_ARGS if ctx is NULL.
  */
 cfgpack_err_t cfgpack_print_all(const cfgpack_ctx_t *ctx);
 
 /**
  * @brief Return schema version.
  * @param ctx Initialized context.
- * @return Schema version from the map header.
+ * @return Schema version from the map header, or 0 if ctx is NULL.
  */
 uint32_t cfgpack_get_version(const cfgpack_ctx_t *ctx);
 
 /**
  * @brief Return count of present values.
  * @param ctx Initialized context.
- * @return Number of entries marked present.
+ * @return Number of entries marked present, or 0 if ctx is NULL.
  */
 size_t cfgpack_get_size(const cfgpack_ctx_t *ctx);
 

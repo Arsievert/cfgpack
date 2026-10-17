@@ -1,6 +1,7 @@
 /* Tests for NULL / bad argument handling (CFGPACK_ERR_ARGS paths). */
 
 #include "cfgpack/cfgpack.h"
+#include "cfgpack/io_file.h"
 
 #include "test.h"
 
@@ -780,6 +781,132 @@ TEST_CASE(test_measure_json_null_out) {
     return TEST_OK;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ * NULL guards that were missing or inconsistent across sibling functions
+ * ═══════════════════════════════════════════════════════════════════════════ */
+TEST_CASE(test_init_null_buffers_with_nonzero_counts) {
+    LOG_SECTION("cfgpack_init rejects NULL buffers with non-zero counts");
+
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[1];
+    cfgpack_value_t values[1];
+    char str_pool[8];
+    uint16_t str_offsets[1];
+    cfgpack_ctx_t ctx;
+
+    make_schema(&schema, entries, 1);
+    CHECK(cfgpack_init(&ctx, &schema, NULL, 1, str_pool, sizeof(str_pool),
+                       str_offsets, 1) == CFGPACK_ERR_ARGS);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, NULL, sizeof(str_pool),
+                       str_offsets, 1) == CFGPACK_ERR_ARGS);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, str_pool, sizeof(str_pool),
+                       NULL, 1) == CFGPACK_ERR_ARGS);
+    LOG("NULL values / str_pool / str_offsets with counts -> ERR_ARGS");
+
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, NULL, 0, NULL, 0) ==
+          CFGPACK_OK);
+    LOG("NULL pool and offsets with zero counts still OK");
+
+    return TEST_OK;
+}
+
+TEST_CASE(test_query_functions_null_ctx) {
+    LOG_SECTION("get_version / get_size / print / print_all with NULL ctx");
+
+    CHECK(cfgpack_get_version(NULL) == 0);
+    CHECK(cfgpack_get_size(NULL) == 0);
+    CHECK(cfgpack_print(NULL, 1) == CFGPACK_ERR_ARGS);
+    CHECK(cfgpack_print_all(NULL) == CFGPACK_ERR_ARGS);
+    LOG("NULL ctx -> 0 / ERR_ARGS");
+
+    return TEST_OK;
+}
+
+TEST_CASE(test_print_reserved_index) {
+    LOG_SECTION("cfgpack_print rejects index 0 like cfgpack_get");
+
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[3];
+    cfgpack_value_t values[3];
+    char str_pool[128];
+    uint16_t str_offsets[2];
+    cfgpack_ctx_t ctx;
+
+    CHECK(make_ctx(&ctx, &schema, entries, values, str_pool, sizeof(str_pool),
+                   str_offsets) == CFGPACK_OK);
+    CHECK(cfgpack_print(&ctx, 0) == CFGPACK_ERR_RESERVED_INDEX);
+    LOG("index 0 -> ERR_RESERVED_INDEX");
+
+    return TEST_OK;
+}
+
+TEST_CASE(test_schema_helpers_null_args) {
+    LOG_SECTION("get_sizing / write_json / write_msgpack NULL guards");
+
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[3];
+    cfgpack_value_t values[3];
+    char str_pool[128];
+    uint16_t str_offsets[2];
+    cfgpack_schema_sizing_t sizing;
+    cfgpack_parse_error_t err;
+    cfgpack_ctx_t ctx;
+    uint8_t mp[256];
+    char js[512];
+    size_t n = 0;
+
+    CHECK(cfgpack_schema_get_sizing(NULL, &sizing) == CFGPACK_ERR_ARGS);
+    CHECK(cfgpack_schema_write_json(NULL, js, sizeof(js), &n, &err) ==
+          CFGPACK_ERR_ARGS);
+    CHECK(cfgpack_schema_write_msgpack(NULL, mp, sizeof(mp), &n, &err) ==
+          CFGPACK_ERR_ARGS);
+    LOG("NULL schema / ctx -> ERR_ARGS");
+
+    CHECK(make_ctx(&ctx, &schema, entries, values, str_pool, sizeof(str_pool),
+                   str_offsets) == CFGPACK_OK);
+    CHECK(cfgpack_schema_get_sizing(&schema, NULL) == CFGPACK_ERR_ARGS);
+    CHECK(cfgpack_schema_write_json(&ctx, NULL, 16, &n, &err) ==
+          CFGPACK_ERR_ARGS);
+    CHECK(cfgpack_schema_write_msgpack(&ctx, NULL, 16, &n, &err) ==
+          CFGPACK_ERR_ARGS);
+    LOG("NULL out with non-zero capacity -> ERR_ARGS");
+
+    /* NULL out with zero capacity is the measure idiom: both writers must
+     * report the required size the same way. */
+    CHECK(cfgpack_schema_write_json(&ctx, NULL, 0, &n, NULL) ==
+          CFGPACK_ERR_BOUNDS);
+    CHECK(n > 0);
+    CHECK(cfgpack_schema_write_json(&ctx, js, n, &n, NULL) == CFGPACK_OK);
+    n = 0;
+    CHECK(cfgpack_schema_write_msgpack(&ctx, NULL, 0, &n, NULL) ==
+          CFGPACK_ERR_ENCODE);
+    CHECK(n > 0);
+    CHECK(cfgpack_schema_write_msgpack(&ctx, mp, n - 1, &n, NULL) ==
+          CFGPACK_ERR_ENCODE);
+    CHECK(cfgpack_schema_write_msgpack(&ctx, mp, n, &n, NULL) == CFGPACK_OK);
+    LOG("measure idiom reports needed size for both writers (%zu bytes)", n);
+
+    return TEST_OK;
+}
+
+TEST_CASE(test_file_wrappers_null_args) {
+    LOG_SECTION("io_file wrappers with NULL opts / path");
+
+    char scratch[64];
+    cfgpack_schema_measure_t m;
+    cfgpack_parse_error_t err;
+
+    CHECK(cfgpack_parse_schema_file("tests/data/basic.map", NULL, scratch,
+                                    sizeof(scratch)) == CFGPACK_ERR_ARGS);
+    CHECK(cfgpack_schema_parse_json_file("x.json", NULL, scratch,
+                                         sizeof(scratch)) == CFGPACK_ERR_ARGS);
+    CHECK(cfgpack_schema_measure_file(NULL, &m, scratch, sizeof(scratch),
+                                      &err) == CFGPACK_ERR_ARGS);
+    LOG("NULL opts / NULL path -> ERR_ARGS");
+
+    return TEST_OK;
+}
+
 int main(void) {
     test_result_t overall = TEST_OK;
 
@@ -882,6 +1009,17 @@ int main(void) {
                                  test_measure_json_null_data()) != TEST_OK);
     overall |= (test_case_result("measure_json_null_out",
                                  test_measure_json_null_out()) != TEST_OK);
+    overall |= (test_case_result(
+                    "init_null_buffers_with_nonzero_counts",
+                    test_init_null_buffers_with_nonzero_counts()) != TEST_OK);
+    overall |= (test_case_result("query_functions_null_ctx",
+                                 test_query_functions_null_ctx()) != TEST_OK);
+    overall |= (test_case_result("print_reserved_index",
+                                 test_print_reserved_index()) != TEST_OK);
+    overall |= (test_case_result("schema_helpers_null_args",
+                                 test_schema_helpers_null_args()) != TEST_OK);
+    overall |= (test_case_result("file_wrappers_null_args",
+                                 test_file_wrappers_null_args()) != TEST_OK);
 
     if (overall == TEST_OK) {
         printf(COLOR_GREEN "ALL PASS" COLOR_RESET "\n");

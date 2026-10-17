@@ -38,7 +38,8 @@
  * @param scratch_cap       Capacity of scratch buffer in bytes.
  * @return CFGPACK_OK on success;
  *         CFGPACK_ERR_BOUNDS if decompressed_size > scratch_cap;
- *         CFGPACK_ERR_DECODE on decompression failure or NULL arguments;
+ *         CFGPACK_ERR_ARGS on NULL arguments;
+ *         CFGPACK_ERR_DECODE on decompression failure;
  *         Other errors from cfgpack_pagein_buf().
  */
 cfgpack_err_t cfgpack_pagein_lz4(cfgpack_ctx_t *ctx,
@@ -70,7 +71,8 @@ cfgpack_err_t cfgpack_pagein_lz4(cfgpack_ctx_t *ctx,
  * @param scratch_cap Capacity of scratch buffer in bytes.
  * @return CFGPACK_OK on success;
  *         CFGPACK_ERR_BOUNDS if decompressed data exceeds scratch_cap;
- *         CFGPACK_ERR_DECODE on decompression failure or NULL arguments;
+ *         CFGPACK_ERR_ARGS on NULL arguments;
+ *         CFGPACK_ERR_DECODE on decompression failure;
  *         Other errors from cfgpack_pagein_buf().
  */
 cfgpack_err_t cfgpack_pagein_heatshrink(cfgpack_ctx_t *ctx,

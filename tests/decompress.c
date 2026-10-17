@@ -426,18 +426,18 @@ TEST_CASE(test_lz4_null_args) {
 
     LOG("Testing cfgpack_pagein_lz4(NULL, data, 10, 20, scratch, BUF_SIZE)");
     CHECK(cfgpack_pagein_lz4(NULL, compressed_buf, 10, 20, scratch_buf,
-                             BUF_SIZE) == CFGPACK_ERR_DECODE);
-    LOG("Correctly returned CFGPACK_ERR_DECODE for NULL ctx");
+                             BUF_SIZE) == CFGPACK_ERR_ARGS);
+    LOG("Correctly returned CFGPACK_ERR_ARGS for NULL ctx");
 
     LOG("Testing cfgpack_pagein_lz4(ctx, NULL, 10, 20, scratch, BUF_SIZE)");
     CHECK(cfgpack_pagein_lz4(&ctx, NULL, 10, 20, scratch_buf, BUF_SIZE) ==
-          CFGPACK_ERR_DECODE);
-    LOG("Correctly returned CFGPACK_ERR_DECODE for NULL data");
+          CFGPACK_ERR_ARGS);
+    LOG("Correctly returned CFGPACK_ERR_ARGS for NULL data");
 
     LOG("Testing cfgpack_pagein_lz4(ctx, data, 10, 20, NULL, BUF_SIZE)");
     CHECK(cfgpack_pagein_lz4(&ctx, compressed_buf, 10, 20, NULL, BUF_SIZE) ==
-          CFGPACK_ERR_DECODE);
-    LOG("Correctly returned CFGPACK_ERR_DECODE for NULL scratch");
+          CFGPACK_ERR_ARGS);
+    LOG("Correctly returned CFGPACK_ERR_ARGS for NULL scratch");
 
     LOG("Test completed successfully");
     return TEST_OK;
@@ -605,18 +605,18 @@ TEST_CASE(test_heatshrink_null_args) {
 
     LOG("Testing cfgpack_pagein_heatshrink(NULL, data, 10, scratch, BUF_SIZE)");
     CHECK(cfgpack_pagein_heatshrink(NULL, compressed_buf, 10, scratch_buf,
-                                    BUF_SIZE) == CFGPACK_ERR_DECODE);
-    LOG("Correctly returned CFGPACK_ERR_DECODE for NULL ctx");
+                                    BUF_SIZE) == CFGPACK_ERR_ARGS);
+    LOG("Correctly returned CFGPACK_ERR_ARGS for NULL ctx");
 
     LOG("Testing cfgpack_pagein_heatshrink(ctx, NULL, 10, scratch, BUF_SIZE)");
     CHECK(cfgpack_pagein_heatshrink(&ctx, NULL, 10, scratch_buf, BUF_SIZE) ==
-          CFGPACK_ERR_DECODE);
-    LOG("Correctly returned CFGPACK_ERR_DECODE for NULL data");
+          CFGPACK_ERR_ARGS);
+    LOG("Correctly returned CFGPACK_ERR_ARGS for NULL data");
 
     LOG("Testing cfgpack_pagein_heatshrink(ctx, data, 10, NULL, BUF_SIZE)");
     CHECK(cfgpack_pagein_heatshrink(&ctx, compressed_buf, 10, NULL, BUF_SIZE) ==
-          CFGPACK_ERR_DECODE);
-    LOG("Correctly returned CFGPACK_ERR_DECODE for NULL scratch");
+          CFGPACK_ERR_ARGS);
+    LOG("Correctly returned CFGPACK_ERR_ARGS for NULL scratch");
 
     LOG("Test completed successfully");
     return TEST_OK;

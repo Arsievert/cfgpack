@@ -125,8 +125,11 @@ cfgpack_err_t cfgpack_pageout_file(const cfgpack_ctx_t *ctx,
  * @param path         Source file path.
  * @param scratch      Scratch buffer to hold file contents.
  * @param scratch_cap  Capacity of @p scratch.
- * @return CFGPACK_OK on success; CFGPACK_ERR_IO on read/size errors;
- *         CFGPACK_ERR_DECODE if payload is invalid.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_ARGS on NULL arguments;
+ *         CFGPACK_ERR_IO on read/size errors; CFGPACK_ERR_CRC on checksum
+ *         mismatch; CFGPACK_ERR_DECODE if payload is malformed;
+ *         CFGPACK_ERR_TYPE_MISMATCH or CFGPACK_ERR_STR_TOO_LONG if a value
+ *         does not fit the schema. The context is unchanged on any error.
  */
 cfgpack_err_t cfgpack_pagein_file(cfgpack_ctx_t *ctx,
                                   const char *path,

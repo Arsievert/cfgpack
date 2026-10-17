@@ -23,4 +23,4 @@
  */
 uint32_t cfgpack_crc32c(const uint8_t *data, size_t len);
 
-#endif
+#endif /* CFGPACK_CRC32_H */

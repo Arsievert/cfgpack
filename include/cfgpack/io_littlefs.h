@@ -35,9 +35,10 @@
  * @param path         Destination file path within LittleFS.
  * @param scratch      Scratch buffer (must be >= cfg->cache_size + encoded size).
  * @param scratch_cap  Capacity of @p scratch in bytes.
- * @return CFGPACK_OK on success; CFGPACK_ERR_ENCODE if data portion too small;
- *         CFGPACK_ERR_BOUNDS if scratch < cache_size;
- *         CFGPACK_ERR_IO on LittleFS write failures.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_ARGS on NULL arguments;
+ *         CFGPACK_ERR_ENCODE if data portion too small;
+ *         CFGPACK_ERR_BOUNDS if scratch_cap <= cfg->cache_size (no room
+ *         for data); CFGPACK_ERR_IO on LittleFS write or commit failures.
  */
 cfgpack_err_t cfgpack_pageout_lfs(const cfgpack_ctx_t *ctx,
                                   lfs_t *lfs,
@@ -57,9 +58,12 @@ cfgpack_err_t cfgpack_pageout_lfs(const cfgpack_ctx_t *ctx,
  * @param path         Source file path within LittleFS.
  * @param scratch      Scratch buffer (must be >= cfg->cache_size + file size).
  * @param scratch_cap  Capacity of @p scratch.
- * @return CFGPACK_OK on success; CFGPACK_ERR_BOUNDS if scratch < cache_size;
- *         CFGPACK_ERR_IO on read/size errors;
- *         CFGPACK_ERR_DECODE if payload is invalid.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_ARGS on NULL arguments;
+ *         CFGPACK_ERR_BOUNDS if scratch_cap <= cfg->cache_size;
+ *         CFGPACK_ERR_IO on read/size errors; CFGPACK_ERR_CRC on checksum
+ *         mismatch; CFGPACK_ERR_DECODE if payload is malformed;
+ *         CFGPACK_ERR_TYPE_MISMATCH or CFGPACK_ERR_STR_TOO_LONG if a value
+ *         does not fit the schema. The context is unchanged on any error.
  */
 cfgpack_err_t cfgpack_pagein_lfs(cfgpack_ctx_t *ctx,
                                  lfs_t *lfs,

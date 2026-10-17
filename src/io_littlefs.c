@@ -32,8 +32,12 @@ static cfgpack_err_t split_scratch(const lfs_t *lfs,
                                    uint8_t **file_cache,
                                    uint8_t **data_buf,
                                    size_t *data_cap) {
-    lfs_size_t cache_size = lfs->cfg->cache_size;
+    lfs_size_t cache_size;
 
+    if (!lfs || !lfs->cfg || !scratch) {
+        return (CFGPACK_ERR_ARGS);
+    }
+    cache_size = lfs->cfg->cache_size;
     if (scratch_cap <= cache_size) {
         return (CFGPACK_ERR_BOUNDS);
     }
@@ -135,6 +139,9 @@ cfgpack_err_t cfgpack_pageout_lfs(const cfgpack_ctx_t *ctx,
     size_t data_cap;
     size_t len = 0;
 
+    if (!ctx || !path) {
+        return (CFGPACK_ERR_ARGS);
+    }
     rc = split_scratch(lfs, scratch, scratch_cap, &file_cache, &data_buf,
                        &data_cap);
     if (rc != CFGPACK_OK) {
@@ -160,6 +167,9 @@ cfgpack_err_t cfgpack_pagein_lfs(cfgpack_ctx_t *ctx,
     size_t data_cap;
     size_t len = 0;
 
+    if (!ctx || !path) {
+        return (CFGPACK_ERR_ARGS);
+    }
     rc = split_scratch(lfs, scratch, scratch_cap, &file_cache, &data_buf,
                        &data_cap);
     if (rc != CFGPACK_OK) {

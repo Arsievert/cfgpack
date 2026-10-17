@@ -587,6 +587,30 @@ TEST_CASE(test_buf_append_overflow) {
     return TEST_OK;
 }
 
+/*
+ * Regression: encode_int64 emits non-negative values in uint formats, which
+ * decode_int64 used to reject, so the public pair could not round-trip 200.
+ */
+TEST_CASE(test_encode_decode_int64_positive_roundtrip) {
+    static const int64_t cases[] = {0,   127,   128,   200,          255,
+                                    256, 65535, 65536, 5000000000LL, INT64_MAX};
+    uint8_t storage[16];
+    cfgpack_buf_t buf;
+    cfgpack_reader_t r;
+    int64_t out;
+
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        cfgpack_buf_init(&buf, storage, sizeof(storage));
+        CHECK(cfgpack_msgpack_encode_int64(&buf, cases[i]) == CFGPACK_OK);
+        cfgpack_reader_init(&r, storage, buf.len);
+        CHECK(cfgpack_msgpack_decode_int64(&r, &out) == CFGPACK_OK);
+        CHECK(out == cases[i]);
+        CHECK(r.pos == buf.len);
+    }
+    LOG("10 non-negative int64 values round-trip through encode/decode");
+    return (TEST_OK);
+}
+
 int main(void) {
     test_result_t overall = TEST_OK;
 
@@ -620,6 +644,9 @@ int main(void) {
                                  test_encode_decode_map_header()) != TEST_OK);
     overall |= (test_case_result("skip_value_all_types",
                                  test_skip_value_all_types()) != TEST_OK);
+    overall |= (test_case_result(
+                    "encode_decode_int64_positive_roundtrip",
+                    test_encode_decode_int64_positive_roundtrip()) != TEST_OK);
     overall |= (test_case_result("buf_append_overflow",
                                  test_buf_append_overflow()) != TEST_OK);
 

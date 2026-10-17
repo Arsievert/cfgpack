@@ -75,6 +75,11 @@ cfgpack_err_t cfgpack_init(cfgpack_ctx_t *ctx,
     if (!ctx || !schema) {
         return (CFGPACK_ERR_ARGS);
     }
+    if ((!values && schema->entry_count > 0) ||
+        (!str_pool && str_pool_cap > 0) ||
+        (!str_offsets && str_offsets_count > 0)) {
+        return (CFGPACK_ERR_ARGS);
+    }
 
     if (schema->entry_count > CFGPACK_MAX_ENTRIES) {
         return (CFGPACK_ERR_BOUNDS);
@@ -546,11 +551,18 @@ cfgpack_err_t cfgpack_get_fstr_by_name(const cfgpack_ctx_t *ctx,
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 uint32_t cfgpack_get_version(const cfgpack_ctx_t *ctx) {
+    if (!ctx || !ctx->schema) {
+        return (0);
+    }
     return (ctx->schema->version);
 }
 
 size_t cfgpack_get_size(const cfgpack_ctx_t *ctx) {
     size_t count = 0;
+
+    if (!ctx || !ctx->schema) {
+        return (0);
+    }
     for (size_t i = 0; i < ctx->schema->entry_count; ++i) {
         if (cfgpack_presence_get(ctx, i)) {
             count++;
@@ -585,9 +597,16 @@ static void print_value(const cfgpack_ctx_t *ctx, size_t entry_off) {
 }
 
 cfgpack_err_t cfgpack_print(const cfgpack_ctx_t *ctx, uint16_t index) {
-    const cfgpack_entry_t *entry = find_entry(ctx->schema, index);
+    const cfgpack_entry_t *entry;
     size_t off;
 
+    if (!ctx) {
+        return (CFGPACK_ERR_ARGS);
+    }
+    if (index == 0) {
+        return (CFGPACK_ERR_RESERVED_INDEX);
+    }
+    entry = find_entry(ctx->schema, index);
     if (!entry) {
         return (CFGPACK_ERR_MISSING);
     }
@@ -602,6 +621,9 @@ cfgpack_err_t cfgpack_print(const cfgpack_ctx_t *ctx, uint16_t index) {
 }
 
 cfgpack_err_t cfgpack_print_all(const cfgpack_ctx_t *ctx) {
+    if (!ctx) {
+        return (CFGPACK_ERR_ARGS);
+    }
     for (size_t i = 0; i < ctx->schema->entry_count; ++i) {
         const cfgpack_entry_t *e = &ctx->schema->entries[i];
         if (!cfgpack_presence_get(ctx, i)) {
@@ -617,13 +639,19 @@ cfgpack_err_t cfgpack_print_all(const cfgpack_ctx_t *ctx) {
 #else /* CFGPACK_EMBEDDED */
 
 cfgpack_err_t cfgpack_print(const cfgpack_ctx_t *ctx, uint16_t index) {
-    (void)ctx;
-    (void)index;
+    if (!ctx) {
+        return (CFGPACK_ERR_ARGS);
+    }
+    if (index == 0) {
+        return (CFGPACK_ERR_RESERVED_INDEX);
+    }
     return (CFGPACK_OK);
 }
 
 cfgpack_err_t cfgpack_print_all(const cfgpack_ctx_t *ctx) {
-    (void)ctx;
+    if (!ctx) {
+        return (CFGPACK_ERR_ARGS);
+    }
     return (CFGPACK_OK);
 }
 

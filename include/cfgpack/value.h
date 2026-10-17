@@ -32,6 +32,9 @@ typedef enum {
     CFGPACK_TYPE_FSTR
 } cfgpack_type_t;
 
+/** Number of values in cfgpack_type_t (for tables indexed by type). */
+#define CFGPACK_TYPE_COUNT (CFGPACK_TYPE_FSTR + 1)
+
 /** Maximum variable string length (bytes). */
 #define CFGPACK_STR_MAX 64
 /** Maximum fixed string length (bytes). */
