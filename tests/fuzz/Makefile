@@ -31,6 +31,7 @@ LIBSRC := $(ROOT)/src/core.c           \
           $(ROOT)/src/tokens.c          \
           $(ROOT)/src/wbuf.c            \
           $(ROOT)/src/io_file.c         \
+          $(ROOT)/src/parse_error_str.c \
           $(ROOT)/third_party/lz4/lz4.c \
           $(ROOT)/third_party/heatshrink/heatshrink_decoder.c
 

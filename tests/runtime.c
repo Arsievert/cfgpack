@@ -386,7 +386,8 @@ TEST_CASE(test_pageout_min_buffer) {
     cfgpack_ctx_t ctx;
     cfgpack_value_t values[1];
     uint8_t buf[32]; /* enough for schema name + 1 value */
-    uint8_t small[11];
+    uint8_t small[4];
+    size_t need = 0;
     size_t len = 0;
     char str_pool[1];
     uint16_t str_offsets[1];
@@ -409,10 +410,27 @@ TEST_CASE(test_pageout_min_buffer) {
     LOG("Pageout succeeded, len = %zu", len);
     LOG_HEX("Output buffer", buf, len);
 
-    LOG("Testing pageout with 11-byte buffer (too small)");
+    /* map(2) + key0 + "x" + key1 + u8 = 6 bytes, plus 4-byte CRC = 10 */
+    CHECK(cfgpack_pageout_measure(&ctx, &need) == CFGPACK_OK);
+    CHECK(need == 10 && len == need);
+    LOG("Measured minimum = %zu bytes", need);
+
+    LOG("Pageout with exactly %zu bytes must succeed", need);
+    CHECK(cfgpack_pageout(&ctx, buf, need, &len) == CFGPACK_OK);
+    CHECK(len == need);
+
+    LOG("Pageout with %zu bytes must fail and report the needed size",
+        sizeof(small));
+    len = 0;
     CHECK(cfgpack_pageout(&ctx, small, sizeof(small), &len) ==
           CFGPACK_ERR_ENCODE);
-    LOG("Correctly rejected: CFGPACK_ERR_ENCODE");
+    CHECK(len == need);
+    LOG("Correctly rejected: CFGPACK_ERR_ENCODE, out_len = %zu", len);
+
+    LOG("Pageout with a zero-capacity buffer must also report the size");
+    len = 0;
+    CHECK(cfgpack_pageout(&ctx, small, 0, &len) == CFGPACK_ERR_ENCODE);
+    CHECK(len == need);
 
     LOG("Test completed successfully");
     return (TEST_OK);

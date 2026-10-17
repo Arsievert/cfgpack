@@ -1,6 +1,8 @@
 #include "cfgpack/api.h"
 #include "cfgpack/config.h"
 
+#include "typecheck.h"
+
 #include <string.h>
 
 /**
@@ -181,12 +183,40 @@ static cfgpack_err_t check_str_value(const cfgpack_ctx_t *ctx,
     return (CFGPACK_OK);
 }
 
+/**
+ * @brief Validate a value against its schema entry and store it.
+ *
+ * Shared by cfgpack_set and cfgpack_set_by_name.  Rejects a type-tag
+ * mismatch, an integer outside the entry's width (which pageout would
+ * otherwise emit in a wider wire format that pagein must refuse), and a
+ * raw string value whose pool reference is out of bounds.
+ */
+static cfgpack_err_t store_value(cfgpack_ctx_t *ctx,
+                                 const cfgpack_entry_t *entry,
+                                 const cfgpack_value_t *value) {
+    cfgpack_err_t rc;
+    size_t off;
+
+    if (!type_matches(entry->type, value)) {
+        return (CFGPACK_ERR_TYPE_MISMATCH);
+    }
+    if (!cfgpack_int_fits(entry->type, value)) {
+        return (CFGPACK_ERR_BOUNDS);
+    }
+    rc = check_str_value(ctx, value);
+    if (rc != CFGPACK_OK) {
+        return (rc);
+    }
+    off = entry_offset(ctx->schema, entry);
+    ctx->values[off] = *value;
+    cfgpack_presence_set(ctx, off);
+    return (CFGPACK_OK);
+}
+
 cfgpack_err_t cfgpack_set(cfgpack_ctx_t *ctx,
                           uint16_t index,
                           const cfgpack_value_t *value) {
     const cfgpack_entry_t *entry;
-    cfgpack_err_t rc;
-    size_t off;
 
     if (!ctx || !value) {
         return (CFGPACK_ERR_ARGS);
@@ -199,17 +229,7 @@ cfgpack_err_t cfgpack_set(cfgpack_ctx_t *ctx,
     if (!entry) {
         return (CFGPACK_ERR_MISSING);
     }
-    if (!type_matches(entry->type, value)) {
-        return (CFGPACK_ERR_TYPE_MISMATCH);
-    }
-    rc = check_str_value(ctx, value);
-    if (rc != CFGPACK_OK) {
-        return (rc);
-    }
-    off = entry_offset(ctx->schema, entry);
-    ctx->values[off] = *value;
-    cfgpack_presence_set(ctx, off);
-    return (CFGPACK_OK);
+    return (store_value(ctx, entry, value));
 }
 
 cfgpack_err_t cfgpack_get(const cfgpack_ctx_t *ctx,
@@ -241,8 +261,6 @@ cfgpack_err_t cfgpack_set_by_name(cfgpack_ctx_t *ctx,
                                   const char *name,
                                   const cfgpack_value_t *value) {
     const cfgpack_entry_t *entry;
-    cfgpack_err_t rc;
-    size_t off;
 
     if (!ctx || !name || !value) {
         return (CFGPACK_ERR_ARGS);
@@ -252,17 +270,7 @@ cfgpack_err_t cfgpack_set_by_name(cfgpack_ctx_t *ctx,
     if (!entry) {
         return (CFGPACK_ERR_MISSING);
     }
-    if (!type_matches(entry->type, value)) {
-        return (CFGPACK_ERR_TYPE_MISMATCH);
-    }
-    rc = check_str_value(ctx, value);
-    if (rc != CFGPACK_OK) {
-        return (rc);
-    }
-    off = entry_offset(ctx->schema, entry);
-    ctx->values[off] = *value;
-    cfgpack_presence_set(ctx, off);
-    return (CFGPACK_OK);
+    return (store_value(ctx, entry, value));
 }
 
 cfgpack_err_t cfgpack_get_by_name(const cfgpack_ctx_t *ctx,

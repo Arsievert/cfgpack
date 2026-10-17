@@ -134,7 +134,7 @@ static void gen_msgpack_seeds(void) {
     cfgpack_err_t rc = cfgpack_schema_parse_json(json, strlen(json), &opts);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "ERROR: parse JSON for msgpack seed: %s\n",
-                err.message);
+                cfgpack_parse_error_str(err.code));
         exit(1);
     }
 
@@ -160,7 +160,7 @@ static void gen_msgpack_seeds(void) {
                                       &err);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "ERROR: cfgpack_schema_write_msgpack: %s\n",
-                err.message);
+                cfgpack_parse_error_str(err.code));
         exit(1);
     }
 

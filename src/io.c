@@ -5,6 +5,7 @@
 #include "cfgpack/value.h"
 
 #include "crc32.h"
+#include "typecheck.h"
 
 #include <string.h>
 
@@ -103,9 +104,6 @@ cfgpack_err_t cfgpack_pageout(const cfgpack_ctx_t *ctx,
 
     if (!ctx || !out) {
         return (CFGPACK_ERR_ARGS);
-    }
-    if (out_cap < 12) {
-        return (CFGPACK_ERR_ENCODE);
     }
 
     cfgpack_buf_init(&buf, out, out_cap);
@@ -219,13 +217,17 @@ cfgpack_err_t cfgpack_peek_name(const uint8_t *data,
  * @param entry_off  Entry offset in schema (for string slot lookup).
  * @param type       Expected type to decode.
  * @param out        Output value structure.
+ * @param commit     Non-zero to copy string bytes into the pool; zero to
+ *                   validate only (length, slot and pool bounds) and leave
+ *                   the pool untouched.
  * @return CFGPACK_OK on success, error code on failure.
  */
 static cfgpack_err_t decode_value(cfgpack_reader_t *r,
                                   cfgpack_ctx_t *ctx,
                                   size_t entry_off,
                                   cfgpack_type_t type,
-                                  cfgpack_value_t *out) {
+                                  cfgpack_value_t *out,
+                                  int commit) {
     out->type = type;
     switch (type) {
     case CFGPACK_TYPE_U8:
@@ -263,9 +265,11 @@ static cfgpack_err_t decode_value(cfgpack_reader_t *r,
         if ((size_t)pool_off + len + 1 > ctx->str_pool_cap) {
             return (CFGPACK_ERR_BOUNDS);
         }
-        dst = ctx->str_pool + pool_off;
-        memcpy(dst, ptr, len);
-        dst[len] = '\0';
+        if (commit) {
+            dst = ctx->str_pool + pool_off;
+            memcpy(dst, ptr, len);
+            dst[len] = '\0';
+        }
 
         out->v.str.offset = pool_off;
         out->v.str.len = (uint16_t)len;
@@ -296,9 +300,11 @@ static cfgpack_err_t decode_value(cfgpack_reader_t *r,
         if ((size_t)pool_off + len + 1 > ctx->str_pool_cap) {
             return (CFGPACK_ERR_BOUNDS);
         }
-        dst = ctx->str_pool + pool_off;
-        memcpy(dst, ptr, len);
-        dst[len] = '\0';
+        if (commit) {
+            dst = ctx->str_pool + pool_off;
+            memcpy(dst, ptr, len);
+            dst[len] = '\0';
+        }
 
         out->v.fstr.offset = pool_off;
         out->v.fstr.len = (uint8_t)len;
@@ -307,24 +313,6 @@ static cfgpack_err_t decode_value(cfgpack_reader_t *r,
     }
     return (CFGPACK_ERR_INVALID_TYPE);
 }
-
-/**
- * @brief Check if type coercion (widening) is allowed from wire type to schema type.
- *
- * Allowed widening conversions:
- * - u8 -> u16/u32/u64
- * - u16 -> u32/u64
- * - u32 -> u64
- * - i8 -> i16/i32/i64
- * - i16 -> i32/i64
- * - i32 -> i64
- * - f32 -> f64
- * - fstr -> str (if length fits)
- *
- * Additionally, small unsigned integers can be read as signed types since
- * MessagePack encodes small non-negative values as positive fixint/uint:
- * - u8 -> i8/i16/i32/i64 (value must fit, checked at decode time)
- */
 
 /**
  * @brief Type coercion lookup table indexed by [wire_type][schema_type].
@@ -336,7 +324,8 @@ static cfgpack_err_t decode_value(cfgpack_reader_t *r,
  * - Exact match is always allowed (diagonal).
  * - Unsigned widening: u8->u16/u32/u64, u16->u32/u64, u32->u64.
  * - Unsigned to signed: u8->i8/i16/i32/i64, u16->i16/i32/i64,
- *   u32->i32/i64, u64->i64.
+ *   u32->i32/i64, u64->i64.  The value must also fit the signed width;
+ *   decode_value_with_coercion checks that with cfgpack_int_fits().
  * - Signed widening: i8->i16/i32/i64, i16->i32/i64, i32->i64.
  * - Float widening: f32->f64.
  * - String widening: fstr->str.
@@ -387,6 +376,8 @@ static int can_coerce_type(cfgpack_type_t wire_type,
  * @param entry_off   Entry offset in schema.
  * @param schema_type Expected schema type (for coercion check).
  * @param out         Output value structure.
+ * @param commit      Passed to decode_value(); zero validates without
+ *                    writing to the string pool.
  * @return CFGPACK_OK on success, CFGPACK_ERR_TYPE_MISMATCH if incompatible,
  *         CFGPACK_ERR_DECODE on parse error.
  */
@@ -394,7 +385,8 @@ static cfgpack_err_t decode_value_with_coercion(cfgpack_reader_t *r,
                                                 cfgpack_ctx_t *ctx,
                                                 size_t entry_off,
                                                 cfgpack_type_t schema_type,
-                                                cfgpack_value_t *out) {
+                                                cfgpack_value_t *out,
+                                                int commit) {
     cfgpack_type_t wire_type;
     int wire_is_unsigned;
     int schema_is_signed;
@@ -453,7 +445,7 @@ static cfgpack_err_t decode_value_with_coercion(cfgpack_reader_t *r,
 
     /* If wire type matches schema type (or same decode family), decode directly */
     if (wire_type == schema_type) {
-        return (decode_value(r, ctx, entry_off, schema_type, out));
+        return (decode_value(r, ctx, entry_off, schema_type, out, commit));
     }
 
     /*
@@ -479,16 +471,21 @@ static cfgpack_err_t decode_value_with_coercion(cfgpack_reader_t *r,
     if (wire_is_unsigned && schema_is_signed) {
         /* Decode as uint64, then convert to int64 */
         cfgpack_value_t tmp;
-        cfgpack_err_t err = decode_value(r, ctx, entry_off, wire_type, &tmp);
+        cfgpack_err_t err = decode_value(r, ctx, entry_off, wire_type, &tmp,
+                                         commit);
         if (err != CFGPACK_OK) {
             return (err);
         }
-        /* Check that the unsigned value fits in int64_t */
+        /* The value must fit the schema's signed width, not just int64_t:
+         * u8 wire 200 into an i8 entry is a narrowing, not a widening. */
         if (tmp.v.u64 > (uint64_t)INT64_MAX) {
-            return (CFGPACK_ERR_DECODE);
+            return (CFGPACK_ERR_TYPE_MISMATCH);
         }
         out->type = schema_type;
         out->v.i64 = (int64_t)tmp.v.u64;
+        if (!cfgpack_int_fits(schema_type, out)) {
+            return (CFGPACK_ERR_TYPE_MISMATCH);
+        }
         return (CFGPACK_OK);
     }
 
@@ -496,7 +493,7 @@ static cfgpack_err_t decode_value_with_coercion(cfgpack_reader_t *r,
         /* Decode as f32, then widen to f64 */
         cfgpack_value_t tmp;
         cfgpack_err_t err = decode_value(r, ctx, entry_off, CFGPACK_TYPE_F32,
-                                         &tmp);
+                                         &tmp, commit);
         if (err != CFGPACK_OK) {
             return (err);
         }
@@ -507,47 +504,47 @@ static cfgpack_err_t decode_value_with_coercion(cfgpack_reader_t *r,
 
     /* All other allowed coercions (signed widening, unsigned widening,
      * fstr->str) work via decode_value with the schema type directly */
-    return (decode_value(r, ctx, entry_off, schema_type, out));
+    return (decode_value(r, ctx, entry_off, schema_type, out, commit));
 }
 
-cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx,
-                                   const uint8_t *data,
-                                   size_t len,
-                                   const cfgpack_remap_entry_t *remap,
-                                   size_t remap_count) {
+/**
+ * @brief One walk over a CRC-verified msgpack map.
+ *
+ * In validate mode (@p commit == 0) every key is resolved and every value is
+ * decoded into a stack temporary; string bytes are bounds-checked but not
+ * copied, and the context is never written.  In commit mode the same walk
+ * stores values, copies strings into the pool and sets presence bits.
+ *
+ * Running the validate pass first makes cfgpack_pagein_remap() all-or-nothing:
+ * a blob that fails part-way through leaves the context exactly as it was.
+ *
+ * @param ctx         Context to validate against or load into.
+ * @param data        Map bytes (CRC trailer already stripped).
+ * @param len         Length of @p data.
+ * @param remap       Optional remap table.
+ * @param remap_count Number of entries in @p remap.
+ * @param commit      Zero to validate only, non-zero to store.
+ * @return CFGPACK_OK on success; CFGPACK_ERR_DECODE, CFGPACK_ERR_TYPE_MISMATCH,
+ *         CFGPACK_ERR_STR_TOO_LONG or CFGPACK_ERR_BOUNDS on failure.
+ */
+static cfgpack_err_t pagein_pass(cfgpack_ctx_t *ctx,
+                                 const uint8_t *data,
+                                 size_t len,
+                                 const cfgpack_remap_entry_t *remap,
+                                 size_t remap_count,
+                                 int commit) {
     uint32_t map_count = 0;
-    uint32_t stored_crc;
-    uint32_t actual_crc;
     cfgpack_reader_t r;
-
-    if (!ctx) {
-        return (CFGPACK_ERR_ARGS);
-    }
-    if (!data || len == 0) {
-        return (CFGPACK_ERR_DECODE);
-    }
-
-    if (len < CFGPACK_CRC_SIZE) {
-        return (CFGPACK_ERR_DECODE);
-    }
-    stored_crc = (uint32_t)data[len - 4] | ((uint32_t)data[len - 3] << 8) |
-                 ((uint32_t)data[len - 2] << 16) |
-                 ((uint32_t)data[len - 1] << 24);
-    actual_crc = cfgpack_crc32c(data, len - CFGPACK_CRC_SIZE);
-    if (stored_crc != actual_crc) {
-        return (CFGPACK_ERR_CRC);
-    }
-    len -= CFGPACK_CRC_SIZE;
 
     cfgpack_reader_init(&r, data, len);
     if (cfgpack_msgpack_decode_map_header(&r, &map_count) != CFGPACK_OK) {
         return (CFGPACK_ERR_DECODE);
     }
 
-    memset(ctx->present, 0, sizeof(ctx->present));
-
     for (uint32_t i = 0; i < map_count; ++i) {
         const cfgpack_entry_t *entry;
+        cfgpack_value_t scratch;
+        cfgpack_value_t *dest;
         uint16_t target_index;
         cfgpack_err_t err;
         uint64_t key;
@@ -606,18 +603,64 @@ cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx,
         }
 
         /* Decode value with type coercion support */
-        err = decode_value_with_coercion(&r, ctx, idx, entry->type,
-                                         &ctx->values[idx]);
+        dest = commit ? &ctx->values[idx] : &scratch;
+        err = decode_value_with_coercion(&r, ctx, idx, entry->type, dest,
+                                         commit);
         if (err != CFGPACK_OK) {
             return (err);
         }
-        cfgpack_presence_set(ctx, idx);
+        if (commit) {
+            cfgpack_presence_set(ctx, idx);
+        }
     }
 
-    /* Restore defaults for entries not covered by old data.
-     * After decoding, any entry with has_default that wasn't set by the
-     * incoming data should still be marked present so its schema default
-     * is accessible via cfgpack_get(). */
+    return (CFGPACK_OK);
+}
+
+cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx,
+                                   const uint8_t *data,
+                                   size_t len,
+                                   const cfgpack_remap_entry_t *remap,
+                                   size_t remap_count) {
+    uint32_t stored_crc;
+    uint32_t actual_crc;
+    cfgpack_err_t err;
+
+    if (!ctx) {
+        return (CFGPACK_ERR_ARGS);
+    }
+    if (!data || len == 0) {
+        return (CFGPACK_ERR_DECODE);
+    }
+
+    if (len < CFGPACK_CRC_SIZE) {
+        return (CFGPACK_ERR_DECODE);
+    }
+    stored_crc = (uint32_t)data[len - 4] | ((uint32_t)data[len - 3] << 8) |
+                 ((uint32_t)data[len - 2] << 16) |
+                 ((uint32_t)data[len - 1] << 24);
+    actual_crc = cfgpack_crc32c(data, len - CFGPACK_CRC_SIZE);
+    if (stored_crc != actual_crc) {
+        return (CFGPACK_ERR_CRC);
+    }
+    len -= CFGPACK_CRC_SIZE;
+
+    /* Validate the whole blob before touching the context */
+    err = pagein_pass(ctx, data, len, remap, remap_count, 0);
+    if (err != CFGPACK_OK) {
+        return (err);
+    }
+
+    memset(ctx->present, 0, sizeof(ctx->present));
+    err = pagein_pass(ctx, data, len, remap, remap_count, 1);
+    if (err != CFGPACK_OK) {
+        /* Unreachable: the validate pass accepted this exact input */
+        return (err);
+    }
+
+    /* Entries absent from the blob: an entry with a schema default keeps
+     * whatever value it currently holds (the default, or the last value set)
+     * and stays present; entries without a default become not-present. */
     for (size_t i = 0; i < ctx->schema->entry_count; ++i) {
         if (!cfgpack_presence_get(ctx, i) &&
             ctx->schema->entries[i].has_default) {

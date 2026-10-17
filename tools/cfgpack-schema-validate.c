@@ -285,9 +285,11 @@ static int validate_schema(const uint8_t *data, size_t data_len, int format) {
 
     if (rc != CFGPACK_OK) {
         if (perr.line > 0) {
-            fprintf(stderr, "Invalid: line %zu: %s\n", perr.line, perr.message);
+            fprintf(stderr, "Invalid: line %zu: %s\n", perr.line,
+                    cfgpack_parse_error_str(perr.code));
         } else {
-            fprintf(stderr, "Invalid: %s\n", perr.message);
+            fprintf(stderr, "Invalid: %s\n",
+                    cfgpack_parse_error_str(perr.code));
         }
         return (3);
     }
@@ -330,9 +332,11 @@ static int validate_schema(const uint8_t *data, size_t data_len, int format) {
 
     if (rc != CFGPACK_OK) {
         if (perr.line > 0) {
-            fprintf(stderr, "Invalid: line %zu: %s\n", perr.line, perr.message);
+            fprintf(stderr, "Invalid: line %zu: %s\n", perr.line,
+                    cfgpack_parse_error_str(perr.code));
         } else {
-            fprintf(stderr, "Invalid: %s\n", perr.message);
+            fprintf(stderr, "Invalid: %s\n",
+                    cfgpack_parse_error_str(perr.code));
         }
         return (3);
     }

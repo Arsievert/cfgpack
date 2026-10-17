@@ -111,9 +111,10 @@ static cfgpack_err_t write_lfs_file(lfs_t *lfs,
     }
 
     n = lfs_file_write(lfs, &file, data, (lfs_size_t)len);
-    lfs_file_close(lfs, &file);
+    /* littlefs commits on close; NOSPC or CORRUPT can surface only here */
+    err = lfs_file_close(lfs, &file);
 
-    if (n < 0 || (size_t)n != len) {
+    if (n < 0 || (size_t)n != len || err < 0) {
         return (CFGPACK_ERR_IO);
     }
     return (CFGPACK_OK);

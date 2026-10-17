@@ -60,7 +60,8 @@ static cfgpack_err_t msgpack_init(const uint8_t *data,
     cfgpack_err_t rc = cfgpack_schema_parse_msgpack(data, data_len, opts);
     if (rc != CFGPACK_OK) {
         if (opts->err) {
-            LOG("msgpack parse error: %s", opts->err->message);
+            LOG("msgpack parse error: %s",
+                cfgpack_parse_error_str(opts->err->code));
         }
         return rc;
     }
@@ -588,7 +589,8 @@ TEST_CASE(test_err_duplicate_index) {
                                  0,       str_offsets, 0, &perr};
     cfgpack_err_t rc = cfgpack_schema_parse_msgpack(mp, buf.len, &opts);
     CHECK(rc == CFGPACK_ERR_DUPLICATE);
-    LOG("Correctly returned ERR_DUPLICATE: %s", perr.message);
+    LOG("Correctly returned ERR_DUPLICATE: %s",
+        cfgpack_parse_error_str(perr.code));
 
     return TEST_OK;
 }
@@ -632,7 +634,8 @@ TEST_CASE(test_err_reserved_index) {
                                  0,       str_offsets, 0, &perr};
     cfgpack_err_t rc = cfgpack_schema_parse_msgpack(mp, buf.len, &opts);
     CHECK(rc == CFGPACK_ERR_RESERVED_INDEX);
-    LOG("Correctly returned ERR_RESERVED_INDEX: %s", perr.message);
+    LOG("Correctly returned ERR_RESERVED_INDEX: %s",
+        cfgpack_parse_error_str(perr.code));
 
     return TEST_OK;
 }
@@ -676,7 +679,8 @@ TEST_CASE(test_err_name_too_long) {
                                  0,       str_offsets, 0, &perr};
     cfgpack_err_t rc = cfgpack_schema_parse_msgpack(mp, buf.len, &opts);
     CHECK(rc == CFGPACK_ERR_BOUNDS);
-    LOG("Correctly returned ERR_BOUNDS: %s", perr.message);
+    LOG("Correctly returned ERR_BOUNDS: %s",
+        cfgpack_parse_error_str(perr.code));
 
     return TEST_OK;
 }
@@ -720,7 +724,8 @@ TEST_CASE(test_err_bad_type) {
                                  0,       str_offsets, 0, &perr};
     cfgpack_err_t rc = cfgpack_schema_parse_msgpack(mp, buf.len, &opts);
     CHECK(rc == CFGPACK_ERR_INVALID_TYPE);
-    LOG("Correctly returned ERR_INVALID_TYPE: %s", perr.message);
+    LOG("Correctly returned ERR_INVALID_TYPE: %s",
+        cfgpack_parse_error_str(perr.code));
 
     return TEST_OK;
 }
@@ -759,7 +764,7 @@ TEST_CASE(test_err_truncated) {
     cfgpack_err_t rc = cfgpack_schema_parse_msgpack(mp, trunc_len, &opts);
     CHECK(rc != CFGPACK_OK);
     LOG("Truncated (%zu of %zu bytes) returned error: %s", trunc_len, mp_len,
-        perr.message);
+        cfgpack_parse_error_str(perr.code));
 
     /* Also test measure on truncated data */
     cfgpack_schema_measure_t m;
@@ -817,7 +822,8 @@ TEST_CASE(test_err_str_too_long) {
                                  pool_size, str_offsets, 1, &perr};
     cfgpack_err_t rc = cfgpack_schema_parse_msgpack(mp, buf.len, &opts);
     CHECK(rc == CFGPACK_ERR_STR_TOO_LONG);
-    LOG("Correctly returned ERR_STR_TOO_LONG: %s", perr.message);
+    LOG("Correctly returned ERR_STR_TOO_LONG: %s",
+        cfgpack_parse_error_str(perr.code));
 
     return TEST_OK;
 }
@@ -866,7 +872,8 @@ TEST_CASE(test_err_type_mismatch_float_for_fstr) {
                                  str_offsets, 1,        &perr};
     cfgpack_err_t rc = cfgpack_schema_parse_msgpack(mp, buf.len, &opts);
     CHECK(rc == CFGPACK_ERR_TYPE_MISMATCH);
-    LOG("Correctly returned ERR_TYPE_MISMATCH: %s", perr.message);
+    LOG("Correctly returned ERR_TYPE_MISMATCH: %s",
+        cfgpack_parse_error_str(perr.code));
 
     return TEST_OK;
 }
@@ -911,7 +918,8 @@ TEST_CASE(test_err_type_mismatch_str_for_u8) {
                                  str_offsets, 1,        &perr};
     cfgpack_err_t rc = cfgpack_schema_parse_msgpack(mp, buf.len, &opts);
     CHECK(rc == CFGPACK_ERR_TYPE_MISMATCH);
-    LOG("Correctly returned ERR_TYPE_MISMATCH: %s", perr.message);
+    LOG("Correctly returned ERR_TYPE_MISMATCH: %s",
+        cfgpack_parse_error_str(perr.code));
 
     return TEST_OK;
 }
@@ -956,12 +964,159 @@ TEST_CASE(test_err_type_mismatch_int_for_str) {
                                  str_offsets, 1,        &perr};
     cfgpack_err_t rc = cfgpack_schema_parse_msgpack(mp, buf.len, &opts);
     CHECK(rc == CFGPACK_ERR_TYPE_MISMATCH);
-    LOG("Correctly returned ERR_TYPE_MISMATCH: %s", perr.message);
+    LOG("Correctly returned ERR_TYPE_MISMATCH: %s",
+        cfgpack_parse_error_str(perr.code));
 
     return TEST_OK;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Numeric defaults must match the declared type's width and family.
+ *
+ * Regression: Phase 2 only distinguished "string" from "number", so any
+ * numeric wire format was stored into any numeric type unchecked.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * @brief Build a one-entry schema blob whose default is written by @p emit.
+ */
+typedef void (*mp_default_emit_fn)(cfgpack_buf_t *buf);
+
+static size_t build_one_entry_schema(uint8_t *mp,
+                                     size_t cap,
+                                     cfgpack_type_t type,
+                                     mp_default_emit_fn emit) {
+    cfgpack_buf_t buf;
+    uint8_t arr = 0x91;
+
+    cfgpack_buf_init(&buf, mp, cap);
+    cfgpack_msgpack_encode_map_header(&buf, 3);
+    cfgpack_msgpack_encode_uint64(&buf, 0); /* key: name */
+    cfgpack_msgpack_encode_str(&buf, "t", 1);
+    cfgpack_msgpack_encode_uint64(&buf, 1); /* key: version */
+    cfgpack_msgpack_encode_uint64(&buf, 1);
+    cfgpack_msgpack_encode_uint64(&buf, 2); /* key: entries */
+    cfgpack_buf_append(&buf, &arr, 1);
+    cfgpack_msgpack_encode_map_header(&buf, 4);
+    cfgpack_msgpack_encode_uint64(&buf, 0); /* key: index */
+    cfgpack_msgpack_encode_uint64(&buf, 1);
+    cfgpack_msgpack_encode_uint64(&buf, 1); /* key: name */
+    cfgpack_msgpack_encode_str(&buf, "a", 1);
+    cfgpack_msgpack_encode_uint64(&buf, 2); /* key: type */
+    cfgpack_msgpack_encode_uint64(&buf, (uint64_t)type);
+    cfgpack_msgpack_encode_uint64(&buf, 3); /* key: value */
+    emit(&buf);
+    return (buf.len);
+}
+
+static void emit_u300(cfgpack_buf_t *b) {
+    cfgpack_msgpack_encode_uint64(b, 300);
+}
+static void emit_u200(cfgpack_buf_t *b) {
+    cfgpack_msgpack_encode_uint64(b, 200);
+}
+static void emit_u255(cfgpack_buf_t *b) {
+    cfgpack_msgpack_encode_uint64(b, 255);
+}
+static void emit_neg1(cfgpack_buf_t *b) {
+    cfgpack_msgpack_encode_int64(b, -1);
+}
+static void emit_f32_1p5(cfgpack_buf_t *b) {
+    cfgpack_msgpack_encode_f32(b, 1.5f);
+}
+static void emit_f64_2p5(cfgpack_buf_t *b) {
+    cfgpack_msgpack_encode_f64(b, 2.5);
+}
+static void emit_f64_huge(cfgpack_buf_t *b) {
+    cfgpack_msgpack_encode_f64(b, 1e39);
+}
+static void emit_u7(cfgpack_buf_t *b) {
+    cfgpack_msgpack_encode_uint64(b, 7);
+}
+
+static cfgpack_err_t parse_one(cfgpack_type_t type,
+                               mp_default_emit_fn emit,
+                               cfgpack_value_t *out_value,
+                               cfgpack_parse_error_t *perr) {
+    uint8_t mp[128];
+    size_t len = build_one_entry_schema(mp, sizeof(mp), type, emit);
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[1];
+    cfgpack_value_t values[1];
+    char str_pool[1];
+    uint16_t str_offsets[1];
+    cfgpack_parse_opts_t opts = {&schema, entries,     1, values, str_pool,
+                                 0,       str_offsets, 0, perr};
+    cfgpack_err_t rc;
+
+    memset(perr, 0, sizeof(*perr));
+    rc = cfgpack_schema_parse_msgpack(mp, len, &opts);
+    if (rc == CFGPACK_OK && out_value) {
+        *out_value = values[0];
+    }
+    return (rc);
+}
+
+TEST_CASE(test_default_range_checked) {
+    LOG_SECTION("msgpack numeric defaults are range checked per type");
+    cfgpack_parse_error_t perr;
+    cfgpack_value_t v;
+
+    CHECK(parse_one(CFGPACK_TYPE_U8, emit_u300, NULL, &perr) ==
+          CFGPACK_ERR_BOUNDS);
+    LOG("u8 <- 300: ERR_BOUNDS (%s)", cfgpack_parse_error_str(perr.code));
+
+    CHECK(parse_one(CFGPACK_TYPE_I8, emit_u200, NULL, &perr) ==
+          CFGPACK_ERR_BOUNDS);
+    LOG("i8 <- 200: ERR_BOUNDS (%s)", cfgpack_parse_error_str(perr.code));
+
+    CHECK(parse_one(CFGPACK_TYPE_U8, emit_neg1, NULL, &perr) ==
+          CFGPACK_ERR_BOUNDS);
+    LOG("u8 <- -1: ERR_BOUNDS (%s)", cfgpack_parse_error_str(perr.code));
+
+    CHECK(parse_one(CFGPACK_TYPE_U8, emit_u255, &v, &perr) == CFGPACK_OK);
+    CHECK(v.type == CFGPACK_TYPE_U8 && v.v.u64 == 255);
+    LOG("u8 <- 255: accepted");
+
+    CHECK(parse_one(CFGPACK_TYPE_I64, emit_neg1, &v, &perr) == CFGPACK_OK);
+    CHECK(v.v.i64 == -1);
+    LOG("i64 <- -1: accepted");
+
+    return (TEST_OK);
+}
+
+TEST_CASE(test_default_float_family_checked) {
+    LOG_SECTION("msgpack float defaults land in the right union member");
+    cfgpack_parse_error_t perr;
+    cfgpack_value_t v;
+
+    CHECK(parse_one(CFGPACK_TYPE_U8, emit_f32_1p5, NULL, &perr) ==
+          CFGPACK_ERR_TYPE_MISMATCH);
+    LOG("u8 <- f32 1.5: ERR_TYPE_MISMATCH (%s)",
+        cfgpack_parse_error_str(perr.code));
+
+    CHECK(parse_one(CFGPACK_TYPE_F64, emit_f32_1p5, &v, &perr) == CFGPACK_OK);
+    CHECK(v.type == CFGPACK_TYPE_F64 && v.v.f64 == 1.5);
+    LOG("f64 <- f32 1.5: %g (widened correctly)", v.v.f64);
+
+    CHECK(parse_one(CFGPACK_TYPE_F32, emit_f64_2p5, &v, &perr) == CFGPACK_OK);
+    CHECK(v.type == CFGPACK_TYPE_F32 && v.v.f32 == 2.5f);
+    LOG("f32 <- f64 2.5: %g (narrowed correctly)", (double)v.v.f32);
+
+    CHECK(parse_one(CFGPACK_TYPE_F32, emit_f64_huge, NULL, &perr) ==
+          CFGPACK_ERR_BOUNDS);
+    LOG("f32 <- f64 1e39: ERR_BOUNDS (%s)", cfgpack_parse_error_str(perr.code));
+
+    CHECK(parse_one(CFGPACK_TYPE_F32, emit_u7, &v, &perr) == CFGPACK_OK);
+    CHECK(v.v.f32 == 7.0f);
+    CHECK(parse_one(CFGPACK_TYPE_F64, emit_u7, &v, &perr) == CFGPACK_OK);
+    CHECK(v.v.f64 == 7.0);
+    LOG("f32/f64 <- uint 7: 7.0 (integer wire promoted correctly)");
+
+    return (TEST_OK);
+}
 
 int main(void) {
     test_result_t overall = TEST_OK;
@@ -999,6 +1154,11 @@ int main(void) {
                 TEST_OK);
     overall |= (test_case_result("err_type_mismatch_int_for_str",
                                  test_err_type_mismatch_int_for_str()) !=
+                TEST_OK);
+    overall |= (test_case_result("default_range_checked",
+                                 test_default_range_checked()) != TEST_OK);
+    overall |= (test_case_result("default_float_family_checked",
+                                 test_default_float_family_checked()) !=
                 TEST_OK);
 
     if (overall == TEST_OK) {

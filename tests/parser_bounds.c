@@ -741,7 +741,8 @@ TEST_CASE(test_json_roundtrip) {
     rc = cfgpack_schema_parse_json_file(json_path, &opts2, scratch,
                                         sizeof(scratch));
     if (rc != CFGPACK_OK) {
-        LOG("JSON parse error: %s (line %zu)", err.message, err.line);
+        LOG("JSON parse error: %s (line %zu)",
+            cfgpack_parse_error_str(err.code), err.line);
     }
     CHECK(rc == CFGPACK_OK);
     LOG("JSON parsed successfully");
@@ -853,7 +854,8 @@ TEST_CASE(test_json_parse_direct) {
     rc = cfgpack_schema_parse_json_file(json_path, &opts, scratch,
                                         sizeof(scratch));
     if (rc != CFGPACK_OK) {
-        LOG("JSON parse error: %s (line %zu)", err.message, err.line);
+        LOG("JSON parse error: %s (line %zu)",
+            cfgpack_parse_error_str(err.code), err.line);
     }
     CHECK(rc == CFGPACK_OK);
     LOG("Parse succeeded");

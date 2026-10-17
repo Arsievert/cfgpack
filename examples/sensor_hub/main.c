@@ -301,7 +301,7 @@ int main(int argc, char **argv) {
     rc = cfgpack_schema_parse_json(json_buf, json_len, &opts);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Schema parse error at line %zu: %s\n", parse_err.line,
-                parse_err.message);
+                cfgpack_parse_error_str(parse_err.code));
         return (1);
     }
 
@@ -433,7 +433,8 @@ int main(int argc, char **argv) {
     /* Re-parse schema to restore defaults into values/str_pool */
     rc = cfgpack_schema_parse_json(json_buf, json_len, &opts);
     if (rc != CFGPACK_OK) {
-        fprintf(stderr, "Schema re-parse error: %s\n", parse_err.message);
+        fprintf(stderr, "Schema re-parse error: %s\n",
+                cfgpack_parse_error_str(parse_err.code));
         return (1);
     }
 

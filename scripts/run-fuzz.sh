@@ -61,14 +61,18 @@ for target in $saved_targets; do
 
     printf "${BOLD}> %-25s${RESET} corpus=tests/fuzz/%s\n" "$target" "$corpus_dir"
 
+    # Capture the fuzzer's own exit status: piping straight into tail would
+    # make $? report tail's status, hiding crashes from CI.
+    fuzz_log="$BUILD_OUT/$target.fuzz.log"
     set +e
     "$bin" "$corpus" \
         -max_total_time="$DURATION" \
         -max_len="$MAX_LEN" \
         -print_final_stats=1 \
-        2>&1 | tail -20
+        > "$fuzz_log" 2>&1
     rc=$?
     set -e
+    tail -20 "$fuzz_log"
 
     if [ $rc -eq 0 ]; then
         printf "  ${GREEN}OK${RESET}\n\n"

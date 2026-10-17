@@ -127,7 +127,7 @@ int main(int argc, char **argv) {
     rc = cfgpack_schema_measure(file_buf, file_len, &m, &parse_err);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Schema measure error at line %zu: %s\n",
-                parse_err.line, parse_err.message);
+                parse_err.line, cfgpack_parse_error_str(parse_err.code));
         return (1);
     }
 
@@ -199,7 +199,7 @@ int main(int argc, char **argv) {
     rc = cfgpack_parse_schema(file_buf, file_len, &opts);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Final parse error at line %zu: %s\n", parse_err.line,
-                parse_err.message);
+                cfgpack_parse_error_str(parse_err.code));
         return (1);
     }
 
@@ -252,7 +252,8 @@ int main(int argc, char **argv) {
 
     rc = cfgpack_parse_schema(file_buf, file_len, &opts);
     if (rc != CFGPACK_OK) {
-        fprintf(stderr, "Re-parse error: %s\n", parse_err.message);
+        fprintf(stderr, "Re-parse error: %s\n",
+                cfgpack_parse_error_str(parse_err.code));
         return (1);
     }
 

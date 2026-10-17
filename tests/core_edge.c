@@ -445,6 +445,72 @@ TEST_CASE(test_set_raw_str_bogus_offset) {
     return TEST_OK;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ * cfgpack_set with an integer outside the entry's width -> ERR_BOUNDS
+ *
+ * Regression: a raw U8 value of 300 used to be accepted.  pageout then
+ * emitted it as a u16 wire format, and the next pagein rejected the whole
+ * blob with TYPE_MISMATCH because u16 -> u8 is a narrowing.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+TEST_CASE(test_set_int_out_of_range) {
+    LOG_SECTION("cfgpack_set rejects integers wider than the schema type");
+
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[3];
+    cfgpack_ctx_t ctx;
+    cfgpack_value_t values[3];
+    cfgpack_value_t v;
+    uint8_t buf[64];
+    size_t len = 0;
+
+    make_schema(&schema, entries, 3);
+    entries[0].type = CFGPACK_TYPE_U8;
+    entries[1].type = CFGPACK_TYPE_I8;
+    entries[2].type = CFGPACK_TYPE_U32;
+
+    CHECK(cfgpack_init(&ctx, &schema, values, 3, NULL, 0, NULL, 0) ==
+          CFGPACK_OK);
+
+    memset(&v, 0, sizeof(v));
+    v.type = CFGPACK_TYPE_U8;
+    v.v.u64 = 300;
+    CHECK(cfgpack_set(&ctx, 1, &v) == CFGPACK_ERR_BOUNDS);
+    CHECK(cfgpack_get(&ctx, 1, &v) == CFGPACK_ERR_MISSING);
+    LOG("U8 = 300 rejected: ERR_BOUNDS, entry still absent (ok)");
+
+    v.type = CFGPACK_TYPE_U8;
+    v.v.u64 = 255;
+    CHECK(cfgpack_set(&ctx, 1, &v) == CFGPACK_OK);
+    LOG("U8 = 255 accepted (ok)");
+
+    v.type = CFGPACK_TYPE_I8;
+    v.v.i64 = -200;
+    CHECK(cfgpack_set_by_name(&ctx, "e1", &v) == CFGPACK_ERR_BOUNDS);
+    v.v.i64 = 128;
+    CHECK(cfgpack_set_by_name(&ctx, "e1", &v) == CFGPACK_ERR_BOUNDS);
+    v.v.i64 = -128;
+    CHECK(cfgpack_set_by_name(&ctx, "e1", &v) == CFGPACK_OK);
+    LOG("I8 = -200 / 128 rejected, -128 accepted via set_by_name (ok)");
+
+    v.type = CFGPACK_TYPE_U32;
+    v.v.u64 = 0x100000000ULL;
+    CHECK(cfgpack_set(&ctx, 3, &v) == CFGPACK_ERR_BOUNDS);
+    v.v.u64 = 0xFFFFFFFFULL;
+    CHECK(cfgpack_set(&ctx, 3, &v) == CFGPACK_OK);
+    LOG("U32 = 2^32 rejected, 2^32-1 accepted (ok)");
+
+    /* Everything that was accepted must survive a pageout/pagein round trip */
+    CHECK(cfgpack_pageout(&ctx, buf, sizeof(buf), &len) == CFGPACK_OK);
+    CHECK(cfgpack_pagein_buf(&ctx, buf, len) == CFGPACK_OK);
+    CHECK(cfgpack_get(&ctx, 1, &v) == CFGPACK_OK && v.v.u64 == 255);
+    CHECK(cfgpack_get(&ctx, 2, &v) == CFGPACK_OK && v.v.i64 == -128);
+    CHECK(cfgpack_get(&ctx, 3, &v) == CFGPACK_OK && v.v.u64 == 0xFFFFFFFFULL);
+    LOG("Round trip preserved all in-range values (ok)");
+
+    return (TEST_OK);
+}
+
 int main(void) {
     test_result_t overall = TEST_OK;
 
@@ -468,6 +534,8 @@ int main(void) {
                 TEST_OK);
     overall |= (test_case_result("get_version", test_get_version()) != TEST_OK);
     overall |= (test_case_result("get_size", test_get_size()) != TEST_OK);
+    overall |= (test_case_result("set_int_out_of_range",
+                                 test_set_int_out_of_range()) != TEST_OK);
     overall |= (test_case_result("set_raw_str_bogus_offset",
                                  test_set_raw_str_bogus_offset()) != TEST_OK);
 

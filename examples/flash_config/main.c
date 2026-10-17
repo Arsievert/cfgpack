@@ -344,7 +344,8 @@ static int load_msgpack_schema(const uint8_t *mp_data,
 
     rc = cfgpack_schema_measure_msgpack(mp_data, mp_len, &m, &perr);
     if (rc != CFGPACK_OK) {
-        fprintf(stderr, "Measure error (%s): %s\n", label, perr.message);
+        fprintf(stderr, "Measure error (%s): %s\n", label,
+                cfgpack_parse_error_str(perr.code));
         return (-1);
     }
 
@@ -384,7 +385,8 @@ static int load_msgpack_schema(const uint8_t *mp_data,
 
     rc = cfgpack_schema_parse_msgpack(mp_data, mp_len, &opts);
     if (rc != CFGPACK_OK) {
-        fprintf(stderr, "Parse error (%s): %s\n", label, perr.message);
+        fprintf(stderr, "Parse error (%s): %s\n", label,
+                cfgpack_parse_error_str(perr.code));
         free_buffers();
         return (-1);
     }

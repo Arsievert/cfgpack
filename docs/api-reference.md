@@ -96,10 +96,17 @@ typedef struct {
 } cfgpack_schema_t;
 
 typedef struct {
-    char message[128];
-    size_t line;
+    size_t line;                /* 1-based line for text formats, else 0 */
+    cfgpack_parse_code_t code;  /* CFGPACK_PARSE_* enum, no message text */
 } cfgpack_parse_error_t;
+
+/* Hosted only: implemented in src/parse_error_str.c, not in libcfgpack.a */
+const char *cfgpack_parse_error_str(cfgpack_parse_code_t code);
 ```
+
+The library records only a code and a line, so no diagnostic strings are
+linked into an embedded build. Tools and examples compile
+`src/parse_error_str.c` alongside the archive to print the text.
 
 ### Schema Sizing
 

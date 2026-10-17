@@ -13,118 +13,114 @@
 #include <string.h>
 
 /**
- * @brief Read entire file into scratch buffer.
+ * @brief Read an entire file into a scratch buffer.
+ *
+ * In text mode one byte of scratch is reserved for a NUL terminator.
+ * A file that fills the buffer exactly is accepted: feof() is only set once
+ * a read runs past the end, so after a full read one more byte is probed.
+ *
  * @param path        File path to read.
  * @param scratch     Scratch buffer to hold file contents.
  * @param scratch_cap Capacity of scratch buffer.
+ * @param binary      Non-zero to open in binary mode without a terminator.
  * @param out_len     Output: bytes read.
- * @return CFGPACK_OK on success, CFGPACK_ERR_IO on failure.
+ * @return CFGPACK_OK on success, CFGPACK_ERR_IO on open/read error or if
+ *         the file does not fit.
  */
+static cfgpack_err_t read_file_impl(const char *path,
+                                    void *scratch,
+                                    size_t scratch_cap,
+                                    int binary,
+                                    size_t *out_len) {
+    size_t want;
+    size_t n;
+    FILE *f;
+
+    if (!scratch || scratch_cap == 0) {
+        return (CFGPACK_ERR_IO);
+    }
+    want = binary ? scratch_cap : scratch_cap - 1;
+
+    f = fopen(path, binary ? "rb" : "r");
+    if (!f) {
+        return (CFGPACK_ERR_IO);
+    }
+
+    n = fread(scratch, 1, want, f);
+    if (ferror(f)) {
+        fclose(f);
+        return (CFGPACK_ERR_IO);
+    }
+    if (n == want && fgetc(f) != EOF) {
+        fclose(f);
+        return (CFGPACK_ERR_IO); /* file too big for scratch */
+    }
+    fclose(f);
+
+    if (!binary) {
+        ((char *)scratch)[n] = '\0';
+    }
+    if (out_len) {
+        *out_len = n;
+    }
+    return (CFGPACK_OK);
+}
+
 static cfgpack_err_t read_file(const char *path,
                                char *scratch,
                                size_t scratch_cap,
                                size_t *out_len) {
-    if (!scratch || scratch_cap == 0) {
-        return (CFGPACK_ERR_IO); /* scratch_cap - 1 below would wrap */
-    }
-
-    FILE *f = fopen(path, "r");
-    if (!f) {
-        return (CFGPACK_ERR_IO);
-    }
-
-    size_t n = fread(scratch, 1, scratch_cap - 1, f);
-    if (!feof(f)) {
-        fclose(f);
-        return CFGPACK_ERR_IO; /* file too big for scratch */
-    }
-    fclose(f);
-
-    scratch[n] = '\0';
-    if (out_len) {
-        *out_len = n;
-    }
-    return (CFGPACK_OK);
+    return (read_file_impl(path, scratch, scratch_cap, 0, out_len));
 }
 
-/**
- * @brief Read entire file into scratch buffer (binary mode).
- * @param path        File path to read.
- * @param scratch     Scratch buffer to hold file contents.
- * @param scratch_cap Capacity of scratch buffer.
- * @param out_len     Output: bytes read.
- * @return CFGPACK_OK on success, CFGPACK_ERR_IO on failure.
- */
 static cfgpack_err_t read_file_binary(const char *path,
                                       uint8_t *scratch,
                                       size_t scratch_cap,
                                       size_t *out_len) {
-    if (!scratch || scratch_cap == 0) {
-        return (CFGPACK_ERR_IO);
-    }
+    return (read_file_impl(path, scratch, scratch_cap, 1, out_len));
+}
 
-    FILE *f = fopen(path, "rb");
+/**
+ * @brief Write a buffer to a file.
+ *
+ * Buffered write errors (ENOSPC, EIO) commonly surface only at fflush or
+ * fclose, so both results are checked before reporting success.
+ *
+ * @param path   File path to write.
+ * @param data   Data to write.
+ * @param len    Length of data.
+ * @param binary Non-zero to open in binary mode.
+ * @return CFGPACK_OK on success, CFGPACK_ERR_IO on failure.
+ */
+static cfgpack_err_t write_file_impl(const char *path,
+                                     const void *data,
+                                     size_t len,
+                                     int binary) {
+    FILE *f = fopen(path, binary ? "wb" : "w");
     if (!f) {
         return (CFGPACK_ERR_IO);
     }
 
-    size_t n = fread(scratch, 1, scratch_cap, f);
-    if (n == scratch_cap && !feof(f)) {
+    if (fwrite(data, 1, len, f) != len || fflush(f) != 0) {
         fclose(f);
-        return CFGPACK_ERR_IO; /* file too big for scratch */
+        return (CFGPACK_ERR_IO);
     }
-    fclose(f);
-
-    if (out_len) {
-        *out_len = n;
+    if (fclose(f) != 0) {
+        return (CFGPACK_ERR_IO);
     }
     return (CFGPACK_OK);
 }
 
-/**
- * @brief Write buffer to file.
- * @param path File path to write.
- * @param data Data to write.
- * @param len  Length of data.
- * @return CFGPACK_OK on success, CFGPACK_ERR_IO on failure.
- */
 static cfgpack_err_t write_file(const char *path,
                                 const char *data,
                                 size_t len) {
-    FILE *f = fopen(path, "w");
-    if (!f) {
-        return (CFGPACK_ERR_IO);
-    }
-
-    if (fwrite(data, 1, len, f) != len) {
-        fclose(f);
-        return (CFGPACK_ERR_IO);
-    }
-    fclose(f);
-    return (CFGPACK_OK);
+    return (write_file_impl(path, data, len, 0));
 }
 
-/**
- * @brief Write buffer to file (binary mode).
- * @param path File path to write.
- * @param data Data to write.
- * @param len  Length of data.
- * @return CFGPACK_OK on success, CFGPACK_ERR_IO on failure.
- */
 static cfgpack_err_t write_file_binary(const char *path,
                                        const uint8_t *data,
                                        size_t len) {
-    FILE *f = fopen(path, "wb");
-    if (!f) {
-        return (CFGPACK_ERR_IO);
-    }
-
-    if (fwrite(data, 1, len, f) != len) {
-        fclose(f);
-        return (CFGPACK_ERR_IO);
-    }
-    fclose(f);
-    return (CFGPACK_OK);
+    return (write_file_impl(path, data, len, 1));
 }
 
 cfgpack_err_t cfgpack_schema_measure_file(const char *path,
@@ -139,7 +135,7 @@ cfgpack_err_t cfgpack_schema_measure_file(const char *path,
     if (rc != CFGPACK_OK) {
         if (err) {
             err->line = 0;
-            snprintf(err->message, sizeof(err->message), "unable to open file");
+            err->code = CFGPACK_PARSE_FILE_OPEN;
         }
         return (rc);
     }
@@ -158,7 +154,7 @@ cfgpack_err_t cfgpack_schema_measure_json_file(const char *path,
     if (rc != CFGPACK_OK) {
         if (err) {
             err->line = 0;
-            snprintf(err->message, sizeof(err->message), "unable to open file");
+            err->code = CFGPACK_PARSE_FILE_OPEN;
         }
         return (rc);
     }
@@ -176,8 +172,7 @@ cfgpack_err_t cfgpack_parse_schema_file(const char *path,
     if (rc != CFGPACK_OK) {
         if (opts->err) {
             opts->err->line = 0;
-            snprintf(opts->err->message, sizeof(opts->err->message),
-                     "unable to open file");
+            opts->err->code = CFGPACK_PARSE_FILE_OPEN;
         }
         return (rc);
     }
@@ -195,8 +190,7 @@ cfgpack_err_t cfgpack_schema_parse_json_file(const char *path,
     if (rc != CFGPACK_OK) {
         if (opts->err) {
             opts->err->line = 0;
-            snprintf(opts->err->message, sizeof(opts->err->message),
-                     "unable to open file");
+            opts->err->code = CFGPACK_PARSE_FILE_OPEN;
         }
         return (rc);
     }
@@ -219,8 +213,7 @@ cfgpack_err_t cfgpack_schema_write_json_file(const cfgpack_ctx_t *ctx,
     if (out_len > scratch_cap) {
         if (err) {
             err->line = 0;
-            snprintf(err->message, sizeof(err->message),
-                     "scratch buffer too small");
+            err->code = CFGPACK_PARSE_SCRATCH_TOO_SMALL;
         }
         return (CFGPACK_ERR_BOUNDS);
     }

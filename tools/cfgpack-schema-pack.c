@@ -91,7 +91,8 @@ int main(int argc, char *argv[]) {
                                          sizeof(scratch), &perr);
     }
     if (rc != CFGPACK_OK) {
-        fprintf(stderr, "Measure failed: %s\n", perr.message);
+        fprintf(stderr, "Measure failed: %s\n",
+                cfgpack_parse_error_str(perr.code));
         return 3;
     }
 
@@ -127,7 +128,8 @@ int main(int argc, char *argv[]) {
                                        sizeof(scratch));
     }
     if (rc != CFGPACK_OK) {
-        fprintf(stderr, "Parse failed: %s\n", perr.message);
+        fprintf(stderr, "Parse failed: %s\n",
+                cfgpack_parse_error_str(perr.code));
         return 3;
     }
 
@@ -143,7 +145,8 @@ int main(int argc, char *argv[]) {
     rc = cfgpack_schema_write_msgpack(&ctx, output_buf, sizeof(output_buf),
                                       &out_len, &perr);
     if (rc != CFGPACK_OK) {
-        fprintf(stderr, "Encode failed: %s\n", perr.message);
+        fprintf(stderr, "Encode failed: %s\n",
+                cfgpack_parse_error_str(perr.code));
         return 3;
     }
 

@@ -307,6 +307,57 @@ TEST_CASE(test_json_parse_default_range) {
 /* ═══════════════════════════════════════════════════════════════════════════
  * 8. cfgpack_schema_write_json with tiny output buffer -> ERR_BOUNDS
  * ═══════════════════════════════════════════════════════════════════════════ */
+/*
+ * Regression: a string default on a numeric entry, or a number on a str
+ * entry, was accepted with has_default = 1.  The str case left the value
+ * pointing at pool offset 0, another entry's string.
+ */
+TEST_CASE(test_json_parse_default_family_mismatch) {
+    LOG_SECTION("JSON default must match the entry's type family");
+
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[8];
+    cfgpack_value_t values[8];
+    char str_pool[256];
+    uint16_t str_offsets[4];
+    cfgpack_parse_error_t err;
+    cfgpack_parse_opts_t opts = {&schema,     entries,  8,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 4,        &err};
+
+    const char *str_for_u8 =
+        "{\"name\":\"t\",\"version\":1,\"entries\":["
+        "{\"index\":1,\"name\":\"a\",\"type\":\"u8\",\"value\":\"hi\"}]}";
+    CHECK(parse_json(str_for_u8, &opts) == CFGPACK_ERR_TYPE_MISMATCH);
+    LOG("u8 with string default: ERR_TYPE_MISMATCH (%s)",
+        cfgpack_parse_error_str(err.code));
+
+    const char *num_for_str =
+        "{\"name\":\"t\",\"version\":1,\"entries\":["
+        "{\"index\":1,\"name\":\"s\",\"type\":\"str\",\"value\":5}]}";
+    CHECK(parse_json(num_for_str, &opts) == CFGPACK_ERR_TYPE_MISMATCH);
+    LOG("str with numeric default: ERR_TYPE_MISMATCH (%s)",
+        cfgpack_parse_error_str(err.code));
+
+    const char *num_for_fstr =
+        "{\"name\":\"t\",\"version\":1,\"entries\":["
+        "{\"index\":1,\"name\":\"f\",\"type\":\"fstr\",\"value\":1.5}]}";
+    CHECK(parse_json(num_for_fstr, &opts) == CFGPACK_ERR_TYPE_MISMATCH);
+    LOG("fstr with float default: ERR_TYPE_MISMATCH (%s)",
+        cfgpack_parse_error_str(err.code));
+
+    /* null is still fine for either family */
+    const char *nulls =
+        "{\"name\":\"t\",\"version\":1,\"entries\":["
+        "{\"index\":1,\"name\":\"a\",\"type\":\"u8\",\"value\":null},"
+        "{\"index\":2,\"name\":\"s\",\"type\":\"str\",\"value\":null}]}";
+    CHECK(parse_json(nulls, &opts) == CFGPACK_OK);
+    CHECK(entries[0].has_default == 0 && entries[1].has_default == 0);
+    LOG("null defaults accepted for both families");
+
+    return (TEST_OK);
+}
+
 TEST_CASE(test_json_writer_small_buffer) {
     LOG_SECTION("schema_write_json with tiny buffer returns ERR_BOUNDS");
 
@@ -368,6 +419,9 @@ int main(void) {
                 TEST_OK);
     overall |= (test_case_result("json_parse_reserved_index",
                                  test_json_parse_reserved_index()) != TEST_OK);
+    overall |= (test_case_result("json_parse_default_family_mismatch",
+                                 test_json_parse_default_family_mismatch()) !=
+                TEST_OK);
     overall |= (test_case_result("json_parse_default_range",
                                  test_json_parse_default_range()) != TEST_OK);
     overall |= (test_case_result("json_writer_small_buffer",

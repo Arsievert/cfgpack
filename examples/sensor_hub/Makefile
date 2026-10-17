@@ -61,7 +61,7 @@ $(SCHEMA): sensor_hub.json $(COMPRESS) | $(BUILD)
 
 $(TARGET): $(SRCS) $(LIB) | $(BUILD)
 	@echo "CC sensor_hub"
-	@$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $(SRCS) $(LIB)
+	@$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $(SRCS) $(ROOT)/src/parse_error_str.c $(LIB)
 
 # --- Utility targets ----------------------------------------------------------
 run: $(TARGET) $(SCHEMA) ## Build and run the example

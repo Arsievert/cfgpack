@@ -6,9 +6,11 @@
 #include "cfgpack/value.h"
 
 #include "tokens.h"
+#include "typecheck.h"
 #include "wbuf.h"
 
 #include <errno.h>
+#include <float.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -96,21 +98,19 @@ static const char *line_iter_next(line_iter_t *it, size_t *line_len) {
  * ───────────────────────────────────────────────────────────────────────────── */
 
 /**
- * @brief Populate a parse error structure.
+ * @brief Record a parse error code and line, if the caller wants them.
+ *
+ * NULL-safe.  Only the code and line are stored; the library never writes
+ * message text, so no diagnostic strings reach an embedded image.
  */
-static void set_err(cfgpack_parse_error_t *err, size_t line, const char *msg) {
-    size_t msg_len;
-
+static void set_err(cfgpack_parse_error_t *err,
+                    size_t line,
+                    cfgpack_parse_code_t code) {
     if (!err) {
         return;
     }
     err->line = line;
-    msg_len = strlen(msg);
-    if (msg_len >= sizeof(err->message)) {
-        msg_len = sizeof(err->message) - 1;
-    }
-    memcpy(err->message, msg, msg_len);
-    err->message[msg_len] = '\0';
+    err->code = code;
 }
 
 /**
@@ -192,6 +192,19 @@ static cfgpack_err_t parse_type(const char *tok, cfgpack_type_t *out) {
  */
 static int name_too_long(const char *name) {
     return (strlen(name) > 5 || strlen(name) == 0);
+}
+
+/**
+ * @brief Check that a double can be narrowed to float without overflow.
+ *
+ * Converting a finite double outside float's range is undefined behaviour
+ * (C99 6.3.1.5).  Infinities and NaN convert cleanly and are allowed.
+ */
+static int double_fits_float(double d) {
+    if (d > FLT_MAX || d < -FLT_MAX) {
+        return (d > DBL_MAX || d < -DBL_MAX); /* +/-inf is fine */
+    }
+    return (1);
 }
 
 /**
@@ -457,6 +470,9 @@ static cfgpack_err_t parse_float(const char *tok,
 
     out->type = type;
     if (type == CFGPACK_TYPE_F32) {
+        if (!double_fits_float(val)) {
+            return (CFGPACK_ERR_BOUNDS);
+        }
         out->v.f32 = (float)val;
     } else {
         out->v.f64 = val;
@@ -626,18 +642,18 @@ static cfgpack_err_t schema_finalize(const cfgpack_parse_opts_t *opts,
     }
     if (str_slots > opts->str_offsets_count ||
         str_slots >= CFGPACK_STR_SLOT_NONE) {
-        set_err(opts->err, 0, "str_offsets array too small");
+        set_err(opts->err, 0, CFGPACK_PARSE_STR_OFFSETS_TOO_SMALL);
         return (CFGPACK_ERR_BOUNDS);
     }
 
     pool_needed = compute_str_offsets(opts->entries, count, opts->str_offsets,
                                       opts->str_offsets_count);
     if (pool_needed > UINT16_MAX) {
-        set_err(opts->err, 0, "string pool exceeds offset range");
+        set_err(opts->err, 0, CFGPACK_PARSE_STR_POOL_OFFSET_RANGE);
         return (CFGPACK_ERR_BOUNDS);
     }
     if (pool_needed > opts->str_pool_cap) {
-        set_err(opts->err, 0, "string pool too small");
+        set_err(opts->err, 0, CFGPACK_PARSE_STR_POOL_TOO_SMALL);
         return (CFGPACK_ERR_BOUNDS);
     }
     if (opts->str_pool_cap > 0) {
@@ -731,27 +747,27 @@ static cfgpack_err_t map_parse_header(parse_ctx_t *ctx,
 
     tokens_find(tok, line_buf, " \t\r\n", 2, NULL);
     if (tok->used != 2) {
-        set_err(ctx->err, line_no, "invalid header");
+        set_err(ctx->err, line_no, CFGPACK_PARSE_INVALID_HEADER);
         return (CFGPACK_ERR_PARSE);
     }
     if (ctx->measuring) {
         if (strlen(tok->index[0]) >= 64) {
-            set_err(ctx->err, line_no, "map name too long");
+            set_err(ctx->err, line_no, CFGPACK_PARSE_MAP_NAME_TOO_LONG);
             return (CFGPACK_ERR_BOUNDS);
         }
     } else {
         if (strlen(tok->index[0]) >= sizeof(ctx->out_schema->map_name)) {
-            set_err(ctx->err, line_no, "map name too long");
+            set_err(ctx->err, line_no, CFGPACK_PARSE_MAP_NAME_TOO_LONG);
             return (CFGPACK_ERR_BOUNDS);
         }
     }
     ver = strtoul(tok->index[1], &endp, 10);
     if (tok->index[1][0] == '\0' || (endp && *endp != '\0')) {
-        set_err(ctx->err, line_no, "invalid header");
+        set_err(ctx->err, line_no, CFGPACK_PARSE_INVALID_HEADER);
         return (CFGPACK_ERR_PARSE);
     }
     if (ver > 0xfffffffful) {
-        set_err(ctx->err, line_no, "version out of range");
+        set_err(ctx->err, line_no, CFGPACK_PARSE_VERSION_OUT_OF_RANGE);
         return (CFGPACK_ERR_BOUNDS);
     }
     if (!ctx->measuring) {
@@ -784,31 +800,31 @@ static cfgpack_err_t map_parse_entry(parse_ctx_t *ctx,
     size_t name_len;
 
     if (!ctx->measuring && ctx->count >= ctx->max_entries) {
-        set_err(ctx->err, line_no, "too many entries");
+        set_err(ctx->err, line_no, CFGPACK_PARSE_TOO_MANY_ENTRIES);
         return (CFGPACK_ERR_BOUNDS);
     }
 
     idx_ul = strtoul(tok->index[0], NULL, 10);
     if (idx_ul > 65535ul) {
-        set_err(ctx->err, line_no, "index out of range");
+        set_err(ctx->err, line_no, CFGPACK_PARSE_INDEX_OUT_OF_RANGE);
         return (CFGPACK_ERR_BOUNDS);
     }
     if (idx_ul == 0) {
-        set_err(ctx->err, line_no, "index 0 is reserved for schema name");
+        set_err(ctx->err, line_no, CFGPACK_PARSE_RESERVED_INDEX);
         return (CFGPACK_ERR_RESERVED_INDEX);
     }
     trc = parse_type(tok->index[2], &type);
     if (trc != CFGPACK_OK) {
-        set_err(ctx->err, line_no, "invalid type");
+        set_err(ctx->err, line_no, CFGPACK_PARSE_INVALID_TYPE);
         return (trc);
     }
     if (name_too_long(tok->index[1])) {
-        set_err(ctx->err, line_no, "name too long");
+        set_err(ctx->err, line_no, CFGPACK_PARSE_NAME_TOO_LONG);
         return (CFGPACK_ERR_BOUNDS);
     }
     if (!ctx->measuring && has_duplicate(ctx->entries, ctx->count,
                                          (uint16_t)idx_ul, tok->index[1])) {
-        set_err(ctx->err, line_no, "duplicate");
+        set_err(ctx->err, line_no, CFGPACK_PARSE_DUPLICATE);
         return (CFGPACK_ERR_DUPLICATE);
     }
 
@@ -817,7 +833,7 @@ static cfgpack_err_t map_parse_entry(parse_ctx_t *ctx,
     def_str = extract_default_token(remainder, default_tok,
                                     sizeof(default_tok));
     if (!def_str || def_str[0] == '\0') {
-        set_err(ctx->err, line_no, "missing default value");
+        set_err(ctx->err, line_no, CFGPACK_PARSE_MISSING_DEFAULT);
         return (CFGPACK_ERR_PARSE);
     }
 
@@ -825,7 +841,7 @@ static cfgpack_err_t map_parse_entry(parse_ctx_t *ctx,
     has_def = 0;
     drc = parse_default(def_str, type, &fat_default, &has_def);
     if (drc != CFGPACK_OK) {
-        set_err(ctx->err, line_no, "invalid default value");
+        set_err(ctx->err, line_no, CFGPACK_PARSE_INVALID_DEFAULT);
         return (drc);
     }
 
@@ -985,7 +1001,7 @@ static cfgpack_err_t parse_schema_map_impl(const char *data,
         }
 
         if (line_len >= sizeof(line_buf)) {
-            set_err(err, line_no, "line too long");
+            set_err(err, line_no, CFGPACK_PARSE_LINE_TOO_LONG);
             return (CFGPACK_ERR_PARSE);
         }
         memcpy(line_buf, line, line_len);
@@ -1009,7 +1025,7 @@ static cfgpack_err_t parse_schema_map_impl(const char *data,
         tokens_find(&tok, line_buf, " \t\r\n", 3, &stop_offset);
 
         if (tok.used < 3) {
-            set_err(err, line_no, "invalid entry");
+            set_err(err, line_no, CFGPACK_PARSE_INVALID_ENTRY);
             tokens_destroy(&tok);
             return (CFGPACK_ERR_PARSE);
         }
@@ -1022,7 +1038,7 @@ static cfgpack_err_t parse_schema_map_impl(const char *data,
     }
 
     if (!header_read) {
-        set_err(err, 0, "missing header");
+        set_err(err, 0, CFGPACK_PARSE_MISSING_HEADER);
         return (CFGPACK_ERR_PARSE);
     }
 
@@ -1192,7 +1208,7 @@ cfgpack_err_t cfgpack_schema_write_json(const cfgpack_ctx_t *ctx,
     }
 
     if (w.len > out_cap) {
-        set_err(err, 0, "buffer too small");
+        set_err(err, 0, CFGPACK_PARSE_BUFFER_TOO_SMALL);
         return (CFGPACK_ERR_BOUNDS);
     }
 
@@ -1443,13 +1459,13 @@ static cfgpack_err_t json_parse_header_name(parse_ctx_t *ctx,
     if (ctx->measuring) {
         char name_buf[64];
         if (!json_parse_string(p, name_buf, sizeof(name_buf), NULL)) {
-            set_err(ctx->err, p->line, "invalid name");
+            set_err(ctx->err, p->line, CFGPACK_PARSE_INVALID_NAME);
             return (CFGPACK_ERR_PARSE);
         }
     } else {
         if (!json_parse_string(p, ctx->out_schema->map_name,
                                sizeof(ctx->out_schema->map_name), NULL)) {
-            set_err(ctx->err, p->line, "invalid name");
+            set_err(ctx->err, p->line, CFGPACK_PARSE_INVALID_NAME);
             return (CFGPACK_ERR_PARSE);
         }
     }
@@ -1466,7 +1482,7 @@ static cfgpack_err_t json_parse_header_version(parse_ctx_t *ctx,
     int64_t ver;
 
     if (!json_parse_number(p, &ver, &ver_f, &is_float) || is_float || ver < 0) {
-        set_err(ctx->err, p->line, "invalid version");
+        set_err(ctx->err, p->line, CFGPACK_PARSE_INVALID_VERSION);
         return (CFGPACK_ERR_PARSE);
     }
     if (!ctx->measuring) {
@@ -1508,11 +1524,11 @@ static cfgpack_err_t json_parse_entry_fields(parse_ctx_t *ctx,
         char ekey[32];
 
         if (!json_parse_string(p, ekey, sizeof(ekey), &ekey_len)) {
-            set_err(ctx->err, p->line, "expected entry key");
+            set_err(ctx->err, p->line, CFGPACK_PARSE_EXPECTED_ENTRY_KEY);
             return (CFGPACK_ERR_PARSE);
         }
         if (!json_expect(p, ':')) {
-            set_err(ctx->err, p->line, "expected ':'");
+            set_err(ctx->err, p->line, CFGPACK_PARSE_EXPECTED_COLON);
             return (CFGPACK_ERR_PARSE);
         }
 
@@ -1522,12 +1538,11 @@ static cfgpack_err_t json_parse_entry_fields(parse_ctx_t *ctx,
             int64_t idx;
             if (!json_parse_number(p, &idx, &idx_f, &is_float) || is_float ||
                 idx < 0 || idx > 65535) {
-                set_err(ctx->err, p->line, "invalid index");
+                set_err(ctx->err, p->line, CFGPACK_PARSE_INVALID_INDEX);
                 return (CFGPACK_ERR_BOUNDS);
             }
             if (idx == 0) {
-                set_err(ctx->err, p->line,
-                        "index 0 is reserved for schema name");
+                set_err(ctx->err, p->line, CFGPACK_PARSE_RESERVED_INDEX);
                 return (CFGPACK_ERR_RESERVED_INDEX);
             }
             if (!ctx->measuring) {
@@ -1537,11 +1552,11 @@ static cfgpack_err_t json_parse_entry_fields(parse_ctx_t *ctx,
         } else if (strcmp(ekey, "name") == 0) {
             char name_buf[32];
             if (!json_parse_string(p, name_buf, sizeof(name_buf), NULL)) {
-                set_err(ctx->err, p->line, "invalid entry name");
+                set_err(ctx->err, p->line, CFGPACK_PARSE_INVALID_ENTRY_NAME);
                 return (CFGPACK_ERR_PARSE);
             }
             if (name_too_long(name_buf)) {
-                set_err(ctx->err, p->line, "name too long");
+                set_err(ctx->err, p->line, CFGPACK_PARSE_NAME_TOO_LONG);
                 return (CFGPACK_ERR_BOUNDS);
             }
             if (!ctx->measuring) {
@@ -1553,7 +1568,7 @@ static cfgpack_err_t json_parse_entry_fields(parse_ctx_t *ctx,
             char type_buf[16];
             cfgpack_err_t trc;
             if (!json_parse_string(p, type_buf, sizeof(type_buf), NULL)) {
-                set_err(ctx->err, p->line, "invalid type");
+                set_err(ctx->err, p->line, CFGPACK_PARSE_INVALID_TYPE);
                 return (CFGPACK_ERR_PARSE);
             }
             if (ctx->measuring) {
@@ -1563,7 +1578,7 @@ static cfgpack_err_t json_parse_entry_fields(parse_ctx_t *ctx,
                 f->entry_type = e->type;
             }
             if (trc != CFGPACK_OK) {
-                set_err(ctx->err, p->line, "invalid type");
+                set_err(ctx->err, p->line, CFGPACK_PARSE_INVALID_TYPE);
                 return (trc);
             }
             f->got_type = 1;
@@ -1575,28 +1590,29 @@ static cfgpack_err_t json_parse_entry_fields(parse_ctx_t *ctx,
                 if (!json_parse_string(p, f->default_str,
                                        sizeof(f->default_str),
                                        &f->default_str_len)) {
-                    set_err(ctx->err, p->line, "invalid string default");
+                    set_err(ctx->err, p->line,
+                            CFGPACK_PARSE_INVALID_STRING_DEFAULT);
                     return (CFGPACK_ERR_PARSE);
                 }
                 /* Validate string length against type if known */
                 if (ctx->measuring && f->got_type &&
                     f->entry_type == CFGPACK_TYPE_FSTR &&
                     f->default_str_len > CFGPACK_FSTR_MAX) {
-                    set_err(ctx->err, p->line, "fstr too long");
+                    set_err(ctx->err, p->line, CFGPACK_PARSE_FSTR_TOO_LONG);
                     return (CFGPACK_ERR_STR_TOO_LONG);
                 }
                 f->default_is_string = 1;
             } else {
                 if (!json_parse_number(p, &f->default_ival, &f->default_fval,
                                        &f->default_is_float)) {
-                    set_err(ctx->err, p->line, "invalid default value");
+                    set_err(ctx->err, p->line, CFGPACK_PARSE_INVALID_DEFAULT);
                     return (CFGPACK_ERR_PARSE);
                 }
                 f->default_is_number = 1;
             }
             f->got_default = 1;
         } else {
-            set_err(ctx->err, p->line, "unknown entry key");
+            set_err(ctx->err, p->line, CFGPACK_PARSE_UNKNOWN_ENTRY_KEY);
             return (CFGPACK_ERR_PARSE);
         }
 
@@ -1618,16 +1634,20 @@ static cfgpack_err_t json_store_entry_defaults(parse_ctx_t *ctx,
         e->has_default = 0;
         ctx->values[ctx->count].type = e->type;
     } else if (f->default_is_string) {
+        if (e->type != CFGPACK_TYPE_STR && e->type != CFGPACK_TYPE_FSTR) {
+            set_err(ctx->err, p->line, CFGPACK_PARSE_STRING_FOR_NUMERIC);
+            return (CFGPACK_ERR_TYPE_MISMATCH);
+        }
         e->has_default = 1;
         ctx->values[ctx->count].type = e->type;
         if (e->type == CFGPACK_TYPE_FSTR) {
             if (f->default_str_len > CFGPACK_FSTR_MAX) {
-                set_err(ctx->err, p->line, "fstr too long");
+                set_err(ctx->err, p->line, CFGPACK_PARSE_FSTR_TOO_LONG);
                 return (CFGPACK_ERR_STR_TOO_LONG);
             }
         } else {
             if (f->default_str_len > CFGPACK_STR_MAX) {
-                set_err(ctx->err, p->line, "str too long");
+                set_err(ctx->err, p->line, CFGPACK_PARSE_STR_TOO_LONG);
                 return (CFGPACK_ERR_STR_TOO_LONG);
             }
         }
@@ -1641,6 +1661,10 @@ static cfgpack_err_t json_store_entry_defaults(parse_ctx_t *ctx,
                                             0xFFFFFFFFFFFFFFFFULL};
         int64_t iv = f->default_ival;
 
+        if (e->type == CFGPACK_TYPE_STR || e->type == CFGPACK_TYPE_FSTR) {
+            set_err(ctx->err, p->line, CFGPACK_PARSE_NUMERIC_FOR_STRING);
+            return (CFGPACK_ERR_TYPE_MISMATCH);
+        }
         e->has_default = 1;
         ctx->values[ctx->count].type = e->type;
         switch (e->type) {
@@ -1649,11 +1673,11 @@ static cfgpack_err_t json_store_entry_defaults(parse_ctx_t *ctx,
         case CFGPACK_TYPE_U32:
         case CFGPACK_TYPE_U64:
             if (f->default_is_float) {
-                set_err(ctx->err, p->line, "invalid default value");
+                set_err(ctx->err, p->line, CFGPACK_PARSE_INVALID_DEFAULT);
                 return (CFGPACK_ERR_PARSE);
             }
             if (iv < 0 || (uint64_t)iv > uint_max[e->type - CFGPACK_TYPE_U8]) {
-                set_err(ctx->err, p->line, "default out of range");
+                set_err(ctx->err, p->line, CFGPACK_PARSE_DEFAULT_OUT_OF_RANGE);
                 return (CFGPACK_ERR_BOUNDS);
             }
             ctx->values[ctx->count].v.u64 = (uint64_t)iv;
@@ -1663,17 +1687,21 @@ static cfgpack_err_t json_store_entry_defaults(parse_ctx_t *ctx,
         case CFGPACK_TYPE_I32:
         case CFGPACK_TYPE_I64:
             if (f->default_is_float) {
-                set_err(ctx->err, p->line, "invalid default value");
+                set_err(ctx->err, p->line, CFGPACK_PARSE_INVALID_DEFAULT);
                 return (CFGPACK_ERR_PARSE);
             }
             if (iv < int_min[e->type - CFGPACK_TYPE_I8] ||
                 iv > int_max[e->type - CFGPACK_TYPE_I8]) {
-                set_err(ctx->err, p->line, "default out of range");
+                set_err(ctx->err, p->line, CFGPACK_PARSE_DEFAULT_OUT_OF_RANGE);
                 return (CFGPACK_ERR_BOUNDS);
             }
             ctx->values[ctx->count].v.i64 = iv;
             break;
         case CFGPACK_TYPE_F32:
+            if (f->default_is_float && !double_fits_float(f->default_fval)) {
+                set_err(ctx->err, p->line, CFGPACK_PARSE_DEFAULT_OUT_OF_RANGE);
+                return (CFGPACK_ERR_BOUNDS);
+            }
             ctx->values[ctx->count].v.f32 = f->default_is_float
                                                 ? (float)f->default_fval
                                                 : (float)f->default_ival;
@@ -1689,7 +1717,7 @@ static cfgpack_err_t json_store_entry_defaults(parse_ctx_t *ctx,
 
     /* Check for duplicates */
     if (has_duplicate(ctx->entries, ctx->count, e->index, e->name)) {
-        set_err(ctx->err, p->line, "duplicate");
+        set_err(ctx->err, p->line, CFGPACK_PARSE_DUPLICATE);
         return (CFGPACK_ERR_DUPLICATE);
     }
     return (CFGPACK_OK);
@@ -1705,12 +1733,12 @@ static cfgpack_err_t json_parse_one_entry(parse_ctx_t *ctx, json_parser_t *p) {
     cfgpack_err_t rc;
 
     if (!ctx->measuring && ctx->count >= ctx->max_entries) {
-        set_err(ctx->err, p->line, "too many entries");
+        set_err(ctx->err, p->line, CFGPACK_PARSE_TOO_MANY_ENTRIES);
         return (CFGPACK_ERR_BOUNDS);
     }
 
     if (!json_expect(p, '{')) {
-        set_err(ctx->err, p->line, "expected '{'");
+        set_err(ctx->err, p->line, CFGPACK_PARSE_EXPECTED_LBRACE);
         return (CFGPACK_ERR_PARSE);
     }
 
@@ -1731,12 +1759,12 @@ static cfgpack_err_t json_parse_one_entry(parse_ctx_t *ctx, json_parser_t *p) {
     }
 
     if (!json_expect(p, '}')) {
-        set_err(ctx->err, p->line, "expected '}'");
+        set_err(ctx->err, p->line, CFGPACK_PARSE_EXPECTED_RBRACE);
         return (CFGPACK_ERR_PARSE);
     }
 
     if (!f.got_index || !f.got_ename || !f.got_type || !f.got_default) {
-        set_err(ctx->err, p->line, "missing entry field");
+        set_err(ctx->err, p->line, CFGPACK_PARSE_MISSING_ENTRY_FIELD);
         return (CFGPACK_ERR_PARSE);
     }
 
@@ -1748,7 +1776,7 @@ static cfgpack_err_t json_parse_one_entry(parse_ctx_t *ctx, json_parser_t *p) {
         }
     } else {
         if (e->index == 0) {
-            set_err(ctx->err, p->line, "index 0 is reserved for schema name");
+            set_err(ctx->err, p->line, CFGPACK_PARSE_RESERVED_INDEX);
             return (CFGPACK_ERR_RESERVED_INDEX);
         }
         rc = json_store_entry_defaults(ctx, p, e, &f);
@@ -1929,7 +1957,7 @@ static cfgpack_err_t parse_schema_json_impl(const char *data,
 
     /* Expect top-level object */
     if (!json_expect(p, '{')) {
-        set_err(err, p->line, "expected '{'");
+        set_err(err, p->line, CFGPACK_PARSE_EXPECTED_LBRACE);
         return (CFGPACK_ERR_PARSE);
     }
 
@@ -1938,11 +1966,11 @@ static cfgpack_err_t parse_schema_json_impl(const char *data,
         size_t key_len;
         char key[32];
         if (!json_parse_string(p, key, sizeof(key), &key_len)) {
-            set_err(err, p->line, "expected key");
+            set_err(err, p->line, CFGPACK_PARSE_EXPECTED_KEY);
             return (CFGPACK_ERR_PARSE);
         }
         if (!json_expect(p, ':')) {
-            set_err(err, p->line, "expected ':'");
+            set_err(err, p->line, CFGPACK_PARSE_EXPECTED_COLON);
             return (CFGPACK_ERR_PARSE);
         }
 
@@ -1960,7 +1988,7 @@ static cfgpack_err_t parse_schema_json_impl(const char *data,
             got_version = 1;
         } else if (strcmp(key, "entries") == 0) {
             if (!json_expect(p, '[')) {
-                set_err(err, p->line, "expected '['");
+                set_err(err, p->line, CFGPACK_PARSE_EXPECTED_LBRACKET);
                 return (CFGPACK_ERR_PARSE);
             }
 
@@ -1973,12 +2001,12 @@ static cfgpack_err_t parse_schema_json_impl(const char *data,
             }
 
             if (!json_expect(p, ']')) {
-                set_err(err, p->line, "expected ']'");
+                set_err(err, p->line, CFGPACK_PARSE_EXPECTED_RBRACKET);
                 return (CFGPACK_ERR_PARSE);
             }
             got_entries = 1;
         } else {
-            set_err(err, p->line, "unknown key");
+            set_err(err, p->line, CFGPACK_PARSE_UNKNOWN_KEY);
             return (CFGPACK_ERR_PARSE);
         }
 
@@ -1986,12 +2014,12 @@ static cfgpack_err_t parse_schema_json_impl(const char *data,
     }
 
     if (!json_expect(p, '}')) {
-        set_err(err, p->line, "expected '}'");
+        set_err(err, p->line, CFGPACK_PARSE_EXPECTED_RBRACE);
         return (CFGPACK_ERR_PARSE);
     }
 
     if (!got_name || !got_version || !got_entries) {
-        set_err(err, p->line, "missing required field");
+        set_err(err, p->line, CFGPACK_PARSE_MISSING_FIELD);
         return (CFGPACK_ERR_PARSE);
     }
 
@@ -2138,7 +2166,7 @@ static cfgpack_err_t mp_parse_header_name(parse_ctx_t *ctx,
     if (ctx->measuring) {
         rc = cfgpack_msgpack_skip_value(r);
         if (rc != CFGPACK_OK) {
-            set_err(ctx->err, 0, "invalid top-level value");
+            set_err(ctx->err, 0, CFGPACK_PARSE_INVALID_TOP_LEVEL);
             return (CFGPACK_ERR_DECODE);
         }
     } else {
@@ -2147,11 +2175,11 @@ static cfgpack_err_t mp_parse_header_name(parse_ctx_t *ctx,
 
         rc = cfgpack_msgpack_decode_str(r, &nptr, &nlen);
         if (rc != CFGPACK_OK) {
-            set_err(ctx->err, 0, "invalid name");
+            set_err(ctx->err, 0, CFGPACK_PARSE_INVALID_NAME);
             return (CFGPACK_ERR_DECODE);
         }
         if (nlen >= sizeof(ctx->out_schema->map_name)) {
-            set_err(ctx->err, 0, "name too long");
+            set_err(ctx->err, 0, CFGPACK_PARSE_NAME_TOO_LONG);
             return (CFGPACK_ERR_BOUNDS);
         }
         memcpy(ctx->out_schema->map_name, nptr, nlen);
@@ -2173,7 +2201,7 @@ static cfgpack_err_t mp_parse_header_version(parse_ctx_t *ctx,
     if (ctx->measuring) {
         rc = cfgpack_msgpack_skip_value(r);
         if (rc != CFGPACK_OK) {
-            set_err(ctx->err, 0, "invalid top-level value");
+            set_err(ctx->err, 0, CFGPACK_PARSE_INVALID_TOP_LEVEL);
             return (CFGPACK_ERR_DECODE);
         }
     } else {
@@ -2181,7 +2209,7 @@ static cfgpack_err_t mp_parse_header_version(parse_ctx_t *ctx,
 
         rc = cfgpack_msgpack_decode_uint64(r, &ver);
         if (rc != CFGPACK_OK) {
-            set_err(ctx->err, 0, "invalid version");
+            set_err(ctx->err, 0, CFGPACK_PARSE_INVALID_VERSION);
             return (CFGPACK_ERR_DECODE);
         }
         ctx->out_schema->version = (uint32_t)ver;
@@ -2211,13 +2239,13 @@ static cfgpack_err_t mp_parse_one_entry(parse_ctx_t *ctx, cfgpack_reader_t *r) {
     uint32_t ecount;
 
     if (!ctx->measuring && ctx->count >= ctx->max_entries) {
-        set_err(ctx->err, 0, "too many entries");
+        set_err(ctx->err, 0, CFGPACK_PARSE_TOO_MANY_ENTRIES);
         return (CFGPACK_ERR_BOUNDS);
     }
 
     rc = cfgpack_msgpack_decode_map_header(r, &ecount);
     if (rc != CFGPACK_OK) {
-        set_err(ctx->err, 0, "expected entry map");
+        set_err(ctx->err, 0, CFGPACK_PARSE_EXPECTED_ENTRY_MAP);
         return (CFGPACK_ERR_DECODE);
     }
 
@@ -2231,7 +2259,7 @@ static cfgpack_err_t mp_parse_one_entry(parse_ctx_t *ctx, cfgpack_reader_t *r) {
 
         rc = cfgpack_msgpack_decode_uint64(r, &ekey);
         if (rc != CFGPACK_OK) {
-            set_err(ctx->err, 0, "expected entry key");
+            set_err(ctx->err, 0, CFGPACK_PARSE_EXPECTED_ENTRY_KEY);
             return (CFGPACK_ERR_DECODE);
         }
 
@@ -2240,15 +2268,15 @@ static cfgpack_err_t mp_parse_one_entry(parse_ctx_t *ctx, cfgpack_reader_t *r) {
 
             rc = cfgpack_msgpack_decode_uint64(r, &idx);
             if (rc != CFGPACK_OK) {
-                set_err(ctx->err, 0, "invalid index");
+                set_err(ctx->err, 0, CFGPACK_PARSE_INVALID_INDEX);
                 return (CFGPACK_ERR_DECODE);
             }
             if (idx == 0) {
-                set_err(ctx->err, 0, "index 0 is reserved for schema name");
+                set_err(ctx->err, 0, CFGPACK_PARSE_RESERVED_INDEX);
                 return (CFGPACK_ERR_RESERVED_INDEX);
             }
             if (idx > 65535) {
-                set_err(ctx->err, 0, "index out of range");
+                set_err(ctx->err, 0, CFGPACK_PARSE_INDEX_OUT_OF_RANGE);
                 return (CFGPACK_ERR_BOUNDS);
             }
             if (!ctx->measuring) {
@@ -2261,11 +2289,11 @@ static cfgpack_err_t mp_parse_one_entry(parse_ctx_t *ctx, cfgpack_reader_t *r) {
 
             rc = cfgpack_msgpack_decode_str(r, &nptr, &nlen);
             if (rc != CFGPACK_OK) {
-                set_err(ctx->err, 0, "invalid entry name");
+                set_err(ctx->err, 0, CFGPACK_PARSE_INVALID_ENTRY_NAME);
                 return (CFGPACK_ERR_DECODE);
             }
             if (nlen > 5 || nlen == 0) {
-                set_err(ctx->err, 0, "name too long");
+                set_err(ctx->err, 0, CFGPACK_PARSE_NAME_TOO_LONG);
                 return (CFGPACK_ERR_BOUNDS);
             }
             if (!ctx->measuring) {
@@ -2278,11 +2306,11 @@ static cfgpack_err_t mp_parse_one_entry(parse_ctx_t *ctx, cfgpack_reader_t *r) {
 
             rc = cfgpack_msgpack_decode_uint64(r, &type_val);
             if (rc != CFGPACK_OK) {
-                set_err(ctx->err, 0, "invalid type");
+                set_err(ctx->err, 0, CFGPACK_PARSE_INVALID_TYPE);
                 return (CFGPACK_ERR_DECODE);
             }
             if (type_val >= MP_TYPE_COUNT) {
-                set_err(ctx->err, 0, "invalid type");
+                set_err(ctx->err, 0, CFGPACK_PARSE_INVALID_TYPE);
                 return (CFGPACK_ERR_INVALID_TYPE);
             }
             entry_type = (cfgpack_type_t)type_val;
@@ -2298,14 +2326,14 @@ static cfgpack_err_t mp_parse_one_entry(parse_ctx_t *ctx, cfgpack_reader_t *r) {
                 } else {
                     rc = cfgpack_msgpack_skip_value(r);
                     if (rc != CFGPACK_OK) {
-                        set_err(ctx->err, 0, "invalid default value");
+                        set_err(ctx->err, 0, CFGPACK_PARSE_INVALID_DEFAULT);
                         return (CFGPACK_ERR_DECODE);
                     }
                 }
             } else {
                 rc = cfgpack_msgpack_skip_value(r);
                 if (rc != CFGPACK_OK) {
-                    set_err(ctx->err, 0, "invalid default value");
+                    set_err(ctx->err, 0, CFGPACK_PARSE_INVALID_DEFAULT);
                     return (CFGPACK_ERR_DECODE);
                 }
             }
@@ -2313,7 +2341,7 @@ static cfgpack_err_t mp_parse_one_entry(parse_ctx_t *ctx, cfgpack_reader_t *r) {
         } else {
             rc = cfgpack_msgpack_skip_value(r);
             if (rc != CFGPACK_OK) {
-                set_err(ctx->err, 0, "invalid value");
+                set_err(ctx->err, 0, CFGPACK_PARSE_INVALID_VALUE);
                 return (CFGPACK_ERR_DECODE);
             }
         }
@@ -2329,7 +2357,7 @@ static cfgpack_err_t mp_parse_one_entry(parse_ctx_t *ctx, cfgpack_reader_t *r) {
         }
     } else {
         if (!got_idx || !got_ename || !got_type || !got_default) {
-            set_err(ctx->err, 0, "missing entry field");
+            set_err(ctx->err, 0, CFGPACK_PARSE_MISSING_ENTRY_FIELD);
             return (CFGPACK_ERR_DECODE);
         }
         if (default_is_nil) {
@@ -2340,7 +2368,7 @@ static cfgpack_err_t mp_parse_one_entry(parse_ctx_t *ctx, cfgpack_reader_t *r) {
         ctx->values[ctx->count].type = e->type;
 
         if (has_duplicate(ctx->entries, ctx->count, e->index, e->name)) {
-            set_err(ctx->err, 0, "duplicate");
+            set_err(ctx->err, 0, CFGPACK_PARSE_DUPLICATE);
             return (CFGPACK_ERR_DUPLICATE);
         }
     }
@@ -2407,7 +2435,7 @@ static cfgpack_err_t mp_phase2_decode_value(cfgpack_reader_t *rp,
         return CFGPACK_OK; /* nil — no default */
     }
     if (rp->pos >= rp->len) {
-        set_err(err, 0, "truncated default value");
+        set_err(err, 0, CFGPACK_PARSE_TRUNCATED_DEFAULT);
         return (CFGPACK_ERR_DECODE);
     }
 
@@ -2417,14 +2445,14 @@ static cfgpack_err_t mp_phase2_decode_value(cfgpack_reader_t *rp,
     if (vb == 0xCA) {
         rc = cfgpack_msgpack_decode_f32(rp, &p2->def_f32);
         if (rc != CFGPACK_OK) {
-            set_err(err, 0, "phase2 decode error");
+            set_err(err, 0, CFGPACK_PARSE_PHASE2_DECODE);
             return (CFGPACK_ERR_DECODE);
         }
         p2->def_is_f32 = 1;
     } else if (vb == 0xCB) {
         rc = cfgpack_msgpack_decode_f64(rp, &p2->def_f64);
         if (rc != CFGPACK_OK) {
-            set_err(err, 0, "phase2 decode error");
+            set_err(err, 0, CFGPACK_PARSE_PHASE2_DECODE);
             return (CFGPACK_ERR_DECODE);
         }
         p2->def_is_f64 = 1;
@@ -2432,7 +2460,7 @@ static cfgpack_err_t mp_phase2_decode_value(cfgpack_reader_t *rp,
                vb == 0xD3) {
         rc = cfgpack_msgpack_decode_int64(rp, &p2->def_i64);
         if (rc != CFGPACK_OK) {
-            set_err(err, 0, "phase2 decode error");
+            set_err(err, 0, CFGPACK_PARSE_PHASE2_DECODE);
             return (CFGPACK_ERR_DECODE);
         }
         p2->def_is_int = 1;
@@ -2442,14 +2470,14 @@ static cfgpack_err_t mp_phase2_decode_value(cfgpack_reader_t *rp,
 
         rc = cfgpack_msgpack_decode_str(rp, &sptr, &slen);
         if (rc != CFGPACK_OK) {
-            set_err(err, 0, "phase2 decode error");
+            set_err(err, 0, CFGPACK_PARSE_PHASE2_DECODE);
             return (CFGPACK_ERR_DECODE);
         }
         p2->has_string_default = 1;
         p2->fat.type = p2->entry_type;
         if (p2->entry_type == CFGPACK_TYPE_FSTR) {
             if (slen > CFGPACK_FSTR_MAX) {
-                set_err(err, 0, "fstr too long");
+                set_err(err, 0, CFGPACK_PARSE_FSTR_TOO_LONG);
                 return (CFGPACK_ERR_STR_TOO_LONG);
             }
             p2->fat.v.fstr.len = (uint8_t)slen;
@@ -2457,7 +2485,7 @@ static cfgpack_err_t mp_phase2_decode_value(cfgpack_reader_t *rp,
             p2->fat.v.fstr.data[slen] = '\0';
         } else {
             if (slen > CFGPACK_STR_MAX) {
-                set_err(err, 0, "str too long");
+                set_err(err, 0, CFGPACK_PARSE_STR_TOO_LONG);
                 return (CFGPACK_ERR_STR_TOO_LONG);
             }
             p2->fat.v.str.len = (uint16_t)slen;
@@ -2467,10 +2495,106 @@ static cfgpack_err_t mp_phase2_decode_value(cfgpack_reader_t *rp,
     } else {
         rc = cfgpack_msgpack_decode_uint64(rp, &p2->def_u64);
         if (rc != CFGPACK_OK) {
-            set_err(err, 0, "phase2 decode error");
+            set_err(err, 0, CFGPACK_PARSE_PHASE2_DECODE);
             return (CFGPACK_ERR_DECODE);
         }
         p2->def_is_uint = 1;
+    }
+    return (CFGPACK_OK);
+}
+
+/**
+ * @brief Convert a decoded numeric default to the entry's declared type.
+ *
+ * The wire format of a msgpack default says nothing about the schema type,
+ * so every combination is checked here: integer types reject float wire
+ * values, every integer type enforces its own range, and float types accept
+ * any numeric wire format but write only their own union member.
+ *
+ * @param out Value slot for the entry (type is set here).
+ * @param p2  Decoded Phase 2 temporaries.
+ * @param err Optional error info.
+ * @return CFGPACK_OK; CFGPACK_ERR_TYPE_MISMATCH for a float wire value on an
+ *         integer entry; CFGPACK_ERR_BOUNDS if the value does not fit.
+ */
+static cfgpack_err_t mp_store_numeric_default(cfgpack_value_t *out,
+                                              const mp_p2_entry_t *p2,
+                                              cfgpack_parse_error_t *err) {
+    int is_float = p2->def_is_f32 || p2->def_is_f64;
+    cfgpack_type_t type = p2->entry_type;
+
+    out->type = type;
+    switch (type) {
+    case CFGPACK_TYPE_U8:
+    case CFGPACK_TYPE_U16:
+    case CFGPACK_TYPE_U32:
+    case CFGPACK_TYPE_U64:
+        if (is_float) {
+            set_err(err, 0, CFGPACK_PARSE_FLOAT_FOR_INT);
+            return (CFGPACK_ERR_TYPE_MISMATCH);
+        }
+        if (p2->def_is_int) {
+            if (p2->def_i64 < 0) {
+                set_err(err, 0, CFGPACK_PARSE_DEFAULT_OUT_OF_RANGE);
+                return (CFGPACK_ERR_BOUNDS);
+            }
+            out->v.u64 = (uint64_t)p2->def_i64;
+        } else {
+            out->v.u64 = p2->def_u64;
+        }
+        break;
+    case CFGPACK_TYPE_I8:
+    case CFGPACK_TYPE_I16:
+    case CFGPACK_TYPE_I32:
+    case CFGPACK_TYPE_I64:
+        if (is_float) {
+            set_err(err, 0, CFGPACK_PARSE_FLOAT_FOR_INT);
+            return (CFGPACK_ERR_TYPE_MISMATCH);
+        }
+        if (p2->def_is_uint) {
+            if (p2->def_u64 > (uint64_t)INT64_MAX) {
+                set_err(err, 0, CFGPACK_PARSE_DEFAULT_OUT_OF_RANGE);
+                return (CFGPACK_ERR_BOUNDS);
+            }
+            out->v.i64 = (int64_t)p2->def_u64;
+        } else {
+            out->v.i64 = p2->def_i64;
+        }
+        break;
+    case CFGPACK_TYPE_F32:
+        if (p2->def_is_f32) {
+            out->v.f32 = p2->def_f32;
+        } else if (p2->def_is_f64) {
+            if (!double_fits_float(p2->def_f64)) {
+                set_err(err, 0, CFGPACK_PARSE_DEFAULT_OUT_OF_RANGE);
+                return (CFGPACK_ERR_BOUNDS);
+            }
+            out->v.f32 = (float)p2->def_f64;
+        } else if (p2->def_is_uint) {
+            out->v.f32 = (float)p2->def_u64;
+        } else {
+            out->v.f32 = (float)p2->def_i64;
+        }
+        return (CFGPACK_OK);
+    case CFGPACK_TYPE_F64:
+        if (p2->def_is_f64) {
+            out->v.f64 = p2->def_f64;
+        } else if (p2->def_is_f32) {
+            out->v.f64 = (double)p2->def_f32;
+        } else if (p2->def_is_uint) {
+            out->v.f64 = (double)p2->def_u64;
+        } else {
+            out->v.f64 = (double)p2->def_i64;
+        }
+        return (CFGPACK_OK);
+    default:
+        set_err(err, 0, CFGPACK_PARSE_NUMERIC_FOR_STRING);
+        return (CFGPACK_ERR_TYPE_MISMATCH);
+    }
+
+    if (!cfgpack_int_fits(type, out)) {
+        set_err(err, 0, CFGPACK_PARSE_DEFAULT_OUT_OF_RANGE);
+        return (CFGPACK_ERR_BOUNDS);
     }
     return (CFGPACK_OK);
 }
@@ -2492,11 +2616,11 @@ static cfgpack_err_t mp_phase2_validate_and_store(parse_ctx_t *ctx,
                       p2->def_is_f64);
 
     if (type_is_str && val_is_num) {
-        set_err(ctx->err, 0, "default value is numeric but type is string");
+        set_err(ctx->err, 0, CFGPACK_PARSE_NUMERIC_FOR_STRING);
         return (CFGPACK_ERR_TYPE_MISMATCH);
     }
     if (!type_is_str && val_is_str) {
-        set_err(ctx->err, 0, "default value is string but type is numeric");
+        set_err(ctx->err, 0, CFGPACK_PARSE_STRING_FOR_NUMERIC);
         return (CFGPACK_ERR_TYPE_MISMATCH);
     }
 
@@ -2510,21 +2634,10 @@ static cfgpack_err_t mp_phase2_validate_and_store(parse_ctx_t *ctx,
     if (p2->has_string_default && type_is_str) {
         fat_str_to_pool(&p2->fat, (size_t)pos, ctx->values, ctx->entries,
                         ctx->str_pool, ctx->str_offsets);
-    } else if (p2->def_is_uint) {
-        ctx->values[pos].type = p2->entry_type;
-        ctx->values[pos].v.u64 = p2->def_u64;
-    } else if (p2->def_is_int) {
-        ctx->values[pos].type = p2->entry_type;
-        ctx->values[pos].v.i64 = p2->def_i64;
-    } else if (p2->def_is_f32) {
-        ctx->values[pos].type = p2->entry_type;
-        ctx->values[pos].v.f32 = p2->def_f32;
-    } else if (p2->def_is_f64) {
-        ctx->values[pos].type = p2->entry_type;
-        ctx->values[pos].v.f64 = p2->def_f64;
+        return (CFGPACK_OK);
     }
 
-    return (CFGPACK_OK);
+    return (mp_store_numeric_default(&ctx->values[pos], p2, ctx->err));
 }
 
 /**
@@ -2544,7 +2657,7 @@ static cfgpack_err_t mp_phase2_decode_entry_fields(cfgpack_reader_t *rp,
 
         rc = cfgpack_msgpack_decode_uint64(rp, &ekey);
         if (rc != CFGPACK_OK) {
-            set_err(err, 0, "phase2 decode error");
+            set_err(err, 0, CFGPACK_PARSE_PHASE2_DECODE);
             return (CFGPACK_ERR_DECODE);
         }
 
@@ -2553,7 +2666,7 @@ static cfgpack_err_t mp_phase2_decode_entry_fields(cfgpack_reader_t *rp,
 
             rc = cfgpack_msgpack_decode_uint64(rp, &idx);
             if (rc != CFGPACK_OK) {
-                set_err(err, 0, "phase2 decode error");
+                set_err(err, 0, CFGPACK_PARSE_PHASE2_DECODE);
                 return (CFGPACK_ERR_DECODE);
             }
             p2->entry_index = (uint16_t)idx;
@@ -2563,7 +2676,7 @@ static cfgpack_err_t mp_phase2_decode_entry_fields(cfgpack_reader_t *rp,
 
             rc = cfgpack_msgpack_decode_str(rp, &np, &nl);
             if (rc != CFGPACK_OK) {
-                set_err(err, 0, "phase2 decode error");
+                set_err(err, 0, CFGPACK_PARSE_PHASE2_DECODE);
                 return (CFGPACK_ERR_DECODE);
             }
         } else if (ekey == MP_ENTRY_KEY_TYPE) {
@@ -2571,7 +2684,7 @@ static cfgpack_err_t mp_phase2_decode_entry_fields(cfgpack_reader_t *rp,
 
             rc = cfgpack_msgpack_decode_uint64(rp, &type_val);
             if (rc != CFGPACK_OK) {
-                set_err(err, 0, "phase2 decode error");
+                set_err(err, 0, CFGPACK_PARSE_PHASE2_DECODE);
                 return (CFGPACK_ERR_DECODE);
             }
             if (type_val < MP_TYPE_COUNT) {
@@ -2585,7 +2698,7 @@ static cfgpack_err_t mp_phase2_decode_entry_fields(cfgpack_reader_t *rp,
         } else {
             rc = cfgpack_msgpack_skip_value(rp);
             if (rc != CFGPACK_OK) {
-                set_err(err, 0, "phase2 decode error");
+                set_err(err, 0, CFGPACK_PARSE_PHASE2_DECODE);
                 return (CFGPACK_ERR_DECODE);
             }
         }
@@ -2613,7 +2726,7 @@ static cfgpack_err_t mp_phase2(parse_ctx_t *ctx,
 
     rc = cfgpack_msgpack_decode_map_header(rp, &top2);
     if (rc != CFGPACK_OK) {
-        set_err(ctx->err, 0, "phase2 decode error");
+        set_err(ctx->err, 0, CFGPACK_PARSE_PHASE2_DECODE);
         return (CFGPACK_ERR_DECODE);
     }
 
@@ -2622,7 +2735,7 @@ static cfgpack_err_t mp_phase2(parse_ctx_t *ctx,
 
         rc = cfgpack_msgpack_decode_uint64(rp, &tkey);
         if (rc != CFGPACK_OK) {
-            set_err(ctx->err, 0, "phase2 decode error");
+            set_err(ctx->err, 0, CFGPACK_PARSE_PHASE2_DECODE);
             return (CFGPACK_ERR_DECODE);
         }
 
@@ -2631,7 +2744,7 @@ static cfgpack_err_t mp_phase2(parse_ctx_t *ctx,
 
             rc = mp_decode_array_header(rp, &arr_count);
             if (rc != CFGPACK_OK) {
-                set_err(ctx->err, 0, "phase2 decode error");
+                set_err(ctx->err, 0, CFGPACK_PARSE_PHASE2_DECODE);
                 return (CFGPACK_ERR_DECODE);
             }
 
@@ -2642,7 +2755,7 @@ static cfgpack_err_t mp_phase2(parse_ctx_t *ctx,
 
                 rc = cfgpack_msgpack_decode_map_header(rp, &ecount);
                 if (rc != CFGPACK_OK) {
-                    set_err(ctx->err, 0, "phase2 decode error");
+                    set_err(ctx->err, 0, CFGPACK_PARSE_PHASE2_DECODE);
                     return (CFGPACK_ERR_DECODE);
                 }
 
@@ -2666,7 +2779,7 @@ static cfgpack_err_t mp_phase2(parse_ctx_t *ctx,
         } else {
             rc = cfgpack_msgpack_skip_value(rp);
             if (rc != CFGPACK_OK) {
-                set_err(ctx->err, 0, "phase2 decode error");
+                set_err(ctx->err, 0, CFGPACK_PARSE_PHASE2_DECODE);
                 return (CFGPACK_ERR_DECODE);
             }
         }
@@ -2713,7 +2826,7 @@ static cfgpack_err_t parse_schema_msgpack_impl(
     /* Top-level map */
     rc = cfgpack_msgpack_decode_map_header(r, &top_count);
     if (rc != CFGPACK_OK) {
-        set_err(err, 0, "invalid msgpack: expected top-level map");
+        set_err(err, 0, CFGPACK_PARSE_EXPECTED_TOP_LEVEL_MAP);
         return (CFGPACK_ERR_DECODE);
     }
 
@@ -2723,9 +2836,7 @@ static cfgpack_err_t parse_schema_msgpack_impl(
 
         rc = cfgpack_msgpack_decode_uint64(r, &tkey);
         if (rc != CFGPACK_OK) {
-            set_err(err, 0,
-                    ctx.measuring ? "invalid msgpack: expected uint key"
-                                  : "expected uint key");
+            set_err(err, 0, CFGPACK_PARSE_EXPECTED_UINT_KEY);
             return (CFGPACK_ERR_DECODE);
         }
 
@@ -2746,7 +2857,7 @@ static cfgpack_err_t parse_schema_msgpack_impl(
 
             rc = mp_decode_array_header(r, &arr_count);
             if (rc != CFGPACK_OK) {
-                set_err(err, 0, "expected array for entries");
+                set_err(err, 0, CFGPACK_PARSE_EXPECTED_ENTRIES_ARRAY);
                 return (CFGPACK_ERR_DECODE);
             }
 
@@ -2760,15 +2871,14 @@ static cfgpack_err_t parse_schema_msgpack_impl(
         } else {
             rc = cfgpack_msgpack_skip_value(r);
             if (rc != CFGPACK_OK) {
-                set_err(err, 0, "invalid top-level value");
+                set_err(err, 0, CFGPACK_PARSE_INVALID_TOP_LEVEL);
                 return (CFGPACK_ERR_DECODE);
             }
         }
     }
 
     if (!got_entries) {
-        set_err(err, 0,
-                ctx.measuring ? "missing entries" : "missing required field");
+        set_err(err, 0, CFGPACK_PARSE_MISSING_FIELD);
         return (CFGPACK_ERR_DECODE);
     }
 
@@ -2780,7 +2890,7 @@ static cfgpack_err_t parse_schema_msgpack_impl(
 
     /* ── Parse mode: check required fields, finalize, Phase 2 ──────────── */
     if (!got_name || !got_version) {
-        set_err(err, 0, "missing required field");
+        set_err(err, 0, CFGPACK_PARSE_MISSING_FIELD);
         return (CFGPACK_ERR_DECODE);
     }
 
@@ -2965,6 +3075,6 @@ cfgpack_err_t cfgpack_schema_write_msgpack(const cfgpack_ctx_t *ctx,
 
 
 fail:
-    set_err(err, 0, "buffer too small");
+    set_err(err, 0, CFGPACK_PARSE_BUFFER_TOO_SMALL);
     return (CFGPACK_ERR_ENCODE);
 }

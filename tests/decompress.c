@@ -647,6 +647,55 @@ TEST_CASE(test_heatshrink_empty_input) {
     return TEST_OK;
 }
 
+/*
+ * Regression: heatshrink_decoder_poll() reports HSDR_POLL_MORE whenever it
+ * fills the buffer it was handed, including a zero-byte buffer.  The wrapper
+ * used to poll again with zero space once scratch was full and spin forever,
+ * both for an exact fit and for an undersized scratch buffer.
+ */
+TEST_CASE(test_heatshrink_scratch_exact_and_short) {
+    LOG_SECTION("Heatshrink: scratch sized exactly, and one byte short");
+
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[15];
+    cfgpack_ctx_t ctx;
+    cfgpack_value_t values[15];
+    char str_pool[512];
+    uint16_t str_offsets[5];
+    size_t msgpack_len;
+    size_t compressed_len;
+    cfgpack_value_t v;
+
+    msgpack_len = create_large_test_msgpack(msgpack_buf, BUF_SIZE);
+    test_append_crc(msgpack_buf, &msgpack_len);
+    CHECK(msgpack_len > 0);
+    CHECK(compress_with_heatshrink(msgpack_buf, msgpack_len, compressed_buf,
+                                   BUF_SIZE, &compressed_len) == 0);
+    LOG("Payload %zu bytes, compressed %zu bytes", msgpack_len, compressed_len);
+
+    setup_large_test_context(&schema, entries, &ctx, values, str_pool,
+                             sizeof(str_pool), str_offsets, 5);
+
+    LOG("Scratch of exactly %zu bytes must succeed", msgpack_len);
+    CHECK(cfgpack_pagein_heatshrink(&ctx, compressed_buf, compressed_len,
+                                    scratch_buf, msgpack_len) == CFGPACK_OK);
+    CHECK(cfgpack_get(&ctx, 2, &v) == CFGPACK_OK && v.v.u64 == 1000);
+    LOG("Exact-fit decode OK, bar(u16) = %" PRIu64, v.v.u64);
+
+    LOG("Scratch of %zu bytes must return ERR_BOUNDS, not hang",
+        msgpack_len - 1);
+    CHECK(cfgpack_pagein_heatshrink(&ctx, compressed_buf, compressed_len,
+                                    scratch_buf,
+                                    msgpack_len - 1) == CFGPACK_ERR_BOUNDS);
+    LOG("Short scratch rejected with ERR_BOUNDS");
+
+    LOG("Scratch of 1 byte must also return ERR_BOUNDS");
+    CHECK(cfgpack_pagein_heatshrink(&ctx, compressed_buf, compressed_len,
+                                    scratch_buf, 1) == CFGPACK_ERR_BOUNDS);
+
+    return (TEST_OK);
+}
+
 TEST_CASE(test_roundtrip_both_algorithms) {
     LOG_SECTION("Roundtrip comparison: LZ4 vs Heatshrink (large dataset)");
 
@@ -738,6 +787,9 @@ int main(void) {
                                  test_heatshrink_null_args()) != TEST_OK);
     overall |= (test_case_result("heatshrink_empty_input",
                                  test_heatshrink_empty_input()) != TEST_OK);
+    overall |= (test_case_result("heatshrink_scratch_exact_and_short",
+                                 test_heatshrink_scratch_exact_and_short()) !=
+                TEST_OK);
     overall |= (test_case_result("roundtrip_both_algorithms",
                                  test_roundtrip_both_algorithms()) != TEST_OK);
 

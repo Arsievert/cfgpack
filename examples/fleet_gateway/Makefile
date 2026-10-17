@@ -93,7 +93,7 @@ $(BUILD)/fleet_v3.msgpack.lz4: $(BUILD)/fleet_v3.msgpack $(COMPRESS) | $(BUILD)
 
 $(TARGET): $(SRCS) $(LIB) | $(BUILD)
 	@echo "CC fleet_gateway"
-	@$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $(SRCS) $(LZ4DIR)/lz4.c $(LIB)
+	@$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $(SRCS) $(ROOT)/src/parse_error_str.c $(LZ4DIR)/lz4.c $(LIB)
 
 # --- Utility targets ----------------------------------------------------------
 run: $(TARGET) $(SCHEMAS) ## Build and run the example

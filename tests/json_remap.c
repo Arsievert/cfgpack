@@ -22,7 +22,8 @@ static cfgpack_err_t json_init(const char *json,
     if (rc != CFGPACK_OK) {
         cfgpack_parse_error_t *err = opts->err;
         if (err) {
-            LOG("JSON parse error: %s (line %zu)", err->message, err->line);
+            LOG("JSON parse error: %s (line %zu)",
+                cfgpack_parse_error_str(err->code), err->line);
         }
         return rc;
     }

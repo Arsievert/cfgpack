@@ -238,7 +238,7 @@ static int load_schema(const char *path,
     rc = cfgpack_schema_measure(map_buf, len, &m, &perr);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Measure error (%s line %zu): %s\n", path, perr.line,
-                perr.message);
+                cfgpack_parse_error_str(perr.code));
         return (-1);
     }
 
@@ -292,7 +292,7 @@ static int load_schema(const char *path,
     rc = cfgpack_parse_schema(map_buf, len, &opts);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Parse error (%s line %zu): %s\n", path, perr.line,
-                perr.message);
+                cfgpack_parse_error_str(perr.code));
         free_buffers();
         return (-1);
     }

@@ -87,7 +87,7 @@ $(TARGET): $(SRCS) $(LIB) | $(BUILD)
 	@echo "CC flash_config"
 	@$(CC) $(CPPFLAGS) $(CFLAGS) \
 		-DCFGPACK_LITTLEFS -DCFGPACK_LZ4 -DCFGPACK_HOSTED \
-		-o $@ $(SRCS) \
+		-o $@ $(SRCS) $(ROOT)/src/parse_error_str.c \
 		$(LZ4DIR)/lz4.c \
 		$(LFSDIR)/lfs.c $(LFSDIR)/lfs_util.c \
 		$(LIB)

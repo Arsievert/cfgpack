@@ -48,8 +48,9 @@ CORESRC := src/core.c                   \
            third_party/littlefs/lfs.c   \
            third_party/littlefs/lfs_util.c
 
-# File I/O wrapper (optional, for desktop/POSIX)
-IOFILESRC := src/io_file.c
+# Hosted-only objects (optional, for desktop/POSIX): file I/O wrapper and the
+# parse-error string table.  Neither is part of libcfgpack.a.
+IOFILESRC := src/io_file.c src/parse_error_str.c
 
 # Compression tool
 COMPRESS_TOOL := $(OUT)/cfgpack-compress

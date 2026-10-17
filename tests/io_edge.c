@@ -450,6 +450,221 @@ TEST_CASE(test_coerce_signed_widening) {
 /* ═══════════════════════════════════════════════════════════════════════════
  * 9. Cross-sign widening: u8->i16, u16->i32
  * ═══════════════════════════════════════════════════════════════════════════ */
+/*
+ * Regression: the coerce table allows u8 -> i8, u16 -> i16 and u32 -> i32,
+ * but the only range check was against INT64_MAX.  A u8 wire value of 200
+ * loaded into an i8 entry was stored as 200 and read back as -56.
+ */
+/*
+ * Regression: pagein used to clear the presence bitmap and then decode
+ * straight into the context, so a blob that failed on its second value left
+ * the first value loaded, every other entry (including schema defaults)
+ * reported MISSING, and the string pool partially overwritten.
+ */
+/*
+ * Regression: read_file_binary rejected a file that exactly filled the
+ * scratch buffer as "too big", because feof() is only set once a read
+ * attempt runs past the end of the file.
+ */
+TEST_CASE(test_pagein_file_exact_fit) {
+    LOG_SECTION("A blob file exactly the size of scratch loads");
+
+    const char *path = "/tmp/cfgpack_exact_fit.bin";
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[1];
+    cfgpack_ctx_t ctx;
+    cfgpack_value_t values[1];
+    uint8_t scratch[64];
+    cfgpack_value_t v;
+    size_t need = 0;
+
+    make_schema(&schema, entries, 1);
+    CHECK(cfgpack_init(&ctx, &schema, values, 1, NULL, 0, NULL, 0) ==
+          CFGPACK_OK);
+    CHECK(cfgpack_set_u8(&ctx, 1, 42) == CFGPACK_OK);
+    CHECK(cfgpack_pageout_measure(&ctx, &need) == CFGPACK_OK);
+    CHECK(need <= sizeof(scratch));
+    CHECK(cfgpack_pageout_file(&ctx, path, scratch, sizeof(scratch)) ==
+          CFGPACK_OK);
+    LOG("Wrote %zu-byte blob to %s", need, path);
+
+    CHECK(cfgpack_set_u8(&ctx, 1, 0) == CFGPACK_OK);
+    CHECK(cfgpack_pagein_file(&ctx, path, scratch, need) == CFGPACK_OK);
+    CHECK(cfgpack_get(&ctx, 1, &v) == CFGPACK_OK && v.v.u64 == 42);
+    LOG("pagein_file with scratch_cap == file size: OK, value restored");
+
+    CHECK(cfgpack_pagein_file(&ctx, path, scratch, need - 1) == CFGPACK_ERR_IO);
+    LOG("pagein_file with scratch_cap == file size - 1: ERR_IO (ok)");
+
+    remove(path);
+    return (TEST_OK);
+}
+
+TEST_CASE(test_pagein_failure_leaves_context_untouched) {
+    LOG_SECTION("A pagein that fails part-way must not modify the context");
+
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[3];
+    cfgpack_ctx_t ctx;
+    cfgpack_value_t values[3];
+    char str_pool[128];
+    uint16_t str_offsets[1];
+    char long_str[CFGPACK_STR_MAX + 6];
+    uint8_t blob[160];
+    cfgpack_buf_t b;
+    size_t blob_len;
+    cfgpack_value_t v;
+    const char *sp;
+    uint16_t sl;
+
+    make_schema(&schema, entries, 3);
+    entries[0].type = CFGPACK_TYPE_U8;
+    entries[0].has_default = 1;
+    entries[0].str_slot = CFGPACK_STR_SLOT_NONE;
+    entries[1].type = CFGPACK_TYPE_STR;
+    entries[1].str_slot = 0;
+    entries[2].type = CFGPACK_TYPE_U16;
+    entries[2].str_slot = CFGPACK_STR_SLOT_NONE;
+
+    memset(values, 0, sizeof(values));
+    values[0].type = CFGPACK_TYPE_U8;
+    values[0].v.u64 = 7; /* schema default for entry 1 */
+    CHECK(cfgpack_init(&ctx, &schema, values, 3, str_pool, sizeof(str_pool),
+                       str_offsets, 1) == CFGPACK_OK);
+    CHECK(cfgpack_set_str(&ctx, 2, "hello") == CFGPACK_OK);
+    CHECK(cfgpack_set_u16(&ctx, 3, 1234) == CFGPACK_OK);
+    CHECK(cfgpack_get_size(&ctx) == 3);
+    LOG("Context: e0=7 (default), e1=\"hello\", e2=1234");
+
+    /* Blob 1: key 1 valid, key 2 is a str that exceeds CFGPACK_STR_MAX */
+    memset(long_str, 'x', sizeof(long_str) - 1);
+    long_str[sizeof(long_str) - 1] = '\0';
+    cfgpack_buf_init(&b, blob, sizeof(blob));
+    CHECK(cfgpack_msgpack_encode_map_header(&b, 3) == CFGPACK_OK);
+    CHECK(cfgpack_msgpack_encode_uint_key(&b, 1) == CFGPACK_OK);
+    CHECK(cfgpack_msgpack_encode_uint64(&b, 9) == CFGPACK_OK);
+    CHECK(cfgpack_msgpack_encode_uint_key(&b, 2) == CFGPACK_OK);
+    CHECK(cfgpack_msgpack_encode_str(&b, long_str, strlen(long_str)) ==
+          CFGPACK_OK);
+    CHECK(cfgpack_msgpack_encode_uint_key(&b, 3) == CFGPACK_OK);
+    CHECK(cfgpack_msgpack_encode_uint64(&b, 5) == CFGPACK_OK);
+    blob_len = b.len;
+    test_append_crc(blob, &blob_len);
+
+    CHECK(cfgpack_pagein_buf(&ctx, blob, blob_len) == CFGPACK_ERR_STR_TOO_LONG);
+    LOG("Blob with over-long string rejected: STR_TOO_LONG");
+
+    CHECK(cfgpack_get_size(&ctx) == 3);
+    CHECK(cfgpack_get(&ctx, 1, &v) == CFGPACK_OK && v.v.u64 == 7);
+    CHECK(cfgpack_get_str(&ctx, 2, &sp, &sl) == CFGPACK_OK);
+    CHECK(sl == 5 && memcmp(sp, "hello", 5) == 0);
+    CHECK(cfgpack_get(&ctx, 3, &v) == CFGPACK_OK && v.v.u64 == 1234);
+    LOG("All three entries still present and unchanged (ok)");
+
+    /* Blob 2: key 1 valid, key 3 carries a string for a u16 entry */
+    cfgpack_buf_init(&b, blob, sizeof(blob));
+    CHECK(cfgpack_msgpack_encode_map_header(&b, 2) == CFGPACK_OK);
+    CHECK(cfgpack_msgpack_encode_uint_key(&b, 1) == CFGPACK_OK);
+    CHECK(cfgpack_msgpack_encode_uint64(&b, 9) == CFGPACK_OK);
+    CHECK(cfgpack_msgpack_encode_uint_key(&b, 3) == CFGPACK_OK);
+    CHECK(cfgpack_msgpack_encode_str(&b, "no", 2) == CFGPACK_OK);
+    blob_len = b.len;
+    test_append_crc(blob, &blob_len);
+
+    CHECK(cfgpack_pagein_buf(&ctx, blob, blob_len) ==
+          CFGPACK_ERR_TYPE_MISMATCH);
+    CHECK(cfgpack_get_size(&ctx) == 3);
+    CHECK(cfgpack_get(&ctx, 1, &v) == CFGPACK_OK && v.v.u64 == 7);
+    CHECK(cfgpack_get_str(&ctx, 2, &sp, &sl) == CFGPACK_OK);
+    CHECK(sl == 5 && memcmp(sp, "hello", 5) == 0);
+    CHECK(cfgpack_get(&ctx, 3, &v) == CFGPACK_OK && v.v.u64 == 1234);
+    LOG("Type-mismatch blob rejected, context unchanged (ok)");
+
+    /* Blob 3: valid, proves the context still loads normally afterwards */
+    cfgpack_buf_init(&b, blob, sizeof(blob));
+    CHECK(cfgpack_msgpack_encode_map_header(&b, 2) == CFGPACK_OK);
+    CHECK(cfgpack_msgpack_encode_uint_key(&b, 1) == CFGPACK_OK);
+    CHECK(cfgpack_msgpack_encode_uint64(&b, 9) == CFGPACK_OK);
+    CHECK(cfgpack_msgpack_encode_uint_key(&b, 2) == CFGPACK_OK);
+    CHECK(cfgpack_msgpack_encode_str(&b, "bye", 3) == CFGPACK_OK);
+    blob_len = b.len;
+    test_append_crc(blob, &blob_len);
+
+    CHECK(cfgpack_pagein_buf(&ctx, blob, blob_len) == CFGPACK_OK);
+    CHECK(cfgpack_get(&ctx, 1, &v) == CFGPACK_OK && v.v.u64 == 9);
+    CHECK(cfgpack_get_str(&ctx, 2, &sp, &sl) == CFGPACK_OK);
+    CHECK(sl == 3 && memcmp(sp, "bye", 3) == 0);
+    CHECK(cfgpack_get(&ctx, 3, &v) == CFGPACK_ERR_MISSING);
+    LOG("Valid blob loads: e0=9, e1=\"bye\", e2 absent (no default) (ok)");
+
+    return (TEST_OK);
+}
+
+TEST_CASE(test_coerce_unsigned_to_signed_same_width) {
+    LOG_SECTION(
+        "Unsigned-to-signed coercion at the same width is range checked");
+
+    static const struct {
+        cfgpack_type_t wire;
+        cfgpack_type_t schema;
+        uint64_t fits;
+        uint64_t too_big;
+    } cases[] = {
+        {CFGPACK_TYPE_U8, CFGPACK_TYPE_I8, 127, 128},
+        {CFGPACK_TYPE_U8, CFGPACK_TYPE_I8, 100, 200},
+        {CFGPACK_TYPE_U16, CFGPACK_TYPE_I16, 32767, 32768},
+        {CFGPACK_TYPE_U32, CFGPACK_TYPE_I32, 2147483647ULL, 2147483648ULL},
+        {CFGPACK_TYPE_U64, CFGPACK_TYPE_I64, 9223372036854775807ULL,
+         9223372036854775808ULL},
+    };
+
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        cfgpack_schema_t old_s;
+        cfgpack_schema_t new_s;
+        cfgpack_entry_t old_e[1];
+        cfgpack_entry_t new_e[1];
+        cfgpack_ctx_t old_c;
+        cfgpack_ctx_t new_c;
+        cfgpack_value_t old_v[1];
+        cfgpack_value_t new_v[1];
+        cfgpack_value_t raw;
+        cfgpack_value_t v;
+        uint8_t buf[64];
+        size_t len = 0;
+
+        make_schema(&old_s, old_e, 1);
+        old_e[0].type = cases[i].wire;
+        make_schema(&new_s, new_e, 1);
+        new_e[0].type = cases[i].schema;
+        CHECK(cfgpack_init(&old_c, &old_s, old_v, 1, NULL, 0, NULL, 0) ==
+              CFGPACK_OK);
+        CHECK(cfgpack_init(&new_c, &new_s, new_v, 1, NULL, 0, NULL, 0) ==
+              CFGPACK_OK);
+
+        memset(&raw, 0, sizeof(raw));
+        raw.type = cases[i].wire;
+
+        raw.v.u64 = cases[i].fits;
+        CHECK(cfgpack_set(&old_c, 1, &raw) == CFGPACK_OK);
+        CHECK(cfgpack_pageout(&old_c, buf, sizeof(buf), &len) == CFGPACK_OK);
+        CHECK(cfgpack_pagein_buf(&new_c, buf, len) == CFGPACK_OK);
+        CHECK(cfgpack_get(&new_c, 1, &v) == CFGPACK_OK);
+        CHECK(v.v.i64 == (int64_t)cases[i].fits);
+        LOG("case %zu: %" PRIu64 " fits -> %" PRId64 " (ok)", i, cases[i].fits,
+            v.v.i64);
+
+        raw.v.u64 = cases[i].too_big;
+        CHECK(cfgpack_set(&old_c, 1, &raw) == CFGPACK_OK);
+        CHECK(cfgpack_pageout(&old_c, buf, sizeof(buf), &len) == CFGPACK_OK);
+        CHECK(cfgpack_pagein_buf(&new_c, buf, len) ==
+              CFGPACK_ERR_TYPE_MISMATCH);
+        LOG("case %zu: %" PRIu64 " rejected with TYPE_MISMATCH (ok)", i,
+            cases[i].too_big);
+    }
+
+    return (TEST_OK);
+}
+
 TEST_CASE(test_coerce_unsigned_to_signed) {
     LOG_SECTION("Unsigned-to-signed cross-sign widening");
 
@@ -1064,6 +1279,12 @@ int main(void) {
                                  test_coerce_signed_widening()) != TEST_OK);
     overall |= (test_case_result("coerce_unsigned_to_signed",
                                  test_coerce_unsigned_to_signed()) != TEST_OK);
+    overall |= (test_case_result(
+                    "pagein_failure_leaves_context_untouched",
+                    test_pagein_failure_leaves_context_untouched()) != TEST_OK);
+    overall |= (test_case_result("coerce_unsigned_to_signed_same_width",
+                                 test_coerce_unsigned_to_signed_same_width()) !=
+                TEST_OK);
     overall |= (test_case_result("coerce_f32_to_f64",
                                  test_coerce_f32_to_f64()) != TEST_OK);
     overall |= (test_case_result("coerce_fstr_to_str",

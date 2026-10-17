@@ -45,12 +45,90 @@ typedef struct {
 } cfgpack_schema_t;
 
 /**
+ * @brief Parse error codes.
+ *
+ * Reported through cfgpack_parse_error_t::code.  The library stores only the
+ * code, never a string, so no diagnostic text is linked into an embedded
+ * build.  Hosted tools can translate a code with cfgpack_parse_error_str().
+ */
+typedef enum {
+    CFGPACK_PARSE_OK = 0,               /**< No error recorded. */
+    CFGPACK_PARSE_FILE_OPEN,            /**< unable to open file */
+    CFGPACK_PARSE_SCRATCH_TOO_SMALL,    /**< scratch buffer too small */
+    CFGPACK_PARSE_BUFFER_TOO_SMALL,     /**< buffer too small */
+    CFGPACK_PARSE_LINE_TOO_LONG,        /**< line too long */
+    CFGPACK_PARSE_MISSING_HEADER,       /**< missing header */
+    CFGPACK_PARSE_INVALID_HEADER,       /**< invalid header */
+    CFGPACK_PARSE_MAP_NAME_TOO_LONG,    /**< map name too long */
+    CFGPACK_PARSE_INVALID_VERSION,      /**< invalid version */
+    CFGPACK_PARSE_VERSION_OUT_OF_RANGE, /**< version out of range */
+    CFGPACK_PARSE_TOO_MANY_ENTRIES,     /**< too many entries */
+    CFGPACK_PARSE_INVALID_ENTRY,        /**< invalid entry */
+    CFGPACK_PARSE_INVALID_INDEX,        /**< invalid index */
+    CFGPACK_PARSE_INDEX_OUT_OF_RANGE,   /**< index out of range */
+    CFGPACK_PARSE_RESERVED_INDEX, /**< index 0 is reserved for schema name */
+    CFGPACK_PARSE_INVALID_NAME,   /**< invalid name */
+    CFGPACK_PARSE_INVALID_ENTRY_NAME,     /**< invalid entry name */
+    CFGPACK_PARSE_NAME_TOO_LONG,          /**< name too long */
+    CFGPACK_PARSE_INVALID_TYPE,           /**< invalid type */
+    CFGPACK_PARSE_DUPLICATE,              /**< duplicate */
+    CFGPACK_PARSE_MISSING_DEFAULT,        /**< missing default value */
+    CFGPACK_PARSE_INVALID_DEFAULT,        /**< invalid default value */
+    CFGPACK_PARSE_TRUNCATED_DEFAULT,      /**< truncated default value */
+    CFGPACK_PARSE_INVALID_STRING_DEFAULT, /**< invalid string default */
+    CFGPACK_PARSE_DEFAULT_OUT_OF_RANGE,   /**< default out of range */
+    CFGPACK_PARSE_FLOAT_FOR_INT,          /**< float default for integer type */
+    CFGPACK_PARSE_NUMERIC_FOR_STRING, /**< default value is numeric but type is string */
+    CFGPACK_PARSE_STRING_FOR_NUMERIC, /**< default value is string but type is numeric */
+    CFGPACK_PARSE_STR_TOO_LONG,          /**< str too long */
+    CFGPACK_PARSE_FSTR_TOO_LONG,         /**< fstr too long */
+    CFGPACK_PARSE_STR_POOL_TOO_SMALL,    /**< string pool too small */
+    CFGPACK_PARSE_STR_POOL_OFFSET_RANGE, /**< string pool exceeds offset range */
+    CFGPACK_PARSE_STR_OFFSETS_TOO_SMALL,  /**< str_offsets array too small */
+    CFGPACK_PARSE_MISSING_FIELD,          /**< missing required field */
+    CFGPACK_PARSE_MISSING_ENTRY_FIELD,    /**< missing entry field */
+    CFGPACK_PARSE_UNKNOWN_KEY,            /**< unknown key */
+    CFGPACK_PARSE_UNKNOWN_ENTRY_KEY,      /**< unknown entry key */
+    CFGPACK_PARSE_INVALID_VALUE,          /**< invalid value */
+    CFGPACK_PARSE_INVALID_TOP_LEVEL,      /**< invalid top-level value */
+    CFGPACK_PARSE_EXPECTED_LBRACE,        /**< expected '{' */
+    CFGPACK_PARSE_EXPECTED_RBRACE,        /**< expected '}' */
+    CFGPACK_PARSE_EXPECTED_LBRACKET,      /**< expected '[' */
+    CFGPACK_PARSE_EXPECTED_RBRACKET,      /**< expected ']' */
+    CFGPACK_PARSE_EXPECTED_COLON,         /**< expected ':' */
+    CFGPACK_PARSE_EXPECTED_KEY,           /**< expected key */
+    CFGPACK_PARSE_EXPECTED_ENTRY_KEY,     /**< expected entry key */
+    CFGPACK_PARSE_EXPECTED_UINT_KEY,      /**< expected uint key */
+    CFGPACK_PARSE_EXPECTED_ENTRY_MAP,     /**< expected entry map */
+    CFGPACK_PARSE_EXPECTED_ENTRIES_ARRAY, /**< expected array for entries */
+    CFGPACK_PARSE_EXPECTED_TOP_LEVEL_MAP, /**< invalid msgpack: expected top-level map */
+    CFGPACK_PARSE_PHASE2_DECODE,          /**< phase2 decode error */
+    CFGPACK_PARSE_CODE_COUNT              /**< Number of codes (not a code). */
+} cfgpack_parse_code_t;
+
+/**
  * @brief Parse error details for schema parsing.
+ *
+ * @c line is the 1-based source line for text formats and 0 for msgpack
+ * input or errors that are not tied to a line.
  */
 typedef struct {
-    char message[128];
     size_t line;
+    cfgpack_parse_code_t code;
 } cfgpack_parse_error_t;
+
+/**
+ * @brief Translate a parse error code to a short English description.
+ *
+ * Implemented in src/parse_error_str.c, which is deliberately not part of
+ * libcfgpack.a: link it only from hosted tools, tests and examples so the
+ * message table never reaches an embedded image.
+ *
+ * @param code Parse error code.
+ * @return Static NUL-terminated string; "unknown parse error" for an
+ *         unrecognised code.
+ */
+const char *cfgpack_parse_error_str(cfgpack_parse_code_t code);
 
 /**
  * @brief Schema sizing information for memory allocation.

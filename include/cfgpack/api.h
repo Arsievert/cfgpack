@@ -788,16 +788,26 @@ cfgpack_err_t cfgpack_peek_name(const uint8_t *data,
  * - Keys in remap table are translated to new indices
  * - Keys not in schema (after remapping) are silently ignored
  * - Type widening is allowed (e.g., u8 value into u16 field)
- * - Type narrowing or incompatible types return CFGPACK_ERR_TYPE_MISMATCH
+ * - Type narrowing or incompatible types return CFGPACK_ERR_TYPE_MISMATCH,
+ *   including an unsigned wire value that does not fit the signed schema
+ *   width (e.g., u8 200 into an i8 field)
+ * - Entries absent from the blob keep their current value and stay present
+ *   if the schema entry has a default; otherwise they become not-present
+ *
+ * The load is all-or-nothing: the blob is fully validated before the
+ * context is modified, so on any error the context is left unchanged.
  *
  * @param ctx         Initialized context.
  * @param data        MessagePack map buffer.
  * @param len         Length of @p data in bytes.
  * @param remap       Remap table (NULL for no remapping).
  * @param remap_count Number of entries in @p remap.
- * @return CFGPACK_OK on success; CFGPACK_ERR_DECODE on malformed input;
+ * @return CFGPACK_OK on success; CFGPACK_ERR_ARGS if ctx is NULL;
+ *         CFGPACK_ERR_CRC if the CRC-32C trailer does not match;
+ *         CFGPACK_ERR_DECODE on malformed input;
  *         CFGPACK_ERR_TYPE_MISMATCH on incompatible types;
- *         CFGPACK_ERR_STR_TOO_LONG if strings exceed limits.
+ *         CFGPACK_ERR_STR_TOO_LONG if strings exceed limits;
+ *         CFGPACK_ERR_BOUNDS if a string does not fit the pool.
  */
 cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx,
                                    const uint8_t *data,
@@ -810,11 +820,15 @@ cfgpack_err_t cfgpack_pagein_remap(cfgpack_ctx_t *ctx,
  *
  * Equivalent to cfgpack_pagein_remap(ctx, data, len, NULL, 0).
  * Unknown keys are silently ignored for forward compatibility.
+ * The load is all-or-nothing; see cfgpack_pagein_remap() for details.
  *
  * @param ctx   Initialized context.
  * @param data  MessagePack map buffer.
  * @param len   Length of @p data in bytes.
- * @return CFGPACK_OK on success; CFGPACK_ERR_DECODE on malformed input;
+ * @return CFGPACK_OK on success; CFGPACK_ERR_ARGS if ctx is NULL;
+ *         CFGPACK_ERR_CRC on checksum failure;
+ *         CFGPACK_ERR_DECODE on malformed input;
+ *         CFGPACK_ERR_TYPE_MISMATCH on incompatible types;
  *         CFGPACK_ERR_STR_TOO_LONG if strings exceed limits.
  */
 cfgpack_err_t cfgpack_pagein_buf(cfgpack_ctx_t *ctx,
