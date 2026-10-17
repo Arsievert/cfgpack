@@ -188,4 +188,4 @@ third_party/littlefs/
     LICENSE.md                 # BSD-3-Clause license
 ```
 
-LittleFS is a little fail-safe filesystem designed for microcontrollers. Unlike LZ4 and heatshrink, it is not compiled into the core library — it is linked directly by applications that use the LittleFS wrappers (`-DCFGPACK_LITTLEFS`). See [LittleFS Storage Wrappers](littlefs.md) for details.
+LittleFS is a little fail-safe filesystem designed for microcontrollers. Like LZ4 and heatshrink, it is compiled into the core library by the default build (`-DCFGPACK_LITTLEFS`), with its logging compiled out so the archive stays stdio-free. See [LittleFS Storage Wrappers](littlefs.md) for details.

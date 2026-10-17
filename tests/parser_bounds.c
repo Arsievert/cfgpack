@@ -10,20 +10,36 @@
 
 static char scratch[16384]; /* Scratch buffer for file parsing */
 
+/* Generated inputs are written under build/tmp/ (created by `make tests`
+ * and scripts/run-tests.sh) so test runs never rewrite tracked fixtures. */
 static test_result_t write_file(const char *path, const char *body) {
     FILE *f = fopen(path, "w");
     if (!f) {
         return (TEST_FAIL);
     }
-    fputs(body, f);
-    fclose(f);
+    if (fputs(body, f) == EOF || fclose(f) != 0) {
+        return (TEST_FAIL);
+    }
     return (TEST_OK);
+}
+
+/** @brief Read a whole file into @p buf; returns length or 0 on failure. */
+static size_t slurp(const char *path, char *buf, size_t cap) {
+    FILE *f = fopen(path, "r");
+    size_t n;
+    if (!f) {
+        return (0);
+    }
+    n = fread(buf, 1, cap - 1, f);
+    fclose(f);
+    buf[n] = '\0';
+    return (n);
 }
 
 TEST_CASE(test_duplicate_name) {
     LOG_SECTION("Duplicate entry name detection");
 
-    const char *path = "tests/data/dup_name.map";
+    const char *path = "build/tmp/dup_name.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
     cfgpack_value_t values[128];
@@ -56,7 +72,7 @@ TEST_CASE(test_duplicate_name) {
 TEST_CASE(test_name_too_long) {
     LOG_SECTION("Entry name exceeds max length (5 chars)");
 
-    const char *path = "tests/data/name_long.map";
+    const char *path = "build/tmp/name_long.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
     cfgpack_value_t values[128];
@@ -86,7 +102,7 @@ TEST_CASE(test_name_too_long) {
 TEST_CASE(test_index_too_large) {
     LOG_SECTION("Index exceeds uint16 max (65535)");
 
-    const char *path = "tests/data/index_large.map";
+    const char *path = "build/tmp/index_large.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
     cfgpack_value_t values[128];
@@ -114,7 +130,7 @@ TEST_CASE(test_index_too_large) {
 TEST_CASE(test_missing_header) {
     LOG_SECTION("Schema file missing header line");
 
-    const char *path = "tests/data/missing_header.map";
+    const char *path = "build/tmp/missing_header.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
     cfgpack_value_t values[128];
@@ -142,7 +158,7 @@ TEST_CASE(test_missing_header) {
 TEST_CASE(test_missing_fields) {
     LOG_SECTION("Entry line missing required fields");
 
-    const char *path = "tests/data/missing_fields.map";
+    const char *path = "build/tmp/missing_fields.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
     cfgpack_value_t values[128];
@@ -173,7 +189,7 @@ TEST_CASE(test_missing_fields) {
 TEST_CASE(test_too_many_entries) {
     LOG_SECTION("Schema exceeds max entries (128)");
 
-    const char *path = "tests/data/too_many.map";
+    const char *path = "build/tmp/too_many.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
     cfgpack_value_t values[128];
@@ -207,7 +223,7 @@ TEST_CASE(test_too_many_entries) {
 TEST_CASE(test_accept_128_entries) {
     LOG_SECTION("Schema with exactly 128 entries (max allowed)");
 
-    const char *path = "tests/data/accept_128.map";
+    const char *path = "build/tmp/accept_128.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
     cfgpack_value_t values[128];
@@ -245,7 +261,7 @@ TEST_CASE(test_accept_128_entries) {
 TEST_CASE(test_unknown_type) {
     LOG_SECTION("Unknown type name in schema");
 
-    const char *path = "tests/data/unknown_type.map";
+    const char *path = "build/tmp/unknown_type.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
     cfgpack_value_t values[128];
@@ -273,7 +289,7 @@ TEST_CASE(test_unknown_type) {
 TEST_CASE(test_header_non_numeric_version) {
     LOG_SECTION("Non-numeric version in header");
 
-    const char *path = "tests/data/header_non_numeric.map";
+    const char *path = "build/tmp/header_non_numeric.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[8];
     cfgpack_value_t values[8];
@@ -301,8 +317,8 @@ TEST_CASE(test_header_non_numeric_version) {
 TEST_CASE(test_name_length_edges) {
     LOG_SECTION("Name length boundary testing (5 chars max)");
 
-    const char *ok_path = "tests/data/name_len_ok.map";
-    const char *bad_path = "tests/data/name_len_bad.map";
+    const char *ok_path = "build/tmp/name_len_ok.map";
+    const char *bad_path = "build/tmp/name_len_bad.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[8];
     cfgpack_value_t values[8];
@@ -338,8 +354,8 @@ TEST_CASE(test_name_length_edges) {
 TEST_CASE(test_index_edges) {
     LOG_SECTION("Index boundary testing (1-65535 valid)");
 
-    const char *ok_path = "tests/data/index_edge_ok.map";
-    const char *bad_path = "tests/data/index_edge_bad.map";
+    const char *ok_path = "build/tmp/index_edge_ok.map";
+    const char *bad_path = "build/tmp/index_edge_bad.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[8];
     cfgpack_value_t values[8];
@@ -374,7 +390,7 @@ TEST_CASE(test_index_edges) {
 TEST_CASE(test_unsorted_input_sorted_output) {
     LOG_SECTION("Unsorted input yields sorted output");
 
-    const char *path = "tests/data/unsorted.map";
+    const char *path = "build/tmp/unsorted.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[4];
     cfgpack_value_t values[4];
@@ -413,7 +429,7 @@ TEST_CASE(test_unsorted_input_sorted_output) {
 TEST_CASE(test_default_u8_out_of_range) {
     LOG_SECTION("Default value out of range for u8");
 
-    const char *path = "tests/data/default_u8_oob.map";
+    const char *path = "build/tmp/default_u8_oob.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[8];
     cfgpack_value_t values[8];
@@ -446,7 +462,7 @@ TEST_CASE(test_default_u8_out_of_range) {
 TEST_CASE(test_default_i8_out_of_range) {
     LOG_SECTION("Default value out of range for i8");
 
-    const char *path = "tests/data/default_i8_oob.map";
+    const char *path = "build/tmp/default_i8_oob.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[8];
     cfgpack_value_t values[8];
@@ -487,7 +503,7 @@ TEST_CASE(test_default_i8_out_of_range) {
 TEST_CASE(test_default_fstr_too_long) {
     LOG_SECTION("Default fstr value exceeds max length (16 chars)");
 
-    const char *path = "tests/data/default_fstr_long.map";
+    const char *path = "build/tmp/default_fstr_long.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[8];
     cfgpack_value_t values[8];
@@ -521,7 +537,7 @@ TEST_CASE(test_default_fstr_too_long) {
 TEST_CASE(test_default_hex_binary_literals) {
     LOG_SECTION("Hex literal default values");
 
-    const char *path = "tests/data/default_hex.map";
+    const char *path = "build/tmp/default_hex.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[8];
     cfgpack_value_t values[8];
@@ -556,7 +572,7 @@ TEST_CASE(test_default_hex_binary_literals) {
 TEST_CASE(test_default_invalid_format) {
     LOG_SECTION("Invalid default value formats");
 
-    const char *path = "tests/data/default_invalid.map";
+    const char *path = "build/tmp/default_invalid.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[8];
     cfgpack_value_t values[8];
@@ -593,7 +609,7 @@ TEST_CASE(test_default_invalid_format) {
 TEST_CASE(test_default_escape_sequences) {
     LOG_SECTION("Escape sequences in string defaults");
 
-    const char *path = "tests/data/default_escape.map";
+    const char *path = "build/tmp/default_escape.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[8];
     cfgpack_value_t values[8];
@@ -665,8 +681,6 @@ TEST_CASE(test_json_writer_basic) {
     uint16_t str_offsets[128];
     cfgpack_parse_error_t err;
     cfgpack_err_t rc;
-    FILE *f;
-    char buf[64];
 
     LOG("Parsing input schema: %s", in_path);
     cfgpack_parse_opts_t opts = {&schema,     entries,  128,
@@ -677,8 +691,8 @@ TEST_CASE(test_json_writer_basic) {
     LOG("Parse succeeded");
 
     cfgpack_ctx_t ctx;
-    cfgpack_init(&ctx, &schema, values, 128, str_pool, sizeof(str_pool),
-                 str_offsets, 128);
+    CHECK(cfgpack_init(&ctx, &schema, values, 128, str_pool, sizeof(str_pool),
+                       str_offsets, 128) == CFGPACK_OK);
 
     LOG("Writing JSON to: %s", out_path);
     rc = cfgpack_schema_write_json_file(&ctx, out_path, scratch,
@@ -688,13 +702,29 @@ TEST_CASE(test_json_writer_basic) {
 
     print_file("Generated JSON", out_path);
 
-    LOG("Verifying JSON starts with '{'");
-    f = fopen(out_path, "r");
-    CHECK(f != NULL);
-    CHECK(fgets(buf, sizeof(buf), f) != NULL);
-    CHECK(buf[0] == '{');
-    fclose(f);
-    LOG("First char is '{' (correct)");
+    LOG("Verifying the written JSON parses back to the same schema");
+    {
+        static cfgpack_entry_t entries2[128];
+        static cfgpack_value_t values2[128];
+        static char str_pool2[8192];
+        static uint16_t str_offsets2[128];
+        cfgpack_schema_t schema2;
+        cfgpack_parse_opts_t opts2 = {&schema2,     entries2,
+                                      128,          values2,
+                                      str_pool2,    sizeof(str_pool2),
+                                      str_offsets2, 128,
+                                      &err};
+        CHECK(cfgpack_schema_parse_json_file(out_path, &opts2, scratch,
+                                             sizeof(scratch)) == CFGPACK_OK);
+        CHECK(schema2.entry_count == schema.entry_count);
+        CHECK(strcmp(schema2.map_name, schema.map_name) == 0);
+        for (size_t i = 0; i < schema.entry_count; ++i) {
+            CHECK(schema2.entries[i].index == schema.entries[i].index);
+            CHECK(schema2.entries[i].type == schema.entries[i].type);
+            CHECK(strcmp(schema2.entries[i].name, schema.entries[i].name) == 0);
+        }
+    }
+    LOG("Round trip preserved %zu entries", schema.entry_count);
 
     LOG("Test completed successfully");
     return (TEST_OK);
@@ -724,8 +754,8 @@ TEST_CASE(test_json_roundtrip) {
         schema1.version, schema1.entry_count);
 
     cfgpack_ctx_t ctx1;
-    cfgpack_init(&ctx1, &schema1, values1, 128, str_pool1, sizeof(str_pool1),
-                 str_offsets1, 128);
+    CHECK(cfgpack_init(&ctx1, &schema1, values1, 128, str_pool1,
+                       sizeof(str_pool1), str_offsets1, 128) == CFGPACK_OK);
 
     LOG("Step 2: Write to JSON");
     rc = cfgpack_schema_write_json_file(&ctx1, json_path, scratch,
@@ -800,8 +830,8 @@ TEST_CASE(test_json_roundtrip) {
     LOG("All %zu entries verified", schema1.entry_count);
 
     cfgpack_ctx_t ctx2;
-    cfgpack_init(&ctx2, &schema2, values2, 128, str_pool2, sizeof(str_pool2),
-                 str_offsets2, 128);
+    CHECK(cfgpack_init(&ctx2, &schema2, values2, 128, str_pool2,
+                       sizeof(str_pool2), str_offsets2, 128) == CFGPACK_OK);
 
     LOG("Step 5: Write JSON again from parsed schema");
     rc = cfgpack_schema_write_json_file(&ctx2, json_path2, scratch,
@@ -810,6 +840,17 @@ TEST_CASE(test_json_roundtrip) {
     LOG("Re-generated JSON written to: %s", json_path2);
     print_file("Re-generated JSON (from parsed JSON)", json_path2);
 
+    LOG("Step 6: the two generated files must be byte-identical");
+    {
+        static char first[8192];
+        static char second[8192];
+        size_t n1 = slurp(json_path, first, sizeof(first));
+        size_t n2 = slurp(json_path2, second, sizeof(second));
+        CHECK(n1 > 0 && n1 == n2);
+        CHECK(memcmp(first, second, n1) == 0);
+    }
+    LOG("JSON -> parse -> JSON is a fixed point");
+
     LOG("Test completed successfully");
     return (TEST_OK);
 }
@@ -817,7 +858,7 @@ TEST_CASE(test_json_roundtrip) {
 TEST_CASE(test_json_parse_direct) {
     LOG_SECTION("Parse JSON schema directly");
 
-    const char *json_path = "tests/data/test_schema.json";
+    const char *json_path = "build/tmp/test_schema.json";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[128];
     cfgpack_value_t values[128];
@@ -921,7 +962,7 @@ TEST_CASE(test_json_parse_direct) {
 TEST_CASE(test_reserved_index_zero_map) {
     LOG_SECTION("Reserved index 0 in .map file");
 
-    const char *path = "tests/data/reserved_index.map";
+    const char *path = "build/tmp/reserved_index.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[8];
     cfgpack_value_t values[8];
@@ -949,7 +990,7 @@ TEST_CASE(test_reserved_index_zero_map) {
 TEST_CASE(test_reserved_index_zero_json) {
     LOG_SECTION("Reserved index 0 in JSON file");
 
-    const char *json_path = "tests/data/reserved_index.json";
+    const char *json_path = "build/tmp/reserved_index.json";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[8];
     cfgpack_value_t values[8];
@@ -994,7 +1035,7 @@ TEST_CASE(test_reserved_index_zero_json) {
 TEST_CASE(test_negative_unsigned_default) {
     LOG_SECTION("Negative default for unsigned type");
 
-    const char *path = "tests/data/neg_unsigned.map";
+    const char *path = "build/tmp/neg_unsigned.map";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[8];
     cfgpack_value_t values[8];

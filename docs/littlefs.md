@@ -122,7 +122,7 @@ See `examples/flash_config/` for a complete working example of this pattern.
 
 ## Building
 
-`src/io_littlefs.c` is **not** included in the core `libcfgpack.a` — like `io_file.c`, it is compiled separately to keep the core library free of filesystem dependencies. To use it:
+`src/io_littlefs.c` and the vendored LittleFS sources **are** compiled into `libcfgpack.a` (the default `CFLAGS` set `-DCFGPACK_LITTLEFS`). LittleFS is built with `LFS_NO_DEBUG`, `LFS_NO_WARN` and `LFS_NO_ERROR` so its logging does not pull `<stdio.h>` into the archive. `LFS_NO_MALLOC` is deliberately left to the integrator: cfgpack's wrappers supply every buffer LittleFS needs through the scratch argument, so the choice only affects the application's own LittleFS calls. If you build the sources yourself rather than linking the archive:
 
 ```bash
 $(CC) -DCFGPACK_LITTLEFS -DCFGPACK_HOSTED \

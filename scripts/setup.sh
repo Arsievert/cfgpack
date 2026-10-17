@@ -48,22 +48,36 @@ if [ "$(uname)" = "Darwin" ]; then
         warn "Homebrew LLVM not found — fuzz testing unavailable (brew install llvm)"
     fi
 else
-    # On Linux, check if the system clang supports -fsanitize=fuzzer
-    if clang -fsanitize=fuzzer /dev/null -o /dev/null 2>/dev/null; then
+    # On Linux, check if the system clang supports -fsanitize=fuzzer by
+    # linking a minimal harness (an empty input never links: libFuzzer
+    # needs LLVMFuzzerTestOneInput).
+    FUZZ_PROBE="$(mktemp -d)"
+    printf '#include <stddef.h>\n#include <stdint.h>\nint LLVMFuzzerTestOneInput(const uint8_t *d, size_t n){(void)d;(void)n;return 0;}\n' \
+        > "$FUZZ_PROBE/probe.c"
+    if clang -fsanitize=fuzzer "$FUZZ_PROBE/probe.c" -o "$FUZZ_PROBE/probe" 2>/dev/null; then
         pass "libFuzzer support — fuzz testing available"
     else
         warn "libFuzzer not available — fuzz testing unavailable"
     fi
+    rm -rf "$FUZZ_PROBE"
 fi
 
 # ── 3. Install pre-commit hook ───────────────────────────────────────────────
 printf "\n${BOLD}Installing pre-commit hook...${RESET}\n"
 
-if [ -d "$ROOT_DIR/.git" ]; then
-    ln -sf ../../scripts/pre-commit "$ROOT_DIR/.git/hooks/pre-commit"
-    pass "pre-commit hook installed"
+# git rev-parse resolves the hooks directory correctly for worktrees,
+# submodules (where .git is a file) and a configured core.hooksPath.
+HOOKS_DIR="$(git -C "$ROOT_DIR" rev-parse --git-path hooks 2>/dev/null || true)"
+if [ -n "$HOOKS_DIR" ]; then
+    case "$HOOKS_DIR" in
+        /*) ;;
+        *) HOOKS_DIR="$ROOT_DIR/$HOOKS_DIR" ;;
+    esac
+    mkdir -p "$HOOKS_DIR"
+    ln -sf "$ROOT_DIR/scripts/pre-commit" "$HOOKS_DIR/pre-commit"
+    pass "pre-commit hook installed ($HOOKS_DIR/pre-commit)"
 else
-    fail ".git directory not found — not a git repository"
+    fail "not a git repository — pre-commit hook not installed"
 fi
 
 # ── 4. Verify build + tests ──────────────────────────────────────────────────

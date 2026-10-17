@@ -23,6 +23,7 @@
 #include "cfgpack/io_file.h"
 #include "cfgpack/msgpack.h"
 
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -67,18 +68,21 @@ int main(int argc, char *argv[]) {
     cfgpack_schema_t schema;
     cfgpack_schema_measure_t m;
     cfgpack_parse_error_t perr;
+    const char *output_path;
+    const char *input_path;
+    size_t out_len = 0;
     cfgpack_ctx_t ctx;
     cfgpack_err_t rc;
     int is_json;
-    size_t out_len = 0;
 
     if (argc != 3) {
         print_usage(argv[0]);
-        return 1;
+        return (1);
     }
 
-    const char *input_path = argv[1];
-    const char *output_path = argv[2];
+    input_path = argv[1];
+    output_path = argv[2];
+    memset(&perr, 0, sizeof(perr));
 
     is_json = has_suffix(input_path, ".json");
 
@@ -93,18 +97,19 @@ int main(int argc, char *argv[]) {
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Measure failed: %s\n",
                 cfgpack_parse_error_str(perr.code));
-        return 3;
+        /* A file that could not be read is an I/O error, not a schema one */
+        return (perr.code == CFGPACK_PARSE_FILE_OPEN ? 2 : 3);
     }
 
     if (m.entry_count > MAX_ENTRIES) {
         fprintf(stderr, "Too many entries: %zu (max %d)\n", m.entry_count,
                 MAX_ENTRIES);
-        return 3;
+        return (3);
     }
     if (m.str_count + m.fstr_count > MAX_STR_OFFSETS) {
         fprintf(stderr, "Too many string entries: %zu (max %d)\n",
                 m.str_count + m.fstr_count, MAX_STR_OFFSETS);
-        return 3;
+        return (3);
     }
 
     /* Phase 2: parse */
@@ -130,7 +135,7 @@ int main(int argc, char *argv[]) {
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Parse failed: %s\n",
                 cfgpack_parse_error_str(perr.code));
-        return 3;
+        return (3);
     }
 
     /* Phase 3: init context */
@@ -138,7 +143,7 @@ int main(int argc, char *argv[]) {
                       m.str_pool_size, str_offsets, m.str_count + m.fstr_count);
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Init failed (error %d)\n", rc);
-        return 3;
+        return (3);
     }
 
     /* Phase 4: write msgpack */
@@ -147,27 +152,28 @@ int main(int argc, char *argv[]) {
     if (rc != CFGPACK_OK) {
         fprintf(stderr, "Encode failed: %s\n",
                 cfgpack_parse_error_str(perr.code));
-        return 3;
+        return (3);
     }
 
     /* Phase 5: write output file */
     fout = fopen(output_path, "wb");
     if (!fout) {
         fprintf(stderr, "Cannot open output file: %s\n", output_path);
-        return 2;
+        return (2);
     }
 
-    if (fwrite(output_buf, 1, out_len, fout) != out_len) {
+    /* Buffered write errors can surface at fclose; never leave a partial
+     * output file behind on failure. */
+    if (fwrite(output_buf, 1, out_len, fout) != out_len || fclose(fout) != 0) {
         fprintf(stderr, "Error writing output file\n");
-        fclose(fout);
-        return 2;
+        remove(output_path);
+        return (2);
     }
-    fclose(fout);
 
     /* Print stats */
-    printf("Schema: \"%s\" v%u (%zu entries)\n", schema.map_name,
+    printf("Schema: \"%s\" v%" PRIu32 " (%zu entries)\n", schema.map_name,
            schema.version, schema.entry_count);
     printf("Output: %zu bytes -> %s\n", out_len, output_path);
 
-    return 0;
+    return (0);
 }

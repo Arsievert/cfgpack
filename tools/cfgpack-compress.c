@@ -28,8 +28,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define MAX_INPUT_SIZE (64 * 1024)  /* 64 KB max input */
-#define MAX_OUTPUT_SIZE (64 * 1024) /* 64 KB max output */
+#define MAX_INPUT_SIZE (64 * 1024) /* 64 KB max input */
+/* Worst case for either codec on incompressible input: LZ4 needs
+ * LZ4_COMPRESSBOUND(n) = n + n/255 + 16; heatshrink's literal path costs
+ * 9 bits per byte, so n + n/8.  Round up generously. */
+#define MAX_OUTPUT_SIZE (MAX_INPUT_SIZE + MAX_INPUT_SIZE / 8 + 64)
 
 static uint8_t input_buf[MAX_INPUT_SIZE];
 static uint8_t output_buf[MAX_OUTPUT_SIZE];
@@ -62,11 +65,38 @@ static int compress_lz4(const uint8_t *input,
 
     if (compressed_size <= 0) {
         fprintf(stderr, "LZ4 compression failed\n");
-        return -1;
+        return (-1);
     }
 
     *output_len = (size_t)compressed_size;
-    return 0;
+    return (0);
+}
+
+/**
+ * @brief Drain pending encoder output.
+ *
+ * heatshrink_encoder_poll() rejects a zero-length output buffer with
+ * HSER_POLL_ERROR_MISUSE, so a full buffer is reported as an overflow here
+ * before polling rather than as a confusing poll error.
+ */
+static int drain_encoder(uint8_t *output, size_t output_cap, size_t *total) {
+    HSE_poll_res poll_res;
+    size_t produced;
+
+    do {
+        if (*total >= output_cap) {
+            fprintf(stderr, "Output buffer overflow\n");
+            return (-1);
+        }
+        poll_res = heatshrink_encoder_poll(&hs_encoder, output + *total,
+                                           output_cap - *total, &produced);
+        if (poll_res < 0) {
+            fprintf(stderr, "Heatshrink poll error: %d\n", poll_res);
+            return (-1);
+        }
+        *total += produced;
+    } while (poll_res == HSER_POLL_MORE);
+    return (0);
 }
 
 static int compress_heatshrink(const uint8_t *input,
@@ -74,44 +104,28 @@ static int compress_heatshrink(const uint8_t *input,
                                uint8_t *output,
                                size_t output_cap,
                                size_t *output_len) {
+    HSE_finish_res finish_res;
     size_t input_consumed = 0;
     size_t total_output = 0;
-    size_t sink_count, poll_count;
     HSE_sink_res sink_res;
-    HSE_poll_res poll_res;
-    HSE_finish_res finish_res;
+    size_t sink_count;
 
     heatshrink_encoder_reset(&hs_encoder);
 
-    /* Feed input and poll for output */
+    /* Feed input and drain output after each chunk */
     while (input_consumed < input_len) {
         sink_res = heatshrink_encoder_sink(&hs_encoder,
                                            (uint8_t *)(input + input_consumed),
                                            input_len - input_consumed,
                                            &sink_count);
-        if (sink_res < 0) {
+        if (sink_res < 0 || sink_count == 0) {
             fprintf(stderr, "Heatshrink sink error: %d\n", sink_res);
-            return -1;
+            return (-1);
         }
         input_consumed += sink_count;
-
-        /* Poll for compressed output */
-        do {
-            poll_res = heatshrink_encoder_poll(&hs_encoder,
-                                               output + total_output,
-                                               output_cap - total_output,
-                                               &poll_count);
-            if (poll_res < 0) {
-                fprintf(stderr, "Heatshrink poll error: %d\n", poll_res);
-                return -1;
-            }
-            total_output += poll_count;
-
-            if (total_output > output_cap) {
-                fprintf(stderr, "Output buffer overflow\n");
-                return -1;
-            }
-        } while (poll_res == HSER_POLL_MORE);
+        if (drain_encoder(output, output_cap, &total_output) != 0) {
+            return (-1);
+        }
     }
 
     /* Finish encoding */
@@ -119,47 +133,38 @@ static int compress_heatshrink(const uint8_t *input,
         finish_res = heatshrink_encoder_finish(&hs_encoder);
         if (finish_res < 0) {
             fprintf(stderr, "Heatshrink finish error: %d\n", finish_res);
-            return -1;
+            return (-1);
         }
-
-        /* Poll remaining output */
-        do {
-            poll_res = heatshrink_encoder_poll(&hs_encoder,
-                                               output + total_output,
-                                               output_cap - total_output,
-                                               &poll_count);
-            if (poll_res < 0) {
-                fprintf(stderr, "Heatshrink poll error: %d\n", poll_res);
-                return -1;
-            }
-            total_output += poll_count;
-
-            if (total_output > output_cap) {
-                fprintf(stderr, "Output buffer overflow\n");
-                return -1;
-            }
-        } while (poll_res == HSER_POLL_MORE);
+        if (finish_res == HSER_FINISH_MORE &&
+            drain_encoder(output, output_cap, &total_output) != 0) {
+            return (-1);
+        }
     } while (finish_res == HSER_FINISH_MORE);
 
     *output_len = total_output;
-    return 0;
+    return (0);
 }
 
 int main(int argc, char *argv[]) {
+    const char *output_path;
+    const char *input_path;
+    const char *algorithm;
+    size_t output_len = 0;
+    size_t file_size;
+    size_t input_len;
     FILE *fin = NULL;
     FILE *fout = NULL;
-    size_t input_len, output_len;
     int ret = 0;
     int is_lz4;
 
     if (argc != 4) {
         print_usage(argv[0]);
-        return 1;
+        return (1);
     }
 
-    const char *algorithm = argv[1];
-    const char *input_path = argv[2];
-    const char *output_path = argv[3];
+    algorithm = argv[1];
+    input_path = argv[2];
+    output_path = argv[3];
 
     /* Validate algorithm */
     if (strcmp(algorithm, "lz4") == 0) {
@@ -169,27 +174,29 @@ int main(int argc, char *argv[]) {
     } else {
         fprintf(stderr, "Unknown algorithm: %s\n", algorithm);
         print_usage(argv[0]);
-        return 1;
+        return (1);
     }
 
     /* Read input file */
     fin = fopen(input_path, "rb");
     if (!fin) {
         fprintf(stderr, "Cannot open input file: %s\n", input_path);
-        return 2;
+        return (2);
     }
 
     input_len = fread(input_buf, 1, MAX_INPUT_SIZE, fin);
     if (ferror(fin)) {
         fprintf(stderr, "Error reading input file\n");
         fclose(fin);
-        return 2;
+        return (2);
     }
-    if (!feof(fin)) {
+    /* feof() is only set by a read past the end, so probe one more byte:
+     * a file of exactly MAX_INPUT_SIZE bytes is fine. */
+    if (input_len == MAX_INPUT_SIZE && fgetc(fin) != EOF) {
         fprintf(stderr, "Input file too large (max %d bytes)\n",
                 MAX_INPUT_SIZE);
         fclose(fin);
-        return 2;
+        return (2);
     }
     fclose(fin);
     fin = NULL;
@@ -204,14 +211,14 @@ int main(int argc, char *argv[]) {
     }
 
     if (ret != 0) {
-        return 3;
+        return (3);
     }
 
     /* Write output file */
     fout = fopen(output_path, "wb");
     if (!fout) {
         fprintf(stderr, "Cannot open output file: %s\n", output_path);
-        return 2;
+        return (2);
     }
 
     /* LZ4: prepend 4-byte little-endian original size header */
@@ -224,21 +231,24 @@ int main(int argc, char *argv[]) {
         if (fwrite(hdr, 1, 4, fout) != 4) {
             fprintf(stderr, "Error writing LZ4 header\n");
             fclose(fout);
-            return 2;
+            remove(output_path);
+            return (2);
         }
     }
 
-    if (fwrite(output_buf, 1, output_len, fout) != output_len) {
+    /* Buffered write errors can surface at fclose; never leave a partial
+     * output file behind on failure. */
+    if (fwrite(output_buf, 1, output_len, fout) != output_len ||
+        fclose(fout) != 0) {
         fprintf(stderr, "Error writing output file\n");
-        fclose(fout);
-        return 2;
+        remove(output_path);
+        return (2);
     }
-    fclose(fout);
 
     /* Print stats */
-    size_t file_size = is_lz4 ? output_len + 4 : output_len;
+    file_size = is_lz4 ? output_len + 4 : output_len;
     printf("%s: %zu -> %zu bytes (%.1f%%)\n", algorithm, input_len, file_size,
            input_len > 0 ? (100.0 * file_size / input_len) : 0.0);
 
-    return 0;
+    return (0);
 }

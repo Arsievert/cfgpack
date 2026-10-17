@@ -589,6 +589,35 @@ TEST_CASE(test_json_structure_strict) {
     return (TEST_OK);
 }
 
+/*
+ * Tests link the hosted library, so this exercises the snprintf("%.17g")
+ * float writer rather than the embedded 9-digit formatter.  A double that
+ * is not exactly representable must survive write -> parse bit for bit.
+ */
+TEST_CASE(test_json_hosted_float_roundtrip) {
+    LOG_SECTION("hosted %%.17g float writer round-trips exactly");
+    char out[512];
+    size_t out_len = 0;
+    cfgpack_ctx_t ctx;
+    double before;
+
+    CHECK(parse_value("f64", "0.1") == CFGPACK_OK);
+    before = g_values[0].v.f64;
+    CHECK(cfgpack_init(&ctx, &g_schema, g_values, 8, g_str_pool,
+                       sizeof(g_str_pool), g_str_offsets, 4) == CFGPACK_OK);
+    CHECK(cfgpack_schema_write_json(&ctx, out, sizeof(out), &out_len, NULL) ==
+          CFGPACK_OK);
+    out[out_len] = '\0';
+    CHECK(strstr(out, "0.10000000000000001") != NULL);
+    LOG("written with 17 significant digits");
+
+    CHECK(parse_json_g(out) == CFGPACK_OK);
+    CHECK(memcmp(&g_values[0].v.f64, &before, sizeof(before)) == 0);
+    LOG("re-parsed value is bit-identical");
+
+    return (TEST_OK);
+}
+
 TEST_CASE(test_json_writer_small_buffer) {
     LOG_SECTION("schema_write_json with tiny buffer returns ERR_BOUNDS");
 
@@ -665,6 +694,9 @@ int main(void) {
                                  test_json_string_escapes()) != TEST_OK);
     overall |= (test_case_result("json_writer_escapes_names",
                                  test_json_writer_escapes_names()) != TEST_OK);
+    overall |= (test_case_result("json_hosted_float_roundtrip",
+                                 test_json_hosted_float_roundtrip()) !=
+                TEST_OK);
     overall |= (test_case_result("json_structure_strict",
                                  test_json_structure_strict()) != TEST_OK);
     overall |= (test_case_result("json_writer_small_buffer",

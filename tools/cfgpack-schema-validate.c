@@ -18,8 +18,8 @@
  * Exit codes:
  *   0 - Valid schema
  *   1 - Usage error
- *   2 - File I/O error
- *   3 - Validation error
+ *   2 - File I/O error (cannot open or read the input)
+ *   3 - Validation error (bad schema, or data that will not decompress)
  */
 
 #include "cfgpack/cfgpack.h"
@@ -29,6 +29,7 @@
 #include "heatshrink_decoder.h"
 #include "lz4.h"
 
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -83,31 +84,43 @@ static int has_suffix(const char *str, const char *suffix) {
     return (strcmp(str + str_len - suf_len, suffix) == 0);
 }
 
-static size_t read_file(const char *path, uint8_t *buf, size_t cap) {
+/**
+ * @brief Read a whole file into @p buf.
+ * @return 0 on success with @p out_len set (an empty file is a successful
+ *         read of 0 bytes), -1 on open/read error or if the file is larger
+ *         than @p cap.
+ */
+static int read_file(const char *path,
+                     uint8_t *buf,
+                     size_t cap,
+                     size_t *out_len) {
     size_t n;
     FILE *f;
 
     f = fopen(path, "rb");
     if (!f) {
         fprintf(stderr, "Cannot open file: %s\n", path);
-        return (0);
+        return (-1);
     }
 
     n = fread(buf, 1, cap, f);
-    if (n == 0 && ferror(f)) {
+    if (ferror(f)) {
         fprintf(stderr, "Error reading file: %s\n", path);
         fclose(f);
-        return (0);
+        return (-1);
     }
-    if (!feof(f)) {
+    /* feof() is only set by a read past the end: probe one more byte so a
+     * file of exactly cap bytes is accepted. */
+    if (n == cap && fgetc(f) != EOF) {
         fprintf(stderr, "File too large (max %d bytes): %s\n", MAX_INPUT_SIZE,
                 path);
         fclose(f);
-        return (0);
+        return (-1);
     }
 
     fclose(f);
-    return (n);
+    *out_len = n;
+    return (0);
 }
 
 static int detect_format(const char *path) {
@@ -160,74 +173,82 @@ static cfgpack_err_t decompress_lz4(const uint8_t *in,
 
 static heatshrink_decoder hs_decoder;
 
+/**
+ * @brief Drain decoder output into @p out.
+ *
+ * heatshrink_decoder_poll() reports HSDR_POLL_MORE whenever it fills the
+ * buffer it is given, including a zero-byte one, so a full buffer must be
+ * detected here or the loop never ends.  Once all input is sunk, finish()
+ * distinguishes an exact fit (DONE) from truncation (MORE).
+ */
+static cfgpack_err_t drain_decoder(uint8_t *out,
+                                   size_t out_cap,
+                                   size_t *total,
+                                   int input_done) {
+    HSD_poll_res poll_res;
+    size_t produced;
+
+    do {
+        if (*total == out_cap) {
+            if (input_done &&
+                heatshrink_decoder_finish(&hs_decoder) == HSDR_FINISH_DONE) {
+                return (CFGPACK_OK);
+            }
+            fprintf(stderr, "Decompressed data exceeds buffer capacity\n");
+            return (CFGPACK_ERR_BOUNDS);
+        }
+        poll_res = heatshrink_decoder_poll(&hs_decoder, out + *total,
+                                           out_cap - *total, &produced);
+        if (poll_res < 0) {
+            fprintf(stderr, "Heatshrink poll failed\n");
+            return (CFGPACK_ERR_DECODE);
+        }
+        *total += produced;
+    } while (poll_res == HSDR_POLL_MORE);
+    return (CFGPACK_OK);
+}
+
 static cfgpack_err_t decompress_heatshrink(const uint8_t *in,
                                            size_t in_len,
                                            uint8_t *out,
                                            size_t out_cap,
                                            size_t *out_len) {
-    size_t output_produced = 0;
     size_t input_consumed = 0;
     HSD_finish_res finish_res;
     size_t total_output = 0;
     HSD_sink_res sink_res;
-    HSD_poll_res poll_res;
+    cfgpack_err_t rc;
+    size_t sunk;
 
     heatshrink_decoder_reset(&hs_decoder);
 
     while (input_consumed < in_len) {
         sink_res = heatshrink_decoder_sink(&hs_decoder,
                                            (uint8_t *)(in + input_consumed),
-                                           in_len - input_consumed,
-                                           &output_produced);
-        if (sink_res < 0) {
+                                           in_len - input_consumed, &sunk);
+        if (sink_res < 0 || sunk == 0) {
             fprintf(stderr, "Heatshrink sink failed\n");
             return (CFGPACK_ERR_DECODE);
         }
-        input_consumed += output_produced;
-
-        do {
-            poll_res = heatshrink_decoder_poll(&hs_decoder, out + total_output,
-                                               out_cap - total_output,
-                                               &output_produced);
-            if (poll_res < 0) {
-                fprintf(stderr, "Heatshrink poll failed\n");
-                return (CFGPACK_ERR_DECODE);
-            }
-            total_output += output_produced;
-
-            if (total_output > out_cap) {
-                fprintf(stderr, "Decompressed data exceeds buffer capacity\n");
-                return (CFGPACK_ERR_BOUNDS);
-            }
-        } while (poll_res == HSDR_POLL_MORE);
+        input_consumed += sunk;
+        rc = drain_decoder(out, out_cap, &total_output,
+                           input_consumed == in_len);
+        if (rc != CFGPACK_OK) {
+            return (rc);
+        }
     }
 
     finish_res = heatshrink_decoder_finish(&hs_decoder);
+    while (finish_res == HSDR_FINISH_MORE) {
+        rc = drain_decoder(out, out_cap, &total_output, 1);
+        if (rc != CFGPACK_OK) {
+            return (rc);
+        }
+        finish_res = heatshrink_decoder_finish(&hs_decoder);
+    }
     if (finish_res < 0) {
         fprintf(stderr, "Heatshrink finish failed\n");
         return (CFGPACK_ERR_DECODE);
-    }
-
-    while (finish_res == HSDR_FINISH_MORE) {
-        poll_res = heatshrink_decoder_poll(&hs_decoder, out + total_output,
-                                           out_cap - total_output,
-                                           &output_produced);
-        if (poll_res < 0) {
-            fprintf(stderr, "Heatshrink poll failed\n");
-            return (CFGPACK_ERR_DECODE);
-        }
-        total_output += output_produced;
-
-        if (total_output > out_cap) {
-            fprintf(stderr, "Decompressed data exceeds buffer capacity\n");
-            return (CFGPACK_ERR_BOUNDS);
-        }
-
-        finish_res = heatshrink_decoder_finish(&hs_decoder);
-        if (finish_res < 0) {
-            fprintf(stderr, "Heatshrink finish failed\n");
-            return (CFGPACK_ERR_DECODE);
-        }
     }
 
     *out_len = total_output;
@@ -342,8 +363,8 @@ static int validate_schema(const uint8_t *data, size_t data_len, int format) {
     }
 
     /* Phase 3: print success summary */
-    printf("Valid: \"%s\" v%u (%zu entries)\n", schema.map_name, schema.version,
-           schema.entry_count);
+    printf("Valid: \"%s\" v%" PRIu32 " (%zu entries)\n", schema.map_name,
+           schema.version, schema.entry_count);
     print_type_summary(&schema);
 
     return (0);
@@ -366,10 +387,15 @@ int main(int argc, char *argv[]) {
 
     /* Parse arguments */
     for (i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--lz4") == 0) {
-            compression = COMPRESS_LZ4;
-        } else if (strcmp(argv[i], "--heatshrink") == 0) {
-            compression = COMPRESS_HEATSHRINK;
+        if (strcmp(argv[i], "--lz4") == 0 ||
+            strcmp(argv[i], "--heatshrink") == 0) {
+            if (compression != COMPRESS_NONE) {
+                fprintf(stderr,
+                        "Error: --lz4 and --heatshrink are exclusive\n");
+                return (1);
+            }
+            compression = strcmp(argv[i], "--lz4") == 0 ? COMPRESS_LZ4
+                                                        : COMPRESS_HEATSHRINK;
         } else if (strcmp(argv[i], "--format") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "Error: --format requires an argument\n");
@@ -416,8 +442,7 @@ int main(int argc, char *argv[]) {
     }
 
     /* Read input file */
-    file_len = read_file(input_path, input_buf, sizeof(input_buf));
-    if (file_len == 0) {
+    if (read_file(input_path, input_buf, sizeof(input_buf), &file_len) != 0) {
         return (2);
     }
 
@@ -430,7 +455,7 @@ int main(int argc, char *argv[]) {
         rc = decompress_lz4(input_buf, file_len, scratch_buf,
                             sizeof(scratch_buf), &decompressed_len);
         if (rc != CFGPACK_OK) {
-            return (2);
+            return (3); /* the file was read fine; its contents are bad */
         }
         data = scratch_buf;
         data_len = decompressed_len;
@@ -442,7 +467,7 @@ int main(int argc, char *argv[]) {
         rc = decompress_heatshrink(input_buf, file_len, scratch_buf,
                                    sizeof(scratch_buf), &decompressed_len);
         if (rc != CFGPACK_OK) {
-            return (2);
+            return (3); /* the file was read fine; its contents are bad */
         }
         data = scratch_buf;
         data_len = decompressed_len;

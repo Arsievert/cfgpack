@@ -3,9 +3,12 @@
  * @brief Seed corpus generator for fuzz targets.
  *
  * Standalone hosted program that generates valid binary seed files for:
+ *   - corpus_map/     (.map text schema)
  *   - corpus_json/    (JSON schema blobs)
  *   - corpus_msgpack/ (msgpack schema blobs)
  *   - corpus_pagein/  (pageout'd config blobs)
+ *   - corpus_decompress/ (the pagein blob compressed with LZ4 / heatshrink,
+ *                         prefixed with the harness's mode byte)
  *   - corpus_decode/  (raw msgpack primitives)
  *   - corpus_msgpack_mutator/ (random byte seeds for custom mutator)
  *
@@ -14,6 +17,9 @@
  */
 #include "cfgpack/cfgpack.h"
 #include "cfgpack/msgpack.h"
+
+#include "heatshrink_encoder.h"
+#include "lz4.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,6 +40,117 @@ static void write_file(const char *path, const void *data, size_t len) {
     }
     fclose(f);
     printf("  wrote %s (%zu bytes)\n", path, len);
+}
+
+/* ── .map corpus seed ───────────────────────────────────────────────────── */
+
+static void gen_map_seeds(void) {
+    static const char map_text[] =
+        "# fuzz seed: every type, comments, hex and quoted defaults\n"
+        "fuzz 3\n"
+        "1 u8v u8 0xff # inline comment\n"
+        "2 u16v u16 1000\n"
+        "3 i8v i8 -5\n"
+        "4 i64v i64 -9000000000\n"
+        "5 f32v f32 1.5\n"
+        "6 f64v f64 -2.5e-3\n"
+        "7 strv str \"hello world\"\n"
+        "8 fstrv fstr \"fixed\"\n"
+        "9 nilv u32 NIL\n";
+
+    printf("corpus_map:\n");
+    write_file("tests/fuzz/corpus_map/alltypes.map", map_text,
+               sizeof(map_text) - 1);
+}
+
+/* ── decompress corpus seeds ────────────────────────────────────────────── */
+
+static heatshrink_encoder hs_enc;
+
+/**
+ * @brief Compress @p in with heatshrink into @p out; returns bytes written
+ *        or 0 on failure.
+ */
+static size_t hs_compress(const uint8_t *in,
+                          size_t in_len,
+                          uint8_t *out,
+                          size_t out_cap) {
+    size_t consumed = 0;
+    size_t total = 0;
+    size_t n;
+
+    heatshrink_encoder_reset(&hs_enc);
+    while (consumed < in_len) {
+        if (heatshrink_encoder_sink(&hs_enc, (uint8_t *)in + consumed,
+                                    in_len - consumed, &n) < 0 ||
+            n == 0) {
+            return 0;
+        }
+        consumed += n;
+        for (;;) {
+            HSE_poll_res pr = heatshrink_encoder_poll(&hs_enc, out + total,
+                                                      out_cap - total, &n);
+            if (pr < 0) {
+                return 0;
+            }
+            total += n;
+            if (pr != HSER_POLL_MORE) {
+                break;
+            }
+        }
+    }
+    for (;;) {
+        HSE_finish_res fr = heatshrink_encoder_finish(&hs_enc);
+        if (fr < 0) {
+            return 0;
+        }
+        if (fr == HSER_FINISH_DONE) {
+            break;
+        }
+        for (;;) {
+            HSE_poll_res pr = heatshrink_encoder_poll(&hs_enc, out + total,
+                                                      out_cap - total, &n);
+            if (pr < 0) {
+                return 0;
+            }
+            total += n;
+            if (pr != HSER_POLL_MORE) {
+                break;
+            }
+        }
+    }
+    return total;
+}
+
+/**
+ * @brief Write LZ4 and heatshrink seeds for fuzz_decompress from a pagein
+ *        blob.  Byte 0 is the harness mode: 0x83 = LZ4 with full scratch,
+ *        0x03 = heatshrink with full scratch.
+ */
+static void gen_decompress_seeds(const uint8_t *blob, size_t blob_len) {
+    uint8_t seed[1 + 2048];
+    size_t n;
+    int lz;
+
+    printf("corpus_decompress:\n");
+
+    lz = LZ4_compress_default((const char *)blob, (char *)seed + 1,
+                              (int)blob_len, (int)(sizeof(seed) - 1));
+    if (lz <= 0) {
+        fprintf(stderr, "ERROR: LZ4 seed compression failed\n");
+        exit(1);
+    }
+    seed[0] = 0x83;
+    write_file("tests/fuzz/corpus_decompress/all_values.lz4", seed,
+               (size_t)lz + 1);
+
+    n = hs_compress(blob, blob_len, seed + 1, sizeof(seed) - 1);
+    if (n == 0) {
+        fprintf(stderr, "ERROR: heatshrink seed compression failed\n");
+        exit(1);
+    }
+    seed[0] = 0x03;
+    write_file("tests/fuzz/corpus_decompress/all_values.hs", seed, n + 1);
 }
 
 /* ── JSON corpus seeds ──────────────────────────────────────────────────── */
@@ -237,6 +354,7 @@ static void gen_pagein_seeds(void) {
         exit(1);
     }
     write_file("tests/fuzz/corpus_pagein/all_values.bin", out, out_len);
+    gen_decompress_seeds(out, out_len);
 
     /* Seed 2: only numeric values (no strings) */
     cfgpack_ctx_t ctx2;
@@ -388,6 +506,8 @@ static void gen_msgpack_mutator_seeds(void) {
 int main(void) {
     printf("Generating fuzz seed corpora...\n\n");
 
+    gen_map_seeds();
+    printf("\n");
     gen_json_seeds();
     printf("\n");
     gen_msgpack_seeds();

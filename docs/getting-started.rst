@@ -18,7 +18,9 @@ Include just ``cfgpack/cfgpack.h``; it re-exports the public API surface.
    uint16_t str_offsets[128];
    uint8_t scratch[4096];
 
-   // Parse schema — defaults are written directly into values[] and str_pool[]
+   /* map_data / map_len: the .map schema text, loaded by the application */
+
+   /* Parse schema: defaults are written directly into values[] and str_pool[] */
    cfgpack_parse_opts_t opts = {
        .out_schema       = &schema,
        .entries          = entries,
@@ -32,17 +34,17 @@ Include just ``cfgpack/cfgpack.h``; it re-exports the public API surface.
    };
    cfgpack_parse_schema(map_data, map_len, &opts);
 
-   // Initialize runtime context — values and str_pool already contain defaults
+   /* Initialize runtime context: values and str_pool already hold defaults */
    cfgpack_ctx_t ctx;
    cfgpack_init(&ctx, &schema, values, 128,
                 str_pool, sizeof(str_pool), str_offsets, 128);
 
-   // Use typed convenience functions
+   /* Use typed convenience functions */
    uint16_t speed;
    cfgpack_get_u16_by_name(&ctx, "maxsp", &speed);
    cfgpack_set_u16_by_name(&ctx, "maxsp", 100);
 
-   // Serialize to MessagePack
+   /* Serialize to MessagePack */
    size_t len;
    cfgpack_pageout(&ctx, scratch, sizeof(scratch), &len);
 
@@ -137,4 +139,8 @@ To compile in hosted mode:
 
 .. code-block:: bash
 
-   $(CC) -DCFGPACK_HOSTED -Iinclude myapp.c -Lbuild/out -lcfgpack
+   make hosted
+   $(CC) -DCFGPACK_HOSTED -Iinclude myapp.c -Lbuild/out -lcfgpack-hosted
+
+The hosted archive also contains the file I/O wrappers and
+``cfgpack_parse_error_str()``; the embedded ``libcfgpack.a`` contains neither.

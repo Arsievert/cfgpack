@@ -615,9 +615,8 @@ TEST_CASE(test_measure_file_nonexistent) {
     cfgpack_parse_error_t err;
     char scratch[256];
 
-    CHECK(cfgpack_schema_measure_file("/tmp/cfgpack_no_such_file.map", &m,
-                                      scratch, sizeof(scratch),
-                                      &err) == CFGPACK_ERR_IO);
+    CHECK(cfgpack_schema_measure_file("build/tmp/no_such_file.map", &m, scratch,
+                                      sizeof(scratch), &err) == CFGPACK_ERR_IO);
     CHECK(err.line == 0);
     LOG("measure_file nonexistent: IO, cfgpack_parse_error_str(err.code)='%s'",
         cfgpack_parse_error_str(err.code));
@@ -635,7 +634,7 @@ TEST_CASE(test_measure_json_file_nonexistent) {
     cfgpack_parse_error_t err;
     char scratch[256];
 
-    CHECK(cfgpack_schema_measure_json_file("/tmp/cfgpack_no_such.json", &m,
+    CHECK(cfgpack_schema_measure_json_file("build/tmp/no_such.json", &m,
                                            scratch, sizeof(scratch),
                                            &err) == CFGPACK_ERR_IO);
     CHECK(err.line == 0);
@@ -666,7 +665,7 @@ TEST_CASE(test_parse_schema_file_nonexistent) {
         .err = &err,
     };
 
-    CHECK(cfgpack_parse_schema_file("/tmp/cfgpack_no_such.map", &opts, scratch,
+    CHECK(cfgpack_parse_schema_file("build/tmp/no_such.map", &opts, scratch,
                                     sizeof(scratch)) == CFGPACK_ERR_IO);
     CHECK(err.line == 0);
     LOG("parse_schema_file nonexistent: IO, "

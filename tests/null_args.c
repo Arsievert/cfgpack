@@ -702,10 +702,10 @@ TEST_CASE(test_print_basic) {
     LOG("Print all entries:");
     CHECK(cfgpack_print_all(&ctx) == CFGPACK_OK);
 
-    /* Note: library is built without CFGPACK_HOSTED, so cfgpack_print is a
-     * no-op that always returns CFGPACK_OK even for missing indices. */
-    LOG("Print missing index (no-op in embedded build):");
-    CHECK(cfgpack_print(&ctx, 99) == CFGPACK_OK);
+    /* Tests link libcfgpack-hosted.a, so this is the real printf-backed
+     * implementation: an unknown index is reported, not silently ignored. */
+    LOG("Print missing index (hosted build reports it):");
+    CHECK(cfgpack_print(&ctx, 99) == CFGPACK_ERR_MISSING);
 
     return TEST_OK;
 }

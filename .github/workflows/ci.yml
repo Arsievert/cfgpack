@@ -48,14 +48,20 @@ jobs:
 
       # macOS runners already ship clang + make; nothing to install.
 
-      - name: Build library
-        run: make CC=${{ matrix.cc }}
+      - name: Build library (warnings are errors)
+        run: make CC=${{ matrix.cc }} WERROR=-Werror
 
       - name: Build tests
-        run: make CC=${{ matrix.cc }} tests
+        run: make CC=${{ matrix.cc }} WERROR=-Werror tests
 
       - name: Run tests
         run: scripts/run-tests.sh
+
+      - name: Build tools and run tool smoke tests
+        run: make CC=${{ matrix.cc }} WERROR=-Werror tools-test
+
+      - name: Build examples
+        run: make CC=${{ matrix.cc }} examples
 
       - name: Upload test log
         if: always()
@@ -75,7 +81,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang
       - name: Build + run tests under ASan/UBSan
-        run: make CC=clang test-asan
+        run: make CC=clang WERROR=-Werror test-asan
       - name: Upload sanitizer log
         if: always()
         uses: actions/upload-artifact@v6
@@ -157,7 +163,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang
       - name: Build fuzz harnesses (also runs gen-seeds)
-        run: make CC=clang fuzz
+        run: make CC=clang WERROR=-Werror fuzz
       - name: Run each fuzz target for 30s
         run: scripts/run-fuzz.sh 30
       - name: Upload corpora + any crash artifacts
@@ -187,7 +193,10 @@ jobs:
         run: make docs
       - name: Generate coverage badge JSON
         run: |
-          pct=$(grep '^TOTAL' build/coverage/report.txt | awk '{print $4}' | tr -d '%')
+          # llvm-cov report columns: Filename Regions Missed Cover Functions
+          # Missed Executed Lines Missed Cover ...  Column 10 is line coverage
+          # (column 4 is region coverage).
+          pct=$(grep '^TOTAL' build/coverage/report.txt | awk '{print $10}' | tr -d '%')
           echo "Line coverage: $pct%"
           # Color: green ≥90, yellowgreen ≥80, yellow ≥70, orange ≥60, red <60
           if [ "$(echo "$pct >= 90" | bc)" -eq 1 ]; then color="brightgreen"

@@ -45,7 +45,7 @@ TEST_CASE(test_pagein_file_nonexistent) {
     LOG("Context initialized");
 
     LOG("Testing pagein_file with nonexistent path");
-    CHECK(cfgpack_pagein_file(&ctx, "/tmp/cfgpack_does_not_exist.bin", scratch,
+    CHECK(cfgpack_pagein_file(&ctx, "build/tmp/does_not_exist.bin", scratch,
                               sizeof(scratch)) == CFGPACK_ERR_IO);
     LOG("Correctly returned: CFGPACK_ERR_IO");
 
@@ -70,7 +70,7 @@ TEST_CASE(test_parse_schema_file_nonexistent) {
     cfgpack_parse_opts_t opts = {&schema,     entries,  8,
                                  values,      str_pool, sizeof(str_pool),
                                  str_offsets, 4,        &err};
-    CHECK(cfgpack_parse_schema_file("/tmp/cfgpack_nope.map", &opts, scratch,
+    CHECK(cfgpack_parse_schema_file("build/tmp/nope.map", &opts, scratch,
                                     sizeof(scratch)) == CFGPACK_ERR_IO);
     LOG("Correctly returned: CFGPACK_ERR_IO");
 
@@ -95,8 +95,7 @@ TEST_CASE(test_json_parse_file_nonexistent) {
     cfgpack_parse_opts_t opts = {&schema,     entries,  8,
                                  values,      str_pool, sizeof(str_pool),
                                  str_offsets, 4,        &err};
-    CHECK(cfgpack_schema_parse_json_file("/tmp/cfgpack_nope.json", &opts,
-                                         scratch,
+    CHECK(cfgpack_schema_parse_json_file("build/tmp/nope.json", &opts, scratch,
                                          sizeof(scratch)) == CFGPACK_ERR_IO);
     LOG("Correctly returned: CFGPACK_ERR_IO");
 
@@ -124,8 +123,7 @@ TEST_CASE(test_json_write_file_bad_path) {
     LOG("Context initialized");
 
     LOG("Attempting write_json_file to nonexistent directory");
-    CHECK(cfgpack_schema_write_json_file(&ctx,
-                                         "/tmp/cfgpack_no_such_dir/out.json",
+    CHECK(cfgpack_schema_write_json_file(&ctx, "build/tmp/no_such_dir/out.json",
                                          scratch, sizeof(scratch),
                                          &err) == CFGPACK_ERR_IO);
     LOG("Correctly returned: CFGPACK_ERR_IO");
@@ -469,7 +467,7 @@ TEST_CASE(test_coerce_signed_widening) {
 TEST_CASE(test_pagein_file_exact_fit) {
     LOG_SECTION("A blob file exactly the size of scratch loads");
 
-    const char *path = "/tmp/cfgpack_exact_fit.bin";
+    const char *path = "build/tmp/exact_fit.bin";
     cfgpack_schema_t schema;
     cfgpack_entry_t entries[1];
     cfgpack_ctx_t ctx;

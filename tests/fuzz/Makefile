@@ -54,7 +54,8 @@ ifeq ($(UNAME_S),Darwin)
   endif
 
   # Point the linker at LLVM's libc++ so the fuzzer runtime resolves.
-  _LLVM_PREFIX := $(shell dirname $(shell dirname $(CC)))
+  # Resolve a bare "clang" through PATH first, or dirname yields ".".
+  _LLVM_PREFIX := $(shell dirname $$(dirname $$(command -v $(CC))))
   _EXTRA_LDFLAGS := -L$(_LLVM_PREFIX)/lib/c++ -Wl,-rpath,$(_LLVM_PREFIX)/lib/c++
 endif
 
@@ -69,19 +70,24 @@ FUZZSRC := fuzz_parse_map.c    \
            fuzz_parse_msgpack.c \
            fuzz_parse_msgpack_mutator.c \
            fuzz_pagein.c        \
+           fuzz_decompress.c    \
            fuzz_msgpack_decode.c
 FUZZBINS := $(FUZZSRC:%.c=$(OUT)/%)
 
 # --- Seed corpus generator ----------------------------------------------------
+# The generator also needs the heatshrink *encoder* to build decompress seeds.
 GEN_SEEDS     := $(OUT)/gen_seeds
 GEN_SEEDS_SRC := gen_seeds.c
+GEN_SEEDS_EXTRA := $(ROOT)/third_party/heatshrink/heatshrink_encoder.c
 
 # --- Targets ------------------------------------------------------------------
 .DEFAULT_GOAL := fuzz
 
 fuzz: gen-seeds $(FUZZBINS)
 
-$(OUT)/fuzz_%: fuzz_%.c $(LIBSRC)
+LIBHDR := $(wildcard $(ROOT)/include/cfgpack/*.h $(ROOT)/src/*.h)
+
+$(OUT)/fuzz_%: fuzz_%.c $(LIBSRC) $(LIBHDR)
 	@mkdir -p $(OUT)
 	@echo "CC (fuzz) $@"
 	@$(CC) $(FUZZ_CFLAGS) $(FUZZ_LDFLAGS) -o $@ $< $(LIBSRC)
@@ -90,14 +96,15 @@ gen-seeds: $(GEN_SEEDS)
 	@mkdir -p $(ROOT)/tests/fuzz/corpus_json \
 	          $(ROOT)/tests/fuzz/corpus_msgpack \
 	          $(ROOT)/tests/fuzz/corpus_pagein \
+	          $(ROOT)/tests/fuzz/corpus_decompress \
 	          $(ROOT)/tests/fuzz/corpus_decode \
 	          $(ROOT)/tests/fuzz/corpus_msgpack_mutator \
 	          $(ROOT)/tests/fuzz/corpus_map
 	@cd $(ROOT) && $(GEN_SEEDS)
 
-$(GEN_SEEDS): $(GEN_SEEDS_SRC) $(LIBSRC)
+$(GEN_SEEDS): $(GEN_SEEDS_SRC) $(LIBSRC) $(GEN_SEEDS_EXTRA)
 	@mkdir -p $(OUT)
 	@echo "CC $(GEN_SEEDS)"
-	@$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $(GEN_SEEDS_SRC) $(LIBSRC)
+	@$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $(GEN_SEEDS_SRC) $(LIBSRC) $(GEN_SEEDS_EXTRA)
 
 .PHONY: fuzz gen-seeds

@@ -34,7 +34,9 @@ All build artifacts are placed under `build/`:
 
 | Path | Contents |
 |------|----------|
-| `build/obj/` | Compiled `.o` object files (mirroring source tree) |
+| `build/obj/` | Embedded-mode `.o` files (mirroring source tree) |
+| `build/obj-hosted/` | Hosted-mode `.o` files (`-DCFGPACK_HOSTED`) for tests and tools |
+| `build/tmp/` | Scratch files written by tests and tool smoke tests |
 | `build/out/` | Final outputs: static library, test binaries, tool binaries |
 | `build/json/` | Per-TU JSON fragments for `compile_commands.json` generation |
 | `build/docs/` | Generated documentation (Doxygen XML, Sphinx HTML) |
@@ -44,8 +46,11 @@ All build artifacts are placed under `build/`:
 | Target | Description |
 |--------|-------------|
 | `all` (default) | Build `libcfgpack.a` -- core library only, no stdio |
-| `tests` | Build all test binaries into `build/out/` |
+| `hosted` | Build `libcfgpack-hosted.a` -- core plus `io_file.c` and `parse_error_str.c`, compiled with `-DCFGPACK_HOSTED` |
+| `tests` | Build all test binaries into `build/out/` (linked against `libcfgpack-hosted.a`) |
 | `tools` | Build `cfgpack-compress`, `cfgpack-schema-pack`, and `cfgpack-schema-validate` |
+| `tools-test` | Run `scripts/test-tools.sh`: pack, validate, compress and decompress fixtures and check exit codes |
+| `examples` | Build every example under `examples/` |
 | `fuzz` | Build all libFuzzer harnesses (delegated to `tests/fuzz/Makefile`) |
 | `docs` | Generate Sphinx + Doxygen documentation |
 | `format` | Auto-format all source with clang-format |
@@ -232,14 +237,15 @@ Each test binary links against: the core static library, `io_file.o`, the encode
 
 `scripts/run-tests.sh` orchestrates test execution:
 
-1. Iterates over a hardcoded list of test binary names.
-2. Runs each binary, captures stdout/stderr and exit code.
-3. Parses output for `PASS`/`FAIL` lines (excluding the `ALL PASS` summary).
-4. Prints a per-binary summary with color-coded pass/fail counts.
-5. Writes full output to `build/test.log`.
-6. Prints a total summary and exits non-zero if any test failed.
+1. Changes to the repository root (tests open fixtures relative to it) and creates `build/tmp/`.
+2. Iterates over a hardcoded list of test binary names.
+3. Runs each binary under a 120-second `timeout` when one is available, capturing stdout/stderr and exit code.
+4. Strips colour codes and counts lines anchored at `PASS ` / `FAIL `, so each case is counted exactly once (the indented `CHECK` diagnostics and the `ALL PASS` / `SOME FAIL` summaries are excluded).
+5. Prints a per-binary summary with color-coded pass/fail counts.
+6. Writes full output to `build/test.log`.
+7. Prints a total summary and exits non-zero if any test failed.
 
-Binaries that are missing are reported as `SKIP`.
+A missing binary or a timed-out binary is reported as a failure, not skipped.
 
 ---
 
@@ -278,6 +284,7 @@ Library sources are compiled directly into each fuzz binary (rather than linking
 | `fuzz_parse_msgpack` | `corpus_msgpack/` | MessagePack schema parser |
 | `fuzz_parse_msgpack_mutator` | `corpus_msgpack_mutator/` | MessagePack parser with custom mutator |
 | `fuzz_pagein` | `corpus_pagein/` | Configuration page-in (deserialization) |
+| `fuzz_decompress` | `corpus_decompress/` | LZ4 and heatshrink decompression wrappers with fuzzer-chosen scratch sizes |
 | `fuzz_msgpack_decode` | `corpus_decode/` | Raw MessagePack decoding |
 
 ### Seed Corpus Generator
@@ -604,11 +611,12 @@ cfgpack/
 │   └── fuzz/                   #   Fuzz testing
 │       ├── Makefile            #     Fuzz build system
 │       ├── gen_seeds.c         #     Seed corpus generator
-│       ├── fuzz_parse_map.c    #     6 fuzz harness sources
+│       ├── fuzz_parse_map.c    #     7 fuzz harness sources
 │       ├── fuzz_parse_json.c
 │       ├── fuzz_parse_msgpack.c
 │       ├── fuzz_parse_msgpack_mutator.c
 │       ├── fuzz_pagein.c
+│       ├── fuzz_decompress.c
 │       └── fuzz_msgpack_decode.c
 ├── tools/                      # CLI tools
 │   ├── cfgpack-compress.c      #   LZ4/heatshrink compression tool

@@ -46,9 +46,13 @@ device.
 On the device:
 
 ```c
-/* Decompress if needed (LZ4 example) */
-LZ4_decompress_safe(compressed_data, scratch, compressed_len,
-                    decompressed_size);
+/* Decompress if needed.  cfgpack-compress prefixes LZ4 output with a
+ * 4-byte little-endian original size; read it, then decompress the rest. */
+uint32_t decompressed_size = (uint32_t)blob[0] | ((uint32_t)blob[1] << 8) |
+                             ((uint32_t)blob[2] << 16) |
+                             ((uint32_t)blob[3] << 24);
+LZ4_decompress_safe((const char *)blob + 4, (char *)scratch,
+                    (int)(blob_len - 4), (int)decompressed_size);
 
 /* Measure, allocate, and parse the msgpack schema */
 cfgpack_schema_measure_msgpack(data, len, &m, &err);  /* measure first */
@@ -97,7 +101,7 @@ Every boot loads the schema, then takes one of three paths depending on what's i
 
 - First line: `<name> <version>` header (e.g., `vehicle 1` where `vehicle` is the schema name and `1` is the version). The schema name is embedded at reserved index 0 in serialized blobs for version detection during firmware upgrades.
 - Lines follow the format: `INDEX NAME TYPE DEFAULT  # optional description`
-  - `INDEX`: 0–65535
+  - `INDEX`: 1–65535 (0 is reserved for the schema name)
   - `NAME`: up to 5 characters (hard limit — longer names will fail to parse)
   - `TYPE`: one of the supported numeric/float/string types (str max 64, fstr max 16)
   - `DEFAULT`: default value for this entry (see below)
@@ -157,26 +161,32 @@ vehicle 1
 - `tools/` — CLI tools source (`cfgpack-compress.c` for LZ4/heatshrink compression, `cfgpack-schema-pack.c` for converting schemas to msgpack binary, `cfgpack-schema-validate.c` for schema validation).
 - `examples/` — complete usage examples (`allocate-once/`, `datalogger/`, `flash_config/`, `fleet_gateway/`, `low_memory/`, `sensor_hub/`).
 - `third_party/` — vendored dependencies (`lz4/`, `heatshrink/`, `littlefs/`).
-- `Makefile` — builds `build/out/libcfgpack.a`, test binaries, and tools.
+- `makefile` — builds `build/out/libcfgpack.a`, `libcfgpack-hosted.a`, test binaries, tools, and examples.
 
 ## Building
 
 ```bash
-make              # builds build/out/libcfgpack.a
-make tests        # builds all test binaries
+make              # builds build/out/libcfgpack.a (embedded: no stdio)
+make hosted       # builds build/out/libcfgpack-hosted.a (printf, file I/O, error strings)
+make tests        # builds all test binaries (linked against the hosted library)
 make tools        # builds CLI tools (cfgpack-compress, cfgpack-schema-pack, cfgpack-schema-validate)
+make tools-test   # smoke-tests the CLI tools end to end
+make examples     # builds every example under examples/
 ```
 
 ### Build Modes
 
-| Mode | Default | stdio | Print Functions | Float Formatting |
+| Mode | Archive | stdio | Print Functions | Float Formatting |
 |------|---------|-------|-----------------|------------------|
-| `CFGPACK_EMBEDDED` | Yes | Not linked | Silent no-ops | Minimal (9 digits) |
-| `CFGPACK_HOSTED` | No | Linked | Full printf | snprintf (%.17g) |
+| `CFGPACK_EMBEDDED` (default) | `libcfgpack.a` | Not linked | Validate arguments, print nothing | Minimal (9 digits) |
+| `CFGPACK_HOSTED` | `libcfgpack-hosted.a` | Linked | Full printf | snprintf (%.17g) |
 
-To compile in hosted mode:
+The mode is baked into the archive at build time, so hosted applications link
+the hosted archive (which also contains the file I/O wrappers and
+`cfgpack_parse_error_str()`):
 ```bash
-$(CC) -DCFGPACK_HOSTED -Iinclude myapp.c -Lbuild/out -lcfgpack
+make hosted
+$(CC) -DCFGPACK_HOSTED -Iinclude myapp.c -Lbuild/out -lcfgpack-hosted
 ```
 
 ## Testing
@@ -191,28 +201,28 @@ Output:
 Running tests...
 
   basic:          4/4 passed
-  core_edge:      12/12 passed
+  core_edge:      13/13 passed
   coverage:       27/27 passed
-  decompress:     8/8 passed
-  io_edge:        18/18 passed
+  decompress:     9/9 passed
+  io_edge:        20/20 passed
   io_littlefs:    8/8 passed
-  json_edge:      9/9 passed
+  json_edge:      17/17 passed
   json_remap:     10/10 passed
   measure:        15/15 passed
-  msgpack:        16/16 passed
+  msgpack:        17/17 passed
   msgpack_decode: 15/15 passed
-  msgpack_schema: 17/17 passed
-  null_args:      40/40 passed
+  msgpack_schema: 20/20 passed
+  null_args:      45/45 passed
   parser_bounds:  24/24 passed
-  parser:         3/3 passed
+  parser:         8/8 passed
   runtime:        24/24 passed
 
-TOTAL: 250/250 passed
+TOTAL: 276/276 passed
 ```
 
 ### Fuzz Testing
 
-Six [libFuzzer](https://llvm.org/docs/LibFuzzer.html) harnesses exercise the parsers and decode paths with randomized input. AddressSanitizer and UndefinedBehaviorSanitizer are enabled by default.
+Seven [libFuzzer](https://llvm.org/docs/LibFuzzer.html) harnesses exercise the parsers, decode, and decompression paths with randomized input. AddressSanitizer and UndefinedBehaviorSanitizer are enabled by default.
 
 **Prerequisites (macOS):** Apple Clang does not ship libFuzzer. Install Homebrew LLVM:
 ```bash
@@ -234,7 +244,8 @@ scripts/run-fuzz.sh 0      # run indefinitely (Ctrl-C to stop)
 | `fuzz_parse_json` | JSON schema parser |
 | `fuzz_parse_msgpack` | MessagePack binary schema parser |
 | `fuzz_parse_msgpack_mutator` | Structure-aware msgpack schema fuzzer (custom mutator) |
-| `fuzz_pagein` | `cfgpack_pagein_buf()` against a fixed schema |
+| `fuzz_pagein` | `cfgpack_pagein_buf()`, `cfgpack_pagein_remap()` and `cfgpack_peek_name()` against a fixed schema |
+| `fuzz_decompress` | `cfgpack_pagein_lz4()` and `cfgpack_pagein_heatshrink()` with fuzzer-chosen scratch sizes |
 | `fuzz_msgpack_decode` | All low-level msgpack decode functions |
 
 See [Fuzz Testing](docs/fuzz-testing.md) for detailed documentation on the harness architecture, seed corpus generation, and crash investigation.

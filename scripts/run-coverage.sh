@@ -18,6 +18,10 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_OUT="$ROOT_DIR/build/out"
 COV_DIR="$ROOT_DIR/build/coverage"
 
+# Tests open fixtures relative to the repo root.
+cd "$ROOT_DIR"
+mkdir -p "$ROOT_DIR/build/tmp"
+
 # Colors
 RED='\033[31m'
 GREEN='\033[32m'
@@ -54,8 +58,12 @@ for test in "${TESTS[@]}"; do
         printf "  %-15s SKIP (not found)\n" "$test:"
         continue
     fi
-    LLVM_PROFILE_FILE="$COV_DIR/%p-$test.profraw" "$bin" >/dev/null 2>&1
-    printf "  %-15s ${GREEN}OK${RESET}\n" "$test:"
+    if LLVM_PROFILE_FILE="$COV_DIR/%p-$test.profraw" "$bin" >/dev/null 2>&1; then
+        printf "  %-15s ${GREEN}OK${RESET}\n" "$test:"
+    else
+        printf "  %-15s ${RED}FAILED${RESET} (see scripts/run-tests.sh)\n" "$test:"
+        exit 1
+    fi
 done
 
 # ── Merge profiles ────────────────────────────────────────────────────────────
@@ -63,7 +71,7 @@ printf "\n${BOLD}Merging profiles...${RESET}\n"
 "$PROFDATA" merge -sparse "$COV_DIR"/*.profraw -o "$COV_DIR/merged.profdata"
 
 # ── Build object list for llvm-cov (all test binaries as sources) ─────────────
-OBJECT_ARGS=""
+OBJECT_ARGS=()
 FIRST_BIN=""
 for test in "${TESTS[@]}"; do
     bin="$BUILD_OUT/$test"
@@ -71,20 +79,20 @@ for test in "${TESTS[@]}"; do
         if [[ -z "$FIRST_BIN" ]]; then
             FIRST_BIN="$bin"
         else
-            OBJECT_ARGS="$OBJECT_ARGS -object=$bin"
+            OBJECT_ARGS+=("-object=$bin")
         fi
     fi
 done
 
 # ── Generate text summary ─────────────────────────────────────────────────────
 printf "${BOLD}Generating reports...${RESET}\n"
-"$LLVM_COV" report "$FIRST_BIN" $OBJECT_ARGS \
+"$LLVM_COV" report "$FIRST_BIN" "${OBJECT_ARGS[@]}" \
     -instr-profile="$COV_DIR/merged.profdata" \
     -ignore-filename-regex='third_party|tests' \
     > "$COV_DIR/report.txt"
 
 # ── Generate HTML ─────────────────────────────────────────────────────────────
-"$LLVM_COV" show "$FIRST_BIN" $OBJECT_ARGS \
+"$LLVM_COV" show "$FIRST_BIN" "${OBJECT_ARGS[@]}" \
     -instr-profile="$COV_DIR/merged.profdata" \
     -ignore-filename-regex='third_party|tests' \
     -format=html \

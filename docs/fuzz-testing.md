@@ -8,7 +8,7 @@ CFGPack's schema parsers (`.map`, JSON, and MessagePack binary) accept external 
 
 ## Fuzz Targets
 
-Six harness files live in `tests/fuzz/`:
+Seven harness files live in `tests/fuzz/`:
 
 | Harness | Source | What it exercises |
 |---------|--------|-------------------|
@@ -16,7 +16,8 @@ Six harness files live in `tests/fuzz/`:
 | `fuzz_parse_json` | `fuzz_parse_json.c` | JSON schema parser (`cfgpack_schema_parse_json`) |
 | `fuzz_parse_msgpack` | `fuzz_parse_msgpack.c` | MessagePack binary schema parser (`cfgpack_schema_parse_msgpack`) |
 | `fuzz_parse_msgpack_mutator` | `fuzz_parse_msgpack_mutator.c` | Structure-aware msgpack schema fuzzer using `LLVMFuzzerCustomMutator` — generates valid msgpack schema blobs with targeted corruption to reach deeper parser paths; on successful parse, exercises init and pageout/pagein roundtrip |
-| `fuzz_pagein` | `fuzz_pagein.c` | `cfgpack_pagein_buf()` and `cfgpack_pagein_remap()` against a fixed schema — wraps fuzzer input with a valid CRC-32C trailer to exercise decoder paths, and also feeds raw input to exercise the CRC rejection path |
+| `fuzz_pagein` | `fuzz_pagein.c` | `cfgpack_pagein_buf()`, `cfgpack_pagein_remap()` and `cfgpack_peek_name()` against a fixed schema — wraps fuzzer input with a valid CRC-32C trailer to exercise decoder paths, and also feeds raw input to exercise the CRC rejection path |
+| `fuzz_decompress` | `fuzz_decompress.c` | `cfgpack_pagein_lz4()` and `cfgpack_pagein_heatshrink()` against a fixed schema — the first input byte selects the codec and a scratch size from 1 byte to 4 KB, so exact-fit and too-small buffers are reached (a full scratch buffer used to hang the heatshrink wrapper) |
 | `fuzz_msgpack_decode` | `fuzz_msgpack_decode.c` | All low-level msgpack decode functions (`cfgpack_msgpack_decode_uint64`, `_int64`, `_f32`, `_f64`, `_str`, `_map_header`, `_skip_value`) |
 
 Each harness implements libFuzzer's `LLVMFuzzerTestOneInput` entry point, allocates a stack-based `cfgpack_ctx_t`, and feeds the fuzzer-provided data directly to the target function. The `fuzz_parse_msgpack_mutator` harness additionally implements `LLVMFuzzerCustomMutator` to generate structurally valid msgpack schema blobs with 16 corruption modes (truncation, bitflips, wrong counts, type mismatches, duplicate names/indices, etc.), enabling coverage of parser code paths that random bytes alone are unlikely to reach. When parsing succeeds, the harness also initializes a runtime context and performs a `cfgpack_pageout`/`cfgpack_pagein_buf` roundtrip, exercising the encode and decode I/O paths with fuzzer-derived schema data. All harnesses are self-contained and do not use the heap.
@@ -53,7 +54,7 @@ This delegates to the sub-makefile at `tests/fuzz/Makefile`, which:
 
 1. Detects whether `CC` has libFuzzer support. On macOS, if Apple Clang is detected, it automatically switches to Homebrew LLVM.
 2. Builds the seed corpus generator (`gen_seeds`) and runs it to populate the corpus directories.
-3. Compiles all six fuzz harnesses with `-fsanitize=fuzzer,address,undefined`.
+3. Compiles all seven fuzz harnesses with `-fsanitize=fuzzer,address,undefined`.
 
 Binaries are placed in `build/out/`:
 
@@ -73,7 +74,7 @@ Fuzz harnesses compile the library source files directly (`$(LIBSRC)`) rather th
 
 ## Seed Corpus
 
-The `gen_seeds.c` program generates valid seed files across six corpus directories:
+The `gen_seeds.c` program generates valid seed files across seven corpus directories:
 
 | Directory | Seeds | Description |
 |-----------|------:|-------------|
@@ -82,6 +83,7 @@ The `gen_seeds.c` program generates valid seed files across six corpus directori
 | `tests/fuzz/corpus_msgpack/` | 1 | A valid msgpack binary schema |
 | `tests/fuzz/corpus_msgpack_mutator/` | 4 | Small random byte sequences that parameterize the custom mutator |
 | `tests/fuzz/corpus_pagein/` | 2 | Valid serialized config blobs (empty + populated) |
+| `tests/fuzz/corpus_decompress/` | 2 | The populated pagein blob compressed with LZ4 and with heatshrink, each with a mode byte prefix |
 | `tests/fuzz/corpus_decode/` | 10 | Individual msgpack-encoded values (uint, int, float, string, map, etc.) |
 
 Seeds are regenerated automatically every time `make fuzz` runs (the `fuzz` target depends on `gen-seeds`). Starting from valid inputs helps the fuzzer reach deeper code paths faster.

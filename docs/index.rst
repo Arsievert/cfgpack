@@ -17,6 +17,7 @@ Hard caps: max 128 schema entries.
    littlefs
    stack-analysis
    fuzz-testing
+   infrastructure
 
 Features
 --------
