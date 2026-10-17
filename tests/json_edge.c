@@ -4,6 +4,7 @@
 
 #include "test.h"
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -358,6 +359,236 @@ TEST_CASE(test_json_parse_default_family_mismatch) {
     return (TEST_OK);
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Helpers for the grammar tests: parse into static buffers, return rc.
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+static cfgpack_schema_t g_schema;
+static cfgpack_entry_t g_entries[8];
+static cfgpack_value_t g_values[8];
+static char g_str_pool[256];
+static uint16_t g_str_offsets[4];
+static cfgpack_parse_error_t g_err;
+
+static cfgpack_err_t parse_json_g(const char *json) {
+    cfgpack_parse_opts_t opts = {&g_schema,     g_entries,  8,
+                                 g_values,      g_str_pool, sizeof(g_str_pool),
+                                 g_str_offsets, 4,          &g_err};
+    memset(&g_err, 0, sizeof(g_err));
+    return (cfgpack_schema_parse_json(json, strlen(json), &opts));
+}
+
+/** @brief Wrap one entry's "value" literal in a minimal schema. */
+static cfgpack_err_t parse_value(const char *type, const char *literal) {
+    char json[256];
+    snprintf(json, sizeof(json),
+             "{\"name\":\"t\",\"version\":1,\"entries\":["
+             "{\"index\":1,\"name\":\"a\",\"type\":\"%s\",\"value\":%s}]}",
+             type, literal);
+    return (parse_json_g(json));
+}
+
+/*
+ * Regression: the number scanner accepted "-", "e5", "1." and "1e+" as 0,
+ * and strtoll clamped anything above INT64_MAX, so a u64 default written
+ * by cfgpack_schema_write_json did not round-trip.
+ */
+TEST_CASE(test_json_number_grammar) {
+    LOG_SECTION("JSON numbers follow the RFC 8259 grammar");
+
+    static const char *bad[] = {"-",  "e5",  "E5", ".",   ".5",  "1.",
+                                "1e", "1e+", "+1", "01x", "0x10"};
+    for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); ++i) {
+        CHECK(parse_value("u8", bad[i]) == CFGPACK_ERR_PARSE);
+    }
+    LOG("11 malformed literals rejected with ERR_PARSE");
+
+    CHECK(parse_value("u64", "18446744073709551615") == CFGPACK_OK);
+    CHECK(g_values[0].v.u64 == UINT64_MAX);
+    LOG("u64 18446744073709551615 parses exactly");
+
+    CHECK(parse_value("u64", "18446744073709551616") == CFGPACK_ERR_PARSE);
+    CHECK(parse_value("i64", "9223372036854775808") == CFGPACK_ERR_BOUNDS);
+    CHECK(parse_value("i64", "-9223372036854775808") == CFGPACK_OK);
+    CHECK(g_values[0].v.i64 == INT64_MIN);
+    CHECK(parse_value("i64", "-9223372036854775809") == CFGPACK_ERR_PARSE);
+    LOG("2^64: PARSE; 2^63 on i64: BOUNDS; INT64_MIN ok; below: PARSE");
+
+    CHECK(parse_value("f64", "1e-310") == CFGPACK_OK);
+    CHECK(g_values[0].v.f64 > 0.0);
+    CHECK(parse_value("f64", "1e999") == CFGPACK_ERR_PARSE);
+    CHECK(parse_value("f32", "1e39") == CFGPACK_ERR_BOUNDS);
+    CHECK(parse_value("f32", "-2.5e1") == CFGPACK_OK);
+    CHECK(g_values[0].v.f32 == -25.0f);
+    LOG("subnormal ok, 1e999 PARSE, 1e39 on f32 BOUNDS, -2.5e1 == -25");
+
+    return (TEST_OK);
+}
+
+TEST_CASE(test_json_u64_roundtrip) {
+    LOG_SECTION("u64 default above INT64_MAX survives write_json -> parse");
+    char out[512];
+    size_t out_len = 0;
+    cfgpack_ctx_t ctx;
+
+    CHECK(parse_value("u64", "18446744073709551615") == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &g_schema, g_values, 8, g_str_pool,
+                       sizeof(g_str_pool), g_str_offsets, 4) == CFGPACK_OK);
+    CHECK(cfgpack_schema_write_json(&ctx, out, sizeof(out), &out_len, NULL) ==
+          CFGPACK_OK);
+    out[out_len] = '\0';
+    CHECK(parse_json_g(out) == CFGPACK_OK);
+    CHECK(g_values[0].v.u64 == UINT64_MAX);
+    LOG("round-tripped value = %" PRIu64, g_values[0].v.u64);
+
+    return (TEST_OK);
+}
+
+TEST_CASE(test_json_version_range) {
+    LOG_SECTION("JSON version must be an integer in 0..2^32-1");
+    char json[160];
+
+    snprintf(json, sizeof(json),
+             "{\"name\":\"t\",\"version\":4294967295,\"entries\":[]}");
+    CHECK(parse_json_g(json) == CFGPACK_OK && g_schema.version == 4294967295u);
+    snprintf(json, sizeof(json),
+             "{\"name\":\"t\",\"version\":4294967296,\"entries\":[]}");
+    CHECK(parse_json_g(json) == CFGPACK_ERR_BOUNDS);
+    CHECK(g_err.code == CFGPACK_PARSE_VERSION_OUT_OF_RANGE);
+    snprintf(json, sizeof(json),
+             "{\"name\":\"t\",\"version\":-1,\"entries\":[]}");
+    CHECK(parse_json_g(json) == CFGPACK_ERR_PARSE);
+    snprintf(json, sizeof(json),
+             "{\"name\":\"t\",\"version\":1.5,\"entries\":[]}");
+    CHECK(parse_json_g(json) == CFGPACK_ERR_PARSE);
+    LOG("2^32-1 ok; 2^32 BOUNDS; -1 and 1.5 PARSE");
+
+    return (TEST_OK);
+}
+
+/*
+ * Regression: \b and \f decoded to the letters b and f, unknown escapes
+ * were accepted, and \u silently dropped or mangled most code points.
+ */
+TEST_CASE(test_json_string_escapes) {
+    LOG_SECTION("JSON string escapes decode per RFC 8259, \\u as UTF-8");
+    const char *sp;
+    uint16_t sl;
+    cfgpack_ctx_t ctx;
+
+    CHECK(parse_value("str", "\"\\b\\f\\/\\n\\t\\r\\\\\\\"\"") == CFGPACK_OK);
+    CHECK(cfgpack_init(&ctx, &g_schema, g_values, 8, g_str_pool,
+                       sizeof(g_str_pool), g_str_offsets, 4) == CFGPACK_OK);
+    CHECK(cfgpack_get_str(&ctx, 1, &sp, &sl) == CFGPACK_OK);
+    CHECK(sl == 8 && memcmp(sp, "\b\f/\n\t\r\\\"", 8) == 0);
+    LOG("all eight simple escapes decode to their control characters");
+
+    CHECK(parse_value("str", "\"\\q\"") == CFGPACK_ERR_PARSE);
+    CHECK(parse_value("str", "\"\\u0041\"") == CFGPACK_ERR_PARSE);
+    CHECK(parse_value("str", "\"\\u00e9\"") == CFGPACK_ERR_PARSE);
+    LOG("\\q and any \\u escape: ERR_PARSE (not supported)");
+
+    /* A bad \u used to swallow the closing quote and run into the next
+     * tokens; it must now fail cleanly instead of accepting the entry. */
+    CHECK(parse_json_g("{\"name\":\"t\",\"version\":1,\"entries\":["
+                       "{\"index\":1,\"name\":\"a\",\"type\":\"u8\\u\"},{"
+                       "\"value\":0}]}") == CFGPACK_ERR_PARSE);
+    LOG("runaway \\u no longer consumes following tokens");
+
+    return (TEST_OK);
+}
+
+/*
+ * Regression: the writer emitted map_name and entry names with wbuf_puts,
+ * so a name containing a quote or backslash produced invalid JSON.
+ */
+TEST_CASE(test_json_writer_escapes_names) {
+    LOG_SECTION("write_json escapes schema and entry names");
+    char out[512];
+    size_t out_len = 0;
+    cfgpack_ctx_t ctx;
+
+    CHECK(parse_json_g("{\"name\":\"a\\\"b\\\\c\",\"version\":1,\"entries\":["
+                       "{\"index\":1,\"name\":\"x\\\"y\",\"type\":\"u8\","
+                       "\"value\":1}]}") == CFGPACK_OK);
+    CHECK(strcmp(g_schema.map_name, "a\"b\\c") == 0);
+    CHECK(strcmp(g_entries[0].name, "x\"y") == 0);
+    CHECK(cfgpack_init(&ctx, &g_schema, g_values, 8, g_str_pool,
+                       sizeof(g_str_pool), g_str_offsets, 4) == CFGPACK_OK);
+    CHECK(cfgpack_schema_write_json(&ctx, out, sizeof(out), &out_len, NULL) ==
+          CFGPACK_OK);
+    out[out_len] = '\0';
+    CHECK(strstr(out, "\"name\": \"a\\\"b\\\\c\"") != NULL);
+    LOG("written: %s", strstr(out, "\"name\""));
+
+    CHECK(parse_json_g(out) == CFGPACK_OK);
+    CHECK(strcmp(g_schema.map_name, "a\"b\\c") == 0);
+    CHECK(strcmp(g_entries[0].name, "x\"y") == 0);
+    LOG("re-parsed names match");
+
+    return (TEST_OK);
+}
+
+/*
+ * Regression: commas between members were optional, trailing commas were
+ * accepted, and anything after the root object was ignored.
+ */
+TEST_CASE(test_json_structure_strict) {
+    LOG_SECTION("JSON separators and end of input are enforced");
+
+    CHECK(parse_json_g("{\"name\":\"t\" \"version\":1,\"entries\":[]}") ==
+          CFGPACK_ERR_PARSE);
+    CHECK(g_err.code == CFGPACK_PARSE_UNEXPECTED_TOKEN);
+    LOG("missing comma between members: ERR_PARSE");
+
+    CHECK(parse_json_g("{\"name\":\"t\",\"version\":1,\"entries\":[],}") ==
+          CFGPACK_ERR_PARSE);
+    CHECK(
+        parse_json_g("{\"name\":\"t\",\"version\":1,\"entries\":["
+                     "{\"index\":1,\"name\":\"a\",\"type\":\"u8\",\"value\":0},"
+                     "]}") == CFGPACK_ERR_PARSE);
+    CHECK(
+        parse_json_g("{\"name\":\"t\",\"version\":1,\"entries\":["
+                     "{\"index\":1,\"name\":\"a\",\"type\":\"u8\",\"value\":0,}"
+                     "]}") == CFGPACK_ERR_PARSE);
+    LOG("trailing commas in object, array and entry: ERR_PARSE");
+
+    CHECK(
+        parse_json_g("{\"name\":\"t\",\"version\":1,\"entries\":["
+                     "{\"index\":1,\"name\":\"a\",\"type\":\"u8\",\"value\":0}"
+                     "{\"index\":2,\"name\":\"b\",\"type\":\"u8\",\"value\":0}"
+                     "]}") == CFGPACK_ERR_PARSE);
+    LOG("missing comma between entries: ERR_PARSE");
+
+    CHECK(parse_json_g("{\"name\":\"t\",\"version\":1,\"entries\":[]} x") ==
+          CFGPACK_ERR_PARSE);
+    CHECK(g_err.code == CFGPACK_PARSE_UNEXPECTED_TOKEN);
+    CHECK(parse_json_g("{\"name\":\"t\",\"version\":1,\"entries\":[]}}") ==
+          CFGPACK_ERR_PARSE);
+    LOG("trailing garbage after root: ERR_PARSE");
+
+    CHECK(parse_json_g("{\"name\":\"t\",\"version\":1,\"entries\":[]}\n\n ") ==
+          CFGPACK_OK);
+    {
+        const char *padded = "{\"name\":\"t\",\"version\":1,\"entries\":[]}";
+        cfgpack_parse_opts_t opts = {
+            &g_schema,          g_entries,     8, g_values, g_str_pool,
+            sizeof(g_str_pool), g_str_offsets, 4, &g_err};
+        CHECK(cfgpack_schema_parse_json(padded, strlen(padded) + 1, &opts) ==
+              CFGPACK_OK);
+    }
+    LOG("trailing whitespace and a trailing NUL are accepted");
+
+    /* Line numbers now count newlines inside strings */
+    CHECK(parse_json_g("{\"name\":\"a\nb\",\n\"version\":x}") ==
+          CFGPACK_ERR_PARSE);
+    CHECK(g_err.line == 3);
+    LOG("error after a string containing a newline reports line %zu",
+        g_err.line);
+
+    return (TEST_OK);
+}
+
 TEST_CASE(test_json_writer_small_buffer) {
     LOG_SECTION("schema_write_json with tiny buffer returns ERR_BOUNDS");
 
@@ -424,6 +655,18 @@ int main(void) {
                 TEST_OK);
     overall |= (test_case_result("json_parse_default_range",
                                  test_json_parse_default_range()) != TEST_OK);
+    overall |= (test_case_result("json_number_grammar",
+                                 test_json_number_grammar()) != TEST_OK);
+    overall |= (test_case_result("json_u64_roundtrip",
+                                 test_json_u64_roundtrip()) != TEST_OK);
+    overall |= (test_case_result("json_version_range",
+                                 test_json_version_range()) != TEST_OK);
+    overall |= (test_case_result("json_string_escapes",
+                                 test_json_string_escapes()) != TEST_OK);
+    overall |= (test_case_result("json_writer_escapes_names",
+                                 test_json_writer_escapes_names()) != TEST_OK);
+    overall |= (test_case_result("json_structure_strict",
+                                 test_json_structure_strict()) != TEST_OK);
     overall |= (test_case_result("json_writer_small_buffer",
                                  test_json_writer_small_buffer()) != TEST_OK);
 

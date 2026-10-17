@@ -1,5 +1,5 @@
-#ifndef _WBUF_H_
-#define _WBUF_H_
+#ifndef CFGPACK_WBUF_H
+#define CFGPACK_WBUF_H
 
 /**
  * @file wbuf.h
@@ -128,4 +128,4 @@ void wbuf_put_float(wbuf_t *w, float val);
  */
 cfgpack_err_t wbuf_try_append(wbuf_t *w, const void *src, size_t n);
 
-#endif /* _WBUF_H_ */
+#endif /* CFGPACK_WBUF_H */

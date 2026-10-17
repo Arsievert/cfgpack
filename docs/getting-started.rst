@@ -87,7 +87,7 @@ Default Values
 Each schema entry requires a default value:
 
 - ``NIL`` — no default; value must be explicitly set before use
-- Integer literals: ``0``, ``42``, ``-5``, ``0xFF``, ``0b1010``
+- Integer literals: decimal (``0``, ``42``, ``-5``) or hexadecimal with a ``0x`` prefix (``0xFF``). Leading zeros are decimal, not octal; binary literals are not supported.
 - Float literals: ``3.14``, ``-1.5e-3``, ``0.0``
 - Quoted strings: ``"hello"``, ``""``, ``"default value"``
 

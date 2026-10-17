@@ -2,28 +2,20 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
 
 /** @copydoc tokens_create */
 int tokens_create(tokens_t *tokens, uint16_t n, char **provided) {
+    tokens->index = NULL;
     tokens->max = 0;
     tokens->used = 0;
-    tokens->owns = false;
 
-    if (provided) {
-        tokens->index = provided;
-    } else {
-        tokens->index = (char **)malloc(n * sizeof(char *));
-        tokens->owns = (tokens->index != NULL);
+    if (!provided || n == 0) {
+        return (-1);
     }
-
-    if (tokens->index) {
-        tokens->max = n;
-        return (0);
-    }
-
-    return (-1);
+    tokens->index = provided;
+    tokens->max = n;
+    return (0);
 }
 
 /**
@@ -33,21 +25,12 @@ int tokens_create(tokens_t *tokens, uint16_t n, char **provided) {
  * @param d NUL-terminated delimiter string.
  * @return 1 if delimiter, 0 otherwise.
  */
-static int _is_delimiter(char s, const char *d) {
-    size_t len;
-
-    if (!d) {
-        return (0);
-    }
-
-    len = strlen(d);
-
-    for (size_t i = 0; i < len; i++) {
-        if (d[i] == s) {
+static int is_delimiter(char s, const char *d) {
+    for (; *d; d++) {
+        if (*d == s) {
             return (1);
         }
     }
-
     return (0);
 }
 
@@ -75,14 +58,14 @@ int tokens_find(tokens_t *tokens,
     len = strlen(input);
 
     for (size_t i = 0; i < len; i++) {
-        if (_is_delimiter(input[i], delimiters)) {
+        if (is_delimiter(input[i], delimiters)) {
             input[i] = 0;
             new_token = true;
             continue;
         }
 
         if (new_token) {
-            if (tokens->used >= n_tokens || tokens->used >= tokens->max) {
+            if (tokens->used >= n_tokens) {
                 if (stop_offset) {
                     *stop_offset = i;
                 }
@@ -102,14 +85,9 @@ int tokens_find(tokens_t *tokens,
 
 /** @copydoc tokens_destroy */
 int tokens_destroy(tokens_t *tokens) {
-    if (tokens->index && tokens->owns) {
-        free(tokens->index);
-    }
-
     tokens->index = NULL;
     tokens->used = 0;
     tokens->max = 0;
-    tokens->owns = false;
 
     return (0);
 }

@@ -69,6 +69,7 @@ const char *cfgpack_parse_error_str(cfgpack_parse_code_t code) {
     case CFGPACK_PARSE_EXPECTED_TOP_LEVEL_MAP:
         return "invalid msgpack: expected top-level map";
     case CFGPACK_PARSE_PHASE2_DECODE: return "phase2 decode error";
+    case CFGPACK_PARSE_UNEXPECTED_TOKEN: return "unexpected token";
     default: return "unknown parse error";
     }
 }

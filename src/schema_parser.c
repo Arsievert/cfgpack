@@ -370,6 +370,20 @@ static cfgpack_err_t parse_quoted_string(const char *p,
 }
 
 /**
+ * @brief Pick the strto*ll base for a .map integer literal.
+ *
+ * Decimal, or hexadecimal with an explicit 0x/0X prefix.  Base 0 is not
+ * used because it reads a leading zero as octal, which JSON does not, so
+ * the same literal would mean different things in the two formats.
+ */
+static int int_literal_base(const char *tok) {
+    if (tok[0] == '-' || tok[0] == '+') {
+        tok++;
+    }
+    return (tok[0] == '0' && (tok[1] == 'x' || tok[1] == 'X')) ? 16 : 10;
+}
+
+/**
  * @brief Parse an unsigned integer default value.
  */
 static cfgpack_err_t parse_uint(const char *tok,
@@ -385,7 +399,7 @@ static cfgpack_err_t parse_uint(const char *tok,
     }
 
     errno = 0;
-    val = strtoull(tok, &endp, 0); /* base 0 handles 0x prefix */
+    val = strtoull(tok, &endp, int_literal_base(tok));
     if (tok[0] == '\0' || (endp && *endp != '\0') || errno == ERANGE) {
         return (CFGPACK_ERR_PARSE);
     }
@@ -419,7 +433,7 @@ static cfgpack_err_t parse_int(const char *tok,
     int64_t val;
 
     errno = 0;
-    val = strtoll(tok, &endp, 0);
+    val = strtoll(tok, &endp, int_literal_base(tok));
     if (tok[0] == '\0' || (endp && *endp != '\0') || errno == ERANGE) {
         return (CFGPACK_ERR_PARSE);
     }
@@ -464,8 +478,11 @@ static cfgpack_err_t parse_float(const char *tok,
 
     errno = 0;
     val = strtod(tok, &endp);
-    if (tok[0] == '\0' || (endp && *endp != '\0') || errno == ERANGE) {
+    if (tok[0] == '\0' || (endp && *endp != '\0')) {
         return (CFGPACK_ERR_PARSE);
+    }
+    if (errno == ERANGE && (val > DBL_MAX || val < -DBL_MAX)) {
+        return (CFGPACK_ERR_PARSE); /* overflow; underflow is fine */
     }
 
     out->type = type;
@@ -485,7 +502,8 @@ static cfgpack_err_t parse_float(const char *tok,
  */
 static const char *extract_default_token(const char *line,
                                          char *out_tok,
-                                         size_t tok_size) {
+                                         size_t tok_size,
+                                         size_t *consumed) {
     const char *p = skip_space(line);
     size_t len = 0;
 
@@ -510,6 +528,9 @@ static const char *extract_default_token(const char *line,
         out_tok[len] = '\0';
     }
 
+    if (consumed) {
+        *consumed = (size_t)(p - line);
+    }
     return (len > 0) ? out_tok : NULL;
 }
 
@@ -741,11 +762,13 @@ static cfgpack_err_t map_parse_header(parse_ctx_t *ctx,
                                       tokens_t *tok,
                                       char *line_buf,
                                       size_t line_no) {
+    unsigned long long ver;
     char *endp = NULL;
-    unsigned long ver;
+    size_t stop_offset;
+    const char *rest;
     size_t name_len;
 
-    tokens_find(tok, line_buf, " \t\r\n", 2, NULL);
+    tokens_find(tok, line_buf, " \t\r\n", 2, &stop_offset);
     if (tok->used != 2) {
         set_err(ctx->err, line_no, CFGPACK_PARSE_INVALID_HEADER);
         return (CFGPACK_ERR_PARSE);
@@ -761,14 +784,21 @@ static cfgpack_err_t map_parse_header(parse_ctx_t *ctx,
             return (CFGPACK_ERR_BOUNDS);
         }
     }
-    ver = strtoul(tok->index[1], &endp, 10);
-    if (tok->index[1][0] == '\0' || (endp && *endp != '\0')) {
+    errno = 0;
+    ver = strtoull(tok->index[1], &endp, 10);
+    if (tok->index[1][0] == '\0' || tok->index[1][0] == '-' ||
+        tok->index[1][0] == '+' || (endp && *endp != '\0')) {
         set_err(ctx->err, line_no, CFGPACK_PARSE_INVALID_HEADER);
         return (CFGPACK_ERR_PARSE);
     }
-    if (ver > 0xfffffffful) {
+    if (errno == ERANGE || ver > UINT32_MAX) {
         set_err(ctx->err, line_no, CFGPACK_PARSE_VERSION_OUT_OF_RANGE);
         return (CFGPACK_ERR_BOUNDS);
+    }
+    rest = skip_space(line_buf + stop_offset);
+    if (*rest != '\0' && *rest != '#') {
+        set_err(ctx->err, line_no, CFGPACK_PARSE_UNEXPECTED_TOKEN);
+        return (CFGPACK_ERR_PARSE);
     }
     if (!ctx->measuring) {
         name_len = strlen(tok->index[0]);
@@ -790,12 +820,15 @@ static cfgpack_err_t map_parse_entry(parse_ctx_t *ctx,
                                      size_t line_no) {
     cfgpack_fat_value_t fat_default;
     char default_tok[MAX_LINE_LEN];
+    unsigned long long idx_ul;
     const char *remainder;
-    unsigned long idx_ul;
     const char *def_str;
     cfgpack_type_t type;
+    char *endp = NULL;
+    const char *rest;
     cfgpack_err_t drc;
     cfgpack_err_t trc;
+    size_t consumed;
     uint8_t has_def;
     size_t name_len;
 
@@ -804,8 +837,14 @@ static cfgpack_err_t map_parse_entry(parse_ctx_t *ctx,
         return (CFGPACK_ERR_BOUNDS);
     }
 
-    idx_ul = strtoul(tok->index[0], NULL, 10);
-    if (idx_ul > 65535ul) {
+    errno = 0;
+    idx_ul = strtoull(tok->index[0], &endp, 10);
+    if (tok->index[0][0] < '0' || tok->index[0][0] > '9' ||
+        (endp && *endp != '\0')) {
+        set_err(ctx->err, line_no, CFGPACK_PARSE_INVALID_INDEX);
+        return (CFGPACK_ERR_PARSE);
+    }
+    if (errno == ERANGE || idx_ul > 65535ull) {
         set_err(ctx->err, line_no, CFGPACK_PARSE_INDEX_OUT_OF_RANGE);
         return (CFGPACK_ERR_BOUNDS);
     }
@@ -830,10 +869,16 @@ static cfgpack_err_t map_parse_entry(parse_ctx_t *ctx,
 
     /* Extract default value from remainder of line */
     remainder = line_buf + stop_offset;
-    def_str = extract_default_token(remainder, default_tok,
-                                    sizeof(default_tok));
+    def_str = extract_default_token(remainder, default_tok, sizeof(default_tok),
+                                    &consumed);
     if (!def_str || def_str[0] == '\0') {
         set_err(ctx->err, line_no, CFGPACK_PARSE_MISSING_DEFAULT);
+        return (CFGPACK_ERR_PARSE);
+    }
+    /* Only an inline comment may follow the default */
+    rest = skip_space(remainder + consumed);
+    if (*rest != '\0' && *rest != '#') {
+        set_err(ctx->err, line_no, CFGPACK_PARSE_UNEXPECTED_TOKEN);
         return (CFGPACK_ERR_PARSE);
     }
 
@@ -932,7 +977,7 @@ static void map_phase2(parse_ctx_t *ctx, const char *data, size_t data_len) {
 
         remainder = line_buf + stop_offset;
         def_str = extract_default_token(remainder, default_tok,
-                                        sizeof(default_tok));
+                                        sizeof(default_tok), NULL);
         if (!def_str || strcmp(def_str, "NIL") == 0) {
             tokens_destroy(&tok);
             continue;
@@ -1113,22 +1158,9 @@ static void write_json_string_to_wbuf(wbuf_t *w, const char *str, size_t len) {
         case '\n': wbuf_puts(w, "\\n"); break;
         case '\r': wbuf_puts(w, "\\r"); break;
         case '\t': wbuf_puts(w, "\\t"); break;
-        default:
-            if (c < 0x20) {
-                /* \uXXXX escape */
-                char hex[7];
-                hex[0] = '\\';
-                hex[1] = 'u';
-                hex[2] = '0';
-                hex[3] = '0';
-                hex[4] = "0123456789abcdef"[(c >> 4) & 0xf];
-                hex[5] = "0123456789abcdef"[c & 0xf];
-                hex[6] = '\0';
-                wbuf_puts(w, hex);
-            } else {
-                wbuf_putc(w, (char)c);
-            }
-            break;
+        case '\b': wbuf_puts(w, "\\b"); break;
+        case '\f': wbuf_puts(w, "\\f"); break;
+        default: wbuf_putc(w, (char)c); break;
         }
     }
     wbuf_putc(w, '"');
@@ -1175,9 +1207,9 @@ cfgpack_err_t cfgpack_schema_write_json(const cfgpack_ctx_t *ctx,
     wbuf_init(&w, out, out_cap);
 
     wbuf_puts(&w, "{\n");
-    wbuf_puts(&w, "  \"name\": \"");
-    wbuf_puts(&w, schema->map_name);
-    wbuf_puts(&w, "\",\n");
+    wbuf_puts(&w, "  \"name\": ");
+    write_json_string_to_wbuf(&w, schema->map_name, strlen(schema->map_name));
+    wbuf_puts(&w, ",\n");
     wbuf_puts(&w, "  \"version\": ");
     wbuf_put_uint(&w, schema->version);
     wbuf_puts(&w, ",\n");
@@ -1187,9 +1219,9 @@ cfgpack_err_t cfgpack_schema_write_json(const cfgpack_ctx_t *ctx,
         const cfgpack_entry_t *e = &schema->entries[i];
         wbuf_puts(&w, "    {\"index\": ");
         wbuf_put_uint(&w, e->index);
-        wbuf_puts(&w, ", \"name\": \"");
-        wbuf_puts(&w, e->name);
-        wbuf_puts(&w, "\", \"type\": \"");
+        wbuf_puts(&w, ", \"name\": ");
+        write_json_string_to_wbuf(&w, e->name, strlen(e->name));
+        wbuf_puts(&w, ", \"type\": \"");
         wbuf_puts(&w, type_to_str(e->type));
         wbuf_puts(&w, "\", \"value\": ");
         write_json_value_to_wbuf(&w, e, &ctx->values[i], ctx->str_pool);
@@ -1248,71 +1280,63 @@ static char json_peek(json_parser_t *p) {
 static int json_expect(json_parser_t *p, char c) {
     json_skip_ws(p);
     if (p->pos < p->len && p->data[p->pos] == c) {
-        if (c == '\n') {
-            p->line++;
-        }
         p->pos++;
         return (1);
     }
     return (0);
 }
 
+/**
+ * @brief Parse a JSON string literal into @p out (NUL-terminated).
+ *
+ * Accepts the single-character RFC 8259 escapes.  \u escapes are not
+ * supported: schema names and defaults are ASCII, and the writer never
+ * emits them.  Any other backslash sequence is an error.
+ * @return 1 on success, 0 on malformed input or overflow.
+ */
 static int json_parse_string(json_parser_t *p,
                              char *out,
                              size_t out_cap,
                              size_t *out_len) {
+    size_t len = 0;
+
     json_skip_ws(p);
     if (!json_expect(p, '"')) {
         return (0);
     }
 
-    size_t len = 0;
     while (p->pos < p->len && p->data[p->pos] != '"') {
+        char c = p->data[p->pos];
+
         if (len >= out_cap - 1) {
-            return 0; /* overflow */
+            return (0); /* overflow */
         }
 
-        if (p->data[p->pos] == '\\' && p->pos + 1 < p->len) {
-            p->pos++;
-            switch (p->data[p->pos]) {
-            case 'n': out[len++] = '\n'; break;
-            case 't': out[len++] = '\t'; break;
-            case 'r': out[len++] = '\r'; break;
-            case '\\': out[len++] = '\\'; break;
-            case '"': out[len++] = '"'; break;
-            case 'u':
-                /* \uXXXX - parse 4 hex digits */
-                if (p->pos + 4 < p->len) {
-                    char hex[5] = {p->data[p->pos + 1], p->data[p->pos + 2],
-                                   p->data[p->pos + 3], p->data[p->pos + 4],
-                                   '\0'};
-                    unsigned int val = 0;
-                    int ok = 1;
-                    for (int i = 0; i < 4; i++) {
-                        char h = hex[i];
-                        if (h >= '0' && h <= '9') {
-                            val = val * 16 + (h - '0');
-                        } else if (h >= 'a' && h <= 'f') {
-                            val = val * 16 + (h - 'a' + 10);
-                        } else if (h >= 'A' && h <= 'F') {
-                            val = val * 16 + (h - 'A' + 10);
-                        } else {
-                            ok = 0;
-                            break;
-                        }
-                    }
-                    if (ok && val < 256) {
-                        out[len++] = (char)val;
-                    }
-                    p->pos += 4;
-                }
-                break;
-            default: out[len++] = p->data[p->pos]; break;
+        if (c != '\\') {
+            if (c == '\n') {
+                p->line++;
             }
-        } else {
-            out[len++] = p->data[p->pos];
+            out[len++] = c;
+            p->pos++;
+            continue;
         }
-        p->pos++;
+
+        p->pos++; /* consume the backslash */
+        if (p->pos >= p->len) {
+            return (0);
+        }
+        c = p->data[p->pos++];
+        switch (c) {
+        case 'n': out[len++] = '\n'; break;
+        case 't': out[len++] = '\t'; break;
+        case 'r': out[len++] = '\r'; break;
+        case 'b': out[len++] = '\b'; break;
+        case 'f': out[len++] = '\f'; break;
+        case '/': out[len++] = '/'; break;
+        case '\\': out[len++] = '\\'; break;
+        case '"': out[len++] = '"'; break;
+        default: return (0); /* unknown or unsupported escape */
+        }
     }
 
     if (!json_expect(p, '"')) {
@@ -1325,70 +1349,104 @@ static int json_parse_string(json_parser_t *p,
     return (1);
 }
 
-static int json_parse_number(json_parser_t *p,
-                             int64_t *out_int,
-                             double *out_float,
-                             int *is_float) {
-    json_skip_ws(p);
+/**
+ * @brief Decoded JSON number.
+ *
+ * Integers keep their full width: a non-negative integer is in @c u, a
+ * negative one in @c i (with @c is_neg set).  Floats are in @c f.
+ */
+typedef struct {
+    double f;
+    uint64_t u;
+    int64_t i;
+    int is_float;
+    int is_neg;
+} json_number_t;
+
+/**
+ * @brief Scan one run of ASCII digits.
+ * @return Number of digits consumed.
+ */
+static size_t json_scan_digits(json_parser_t *p) {
     size_t start = p->pos;
-    int has_dot = 0;
-    int has_exp = 0;
+    while (p->pos < p->len && p->data[p->pos] >= '0' &&
+           p->data[p->pos] <= '9') {
+        p->pos++;
+    }
+    return (p->pos - start);
+}
 
-    /* Optional minus */
+/**
+ * @brief Parse a JSON number with the RFC 8259 grammar.
+ *
+ * Requires at least one digit in the integer part, after a decimal point,
+ * and in an exponent.  Integers that do not fit their width and floats that
+ * overflow to infinity are rejected; float underflow to a subnormal or zero
+ * is accepted.
+ * @return 1 on success, 0 on a malformed or out-of-range literal.
+ */
+static int json_parse_number(json_parser_t *p, json_number_t *n) {
+    size_t num_len;
+    size_t start;
+    char buf[64];
+    char *endp;
+
+    json_skip_ws(p);
+    start = p->pos;
+    memset(n, 0, sizeof(*n));
+
     if (p->pos < p->len && p->data[p->pos] == '-') {
+        n->is_neg = 1;
         p->pos++;
     }
-
-    /* Digits */
-    while (p->pos < p->len &&
-           (p->data[p->pos] >= '0' && p->data[p->pos] <= '9')) {
-        p->pos++;
+    if (json_scan_digits(p) == 0) {
+        return (0);
     }
-
-    /* Optional decimal */
     if (p->pos < p->len && p->data[p->pos] == '.') {
-        has_dot = 1;
+        n->is_float = 1;
         p->pos++;
-        while (p->pos < p->len &&
-               (p->data[p->pos] >= '0' && p->data[p->pos] <= '9')) {
-            p->pos++;
+        if (json_scan_digits(p) == 0) {
+            return (0);
         }
     }
-
-    /* Optional exponent */
     if (p->pos < p->len && (p->data[p->pos] == 'e' || p->data[p->pos] == 'E')) {
-        has_exp = 1;
+        n->is_float = 1;
         p->pos++;
         if (p->pos < p->len &&
             (p->data[p->pos] == '+' || p->data[p->pos] == '-')) {
             p->pos++;
         }
-        while (p->pos < p->len &&
-               (p->data[p->pos] >= '0' && p->data[p->pos] <= '9')) {
-            p->pos++;
+        if (json_scan_digits(p) == 0) {
+            return (0);
         }
     }
 
-    if (p->pos == start) {
-        return (0);
-    }
-
-    /* Parse the number */
-    char buf[64];
-    size_t num_len = p->pos - start;
+    num_len = p->pos - start;
     if (num_len >= sizeof(buf)) {
         return (0);
     }
     memcpy(buf, p->data + start, num_len);
     buf[num_len] = '\0';
 
-    *is_float = has_dot || has_exp;
-    if (*is_float) {
-        *out_float = strtod(buf, NULL);
+    errno = 0;
+    if (n->is_float) {
+        n->f = strtod(buf, &endp);
+        if (errno == ERANGE && (n->f > DBL_MAX || n->f < -DBL_MAX)) {
+            return (0); /* overflow; underflow is fine */
+        }
+        n->is_neg = (n->f < 0.0);
+    } else if (n->is_neg) {
+        n->i = strtoll(buf, &endp, 10);
+        if (errno == ERANGE) {
+            return (0);
+        }
     } else {
-        *out_int = strtoll(buf, NULL, 10);
+        n->u = strtoull(buf, &endp, 10);
+        if (errno == ERANGE) {
+            return (0);
+        }
     }
-    return (1);
+    return (endp == buf + num_len);
 }
 
 static int json_match_literal(json_parser_t *p, const char *lit) {
@@ -1400,6 +1458,27 @@ static int json_match_literal(json_parser_t *p, const char *lit) {
         return (1);
     }
     return (0);
+}
+
+/**
+ * @brief Step past the separator after one object member or array element.
+ *
+ * @param p      Parser.
+ * @param closer '}' or ']'.
+ * @return 1 if a comma was consumed and another element follows, 0 if the
+ *         closer is next, -1 on a missing comma or a trailing comma.
+ */
+static int json_next_element(json_parser_t *p, char closer) {
+    char c = json_peek(p);
+
+    if (c == closer) {
+        return (0);
+    }
+    if (c != ',') {
+        return (-1);
+    }
+    p->pos++;
+    return (json_peek(p) == closer) ? -1 : 1;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -1477,16 +1556,18 @@ static cfgpack_err_t json_parse_header_name(parse_ctx_t *ctx,
  */
 static cfgpack_err_t json_parse_header_version(parse_ctx_t *ctx,
                                                json_parser_t *p) {
-    int is_float;
-    double ver_f;
-    int64_t ver;
+    json_number_t n;
 
-    if (!json_parse_number(p, &ver, &ver_f, &is_float) || is_float || ver < 0) {
+    if (!json_parse_number(p, &n) || n.is_float || n.is_neg) {
         set_err(ctx->err, p->line, CFGPACK_PARSE_INVALID_VERSION);
         return (CFGPACK_ERR_PARSE);
     }
+    if (n.u > UINT32_MAX) {
+        set_err(ctx->err, p->line, CFGPACK_PARSE_VERSION_OUT_OF_RANGE);
+        return (CFGPACK_ERR_BOUNDS);
+    }
     if (!ctx->measuring) {
-        ctx->out_schema->version = (uint32_t)ver;
+        ctx->out_schema->version = (uint32_t)n.u;
     }
     return (CFGPACK_OK);
 }
@@ -1495,8 +1576,7 @@ static cfgpack_err_t json_parse_header_version(parse_ctx_t *ctx,
  * @brief Temporary state for parsing one JSON entry's fields.
  */
 typedef struct {
-    int64_t default_ival;
-    double default_fval;
+    json_number_t default_num;
     size_t default_str_len;
     int got_index;
     int got_ename;
@@ -1506,7 +1586,6 @@ typedef struct {
     int default_is_null;
     int default_is_string;
     int default_is_number;
-    int default_is_float;
     char default_str[CFGPACK_STR_MAX + 1];
 } json_entry_fields_t;
 
@@ -1519,6 +1598,8 @@ static cfgpack_err_t json_parse_entry_fields(parse_ctx_t *ctx,
                                              json_parser_t *p,
                                              cfgpack_entry_t *e,
                                              json_entry_fields_t *f) {
+    int step;
+
     while (json_peek(p) != '}' && json_peek(p) != '\0') {
         size_t ekey_len;
         char ekey[32];
@@ -1533,20 +1614,18 @@ static cfgpack_err_t json_parse_entry_fields(parse_ctx_t *ctx,
         }
 
         if (strcmp(ekey, "index") == 0) {
-            int is_float;
-            double idx_f;
-            int64_t idx;
-            if (!json_parse_number(p, &idx, &idx_f, &is_float) || is_float ||
-                idx < 0 || idx > 65535) {
+            json_number_t idx;
+            if (!json_parse_number(p, &idx) || idx.is_float || idx.is_neg ||
+                idx.u > 65535) {
                 set_err(ctx->err, p->line, CFGPACK_PARSE_INVALID_INDEX);
                 return (CFGPACK_ERR_BOUNDS);
             }
-            if (idx == 0) {
+            if (idx.u == 0) {
                 set_err(ctx->err, p->line, CFGPACK_PARSE_RESERVED_INDEX);
                 return (CFGPACK_ERR_RESERVED_INDEX);
             }
             if (!ctx->measuring) {
-                e->index = (uint16_t)idx;
+                e->index = (uint16_t)idx.u;
             }
             f->got_index = 1;
         } else if (strcmp(ekey, "name") == 0) {
@@ -1603,8 +1682,7 @@ static cfgpack_err_t json_parse_entry_fields(parse_ctx_t *ctx,
                 }
                 f->default_is_string = 1;
             } else {
-                if (!json_parse_number(p, &f->default_ival, &f->default_fval,
-                                       &f->default_is_float)) {
+                if (!json_parse_number(p, &f->default_num)) {
                     set_err(ctx->err, p->line, CFGPACK_PARSE_INVALID_DEFAULT);
                     return (CFGPACK_ERR_PARSE);
                 }
@@ -1616,7 +1694,14 @@ static cfgpack_err_t json_parse_entry_fields(parse_ctx_t *ctx,
             return (CFGPACK_ERR_PARSE);
         }
 
-        json_expect(p, ',');
+        step = json_next_element(p, '}');
+        if (step < 0) {
+            set_err(ctx->err, p->line, CFGPACK_PARSE_UNEXPECTED_TOKEN);
+            return (CFGPACK_ERR_PARSE);
+        }
+        if (step == 0) {
+            break;
+        }
     }
     return (CFGPACK_OK);
 }
@@ -1654,64 +1739,63 @@ static cfgpack_err_t json_store_entry_defaults(parse_ctx_t *ctx,
     } else if (f->default_is_number) {
         /* Match the .map parser: integer types reject float literals and
          * enforce per-type ranges instead of storing a raw cast. */
-        static const int64_t int_min[] = {-128, -32768, -2147483648LL,
-                                          INT64_MIN};
-        static const int64_t int_max[] = {127, 32767, 2147483647LL, INT64_MAX};
-        static const uint64_t uint_max[] = {0xFFULL, 0xFFFFULL, 0xFFFFFFFFULL,
-                                            0xFFFFFFFFFFFFFFFFULL};
-        int64_t iv = f->default_ival;
+        const json_number_t *n = &f->default_num;
+        cfgpack_value_t *v = &ctx->values[ctx->count];
 
         if (e->type == CFGPACK_TYPE_STR || e->type == CFGPACK_TYPE_FSTR) {
             set_err(ctx->err, p->line, CFGPACK_PARSE_NUMERIC_FOR_STRING);
             return (CFGPACK_ERR_TYPE_MISMATCH);
         }
         e->has_default = 1;
-        ctx->values[ctx->count].type = e->type;
+        v->type = e->type;
         switch (e->type) {
         case CFGPACK_TYPE_U8:
         case CFGPACK_TYPE_U16:
         case CFGPACK_TYPE_U32:
         case CFGPACK_TYPE_U64:
-            if (f->default_is_float) {
+            if (n->is_float) {
                 set_err(ctx->err, p->line, CFGPACK_PARSE_INVALID_DEFAULT);
                 return (CFGPACK_ERR_PARSE);
             }
-            if (iv < 0 || (uint64_t)iv > uint_max[e->type - CFGPACK_TYPE_U8]) {
+            if (n->is_neg) {
                 set_err(ctx->err, p->line, CFGPACK_PARSE_DEFAULT_OUT_OF_RANGE);
                 return (CFGPACK_ERR_BOUNDS);
             }
-            ctx->values[ctx->count].v.u64 = (uint64_t)iv;
+            v->v.u64 = n->u;
             break;
         case CFGPACK_TYPE_I8:
         case CFGPACK_TYPE_I16:
         case CFGPACK_TYPE_I32:
         case CFGPACK_TYPE_I64:
-            if (f->default_is_float) {
+            if (n->is_float) {
                 set_err(ctx->err, p->line, CFGPACK_PARSE_INVALID_DEFAULT);
                 return (CFGPACK_ERR_PARSE);
             }
-            if (iv < int_min[e->type - CFGPACK_TYPE_I8] ||
-                iv > int_max[e->type - CFGPACK_TYPE_I8]) {
+            if (!n->is_neg && n->u > (uint64_t)INT64_MAX) {
                 set_err(ctx->err, p->line, CFGPACK_PARSE_DEFAULT_OUT_OF_RANGE);
                 return (CFGPACK_ERR_BOUNDS);
             }
-            ctx->values[ctx->count].v.i64 = iv;
+            v->v.i64 = n->is_neg ? n->i : (int64_t)n->u;
             break;
         case CFGPACK_TYPE_F32:
-            if (f->default_is_float && !double_fits_float(f->default_fval)) {
+            if (n->is_float && !double_fits_float(n->f)) {
                 set_err(ctx->err, p->line, CFGPACK_PARSE_DEFAULT_OUT_OF_RANGE);
                 return (CFGPACK_ERR_BOUNDS);
             }
-            ctx->values[ctx->count].v.f32 = f->default_is_float
-                                                ? (float)f->default_fval
-                                                : (float)f->default_ival;
+            v->v.f32 = n->is_float ? (float)n->f
+                       : n->is_neg ? (float)n->i
+                                   : (float)n->u;
             break;
         case CFGPACK_TYPE_F64:
-            ctx->values[ctx->count].v.f64 = f->default_is_float
-                                                ? f->default_fval
-                                                : (double)f->default_ival;
+            v->v.f64 = n->is_float ? n->f
+                       : n->is_neg ? (double)n->i
+                                   : (double)n->u;
             break;
         default: break;
+        }
+        if (!cfgpack_int_fits(e->type, v)) {
+            set_err(ctx->err, p->line, CFGPACK_PARSE_DEFAULT_OUT_OF_RANGE);
+            return (CFGPACK_ERR_BOUNDS);
         }
     }
 
@@ -1845,11 +1929,9 @@ static void json_phase2(parse_ctx_t *ctx, const char *data, size_t data_len) {
                     }
 
                     if (strcmp(ekey, "index") == 0) {
-                        double idx_f;
-                        int is_float;
-                        int64_t idx;
-                        json_parse_number(jp, &idx, &idx_f, &is_float);
-                        entry_index = (uint16_t)idx;
+                        json_number_t idx;
+                        json_parse_number(jp, &idx);
+                        entry_index = (uint16_t)idx.u;
                     } else if (strcmp(ekey, "name") == 0) {
                         char tmp[32];
                         json_parse_string(jp, tmp, sizeof(tmp), NULL);
@@ -1868,10 +1950,8 @@ static void json_phase2(parse_ctx_t *ctx, const char *data, size_t data_len) {
                                 entry_has_default = 1;
                             }
                         } else {
-                            int64_t iv;
-                            double fv;
-                            int isf;
-                            json_parse_number(jp, &iv, &fv, &isf);
+                            json_number_t num;
+                            json_parse_number(jp, &num);
                             entry_has_default = 1;
                         }
                     }
@@ -1916,10 +1996,8 @@ static void json_phase2(parse_ctx_t *ctx, const char *data, size_t data_len) {
             char tmp[64];
             json_parse_string(jp, tmp, sizeof(tmp), NULL);
         } else if (strcmp(key, "version") == 0) {
-            int64_t v;
-            double vf;
-            int isf;
-            json_parse_number(jp, &v, &vf, &isf);
+            json_number_t num;
+            json_parse_number(jp, &num);
         }
         json_expect(jp, ',');
     }
@@ -1949,6 +2027,7 @@ static cfgpack_err_t parse_schema_json_impl(const char *data,
     int got_name = 0;
     cfgpack_err_t rc;
     parse_ctx_t ctx;
+    int step;
 
     rc = parse_ctx_init(&ctx, opts, measure, err);
     if (rc != CFGPACK_OK) {
@@ -1997,7 +2076,14 @@ static cfgpack_err_t parse_schema_json_impl(const char *data,
                 if (rc != CFGPACK_OK) {
                     return (rc);
                 }
-                json_expect(p, ',');
+                step = json_next_element(p, ']');
+                if (step < 0) {
+                    set_err(err, p->line, CFGPACK_PARSE_UNEXPECTED_TOKEN);
+                    return (CFGPACK_ERR_PARSE);
+                }
+                if (step == 0) {
+                    break;
+                }
             }
 
             if (!json_expect(p, ']')) {
@@ -2010,11 +2096,28 @@ static cfgpack_err_t parse_schema_json_impl(const char *data,
             return (CFGPACK_ERR_PARSE);
         }
 
-        json_expect(p, ',');
+        step = json_next_element(p, '}');
+        if (step < 0) {
+            set_err(err, p->line, CFGPACK_PARSE_UNEXPECTED_TOKEN);
+            return (CFGPACK_ERR_PARSE);
+        }
+        if (step == 0) {
+            break;
+        }
     }
 
     if (!json_expect(p, '}')) {
         set_err(err, p->line, CFGPACK_PARSE_EXPECTED_RBRACE);
+        return (CFGPACK_ERR_PARSE);
+    }
+
+    /* Nothing but whitespace (or NUL padding) may follow the root object */
+    json_skip_ws(p);
+    while (p->pos < p->len && p->data[p->pos] == '\0') {
+        p->pos++;
+    }
+    if (p->pos != p->len) {
+        set_err(err, p->line, CFGPACK_PARSE_UNEXPECTED_TOKEN);
         return (CFGPACK_ERR_PARSE);
     }
 
@@ -2211,6 +2314,10 @@ static cfgpack_err_t mp_parse_header_version(parse_ctx_t *ctx,
         if (rc != CFGPACK_OK) {
             set_err(ctx->err, 0, CFGPACK_PARSE_INVALID_VERSION);
             return (CFGPACK_ERR_DECODE);
+        }
+        if (ver > UINT32_MAX) {
+            set_err(ctx->err, 0, CFGPACK_PARSE_VERSION_OUT_OF_RANGE);
+            return (CFGPACK_ERR_BOUNDS);
         }
         ctx->out_schema->version = (uint32_t)ver;
     }

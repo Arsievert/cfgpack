@@ -103,7 +103,8 @@ typedef enum {
     CFGPACK_PARSE_EXPECTED_ENTRIES_ARRAY, /**< expected array for entries */
     CFGPACK_PARSE_EXPECTED_TOP_LEVEL_MAP, /**< invalid msgpack: expected top-level map */
     CFGPACK_PARSE_PHASE2_DECODE,          /**< phase2 decode error */
-    CFGPACK_PARSE_CODE_COUNT              /**< Number of codes (not a code). */
+    CFGPACK_PARSE_UNEXPECTED_TOKEN, /**< unexpected token */
+    CFGPACK_PARSE_CODE_COUNT        /**< Number of codes (not a code). */
 } cfgpack_parse_code_t;
 
 /**

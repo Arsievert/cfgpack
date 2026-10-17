@@ -128,6 +128,144 @@ TEST_CASE(test_parse_duplicate_index) {
     return (TEST_OK);
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+ * In-memory .map helpers for the tokenizer strictness tests
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+static cfgpack_err_t parse_map_str(const char *map,
+                                   cfgpack_schema_t *schema,
+                                   cfgpack_value_t *values,
+                                   cfgpack_parse_error_t *err) {
+    static cfgpack_entry_t entries[8];
+    static char str_pool[256];
+    static uint16_t str_offsets[4];
+    cfgpack_parse_opts_t opts = {schema,      entries,  8,
+                                 values,      str_pool, sizeof(str_pool),
+                                 str_offsets, 4,        err};
+    memset(err, 0, sizeof(*err));
+    return (cfgpack_parse_schema(map, strlen(map), &opts));
+}
+
+/*
+ * Regression: .map integers were parsed with base 0, so "010" meant 8 and
+ * "08" was an error while JSON read "010" as 10.  The entry index had no
+ * end-pointer check ("5x" parsed as 5), and anything after the default
+ * token was silently ignored.
+ */
+TEST_CASE(test_map_integer_literals) {
+    LOG_SECTION(".map integer literals: decimal and 0x only, no octal");
+    cfgpack_parse_error_t err;
+    cfgpack_schema_t schema;
+    cfgpack_value_t values[8];
+
+    CHECK(parse_map_str("t 1\n1 a u8 010\n2 b u8 08\n3 c u16 0x10\n"
+                        "4 d i8 -0x7f\n",
+                        &schema, values, &err) == CFGPACK_OK);
+    CHECK(values[0].v.u64 == 10);
+    CHECK(values[1].v.u64 == 8);
+    CHECK(values[2].v.u64 == 16);
+    CHECK(values[3].v.i64 == -127);
+    LOG("010 -> 10, 08 -> 8, 0x10 -> 16, -0x7f -> -127 (ok)");
+
+    return (TEST_OK);
+}
+
+TEST_CASE(test_map_index_strict) {
+    LOG_SECTION(".map entry index must be a plain decimal integer");
+    cfgpack_parse_error_t err;
+    cfgpack_schema_t schema;
+    cfgpack_value_t values[8];
+
+    CHECK(parse_map_str("t 1\n5x a u8 0\n", &schema, values, &err) ==
+          CFGPACK_ERR_PARSE);
+    CHECK(err.code == CFGPACK_PARSE_INVALID_INDEX && err.line == 2);
+    LOG("index 5x: ERR_PARSE line %zu (%s)", err.line,
+        cfgpack_parse_error_str(err.code));
+
+    CHECK(parse_map_str("t 1\nabc a u8 0\n", &schema, values, &err) ==
+          CFGPACK_ERR_PARSE);
+    CHECK(err.code == CFGPACK_PARSE_INVALID_INDEX);
+    LOG("index abc: ERR_PARSE, not 'reserved index 0' (ok)");
+
+    CHECK(parse_map_str("t 1\n-1 a u8 0\n", &schema, values, &err) ==
+          CFGPACK_ERR_PARSE);
+    CHECK(parse_map_str("t 1\n65536 a u8 0\n", &schema, values, &err) ==
+          CFGPACK_ERR_BOUNDS);
+    CHECK(parse_map_str("t 1\n65535 a u8 0\n", &schema, values, &err) ==
+          CFGPACK_OK);
+    LOG("index -1: PARSE, 65536: BOUNDS, 65535: OK");
+
+    return (TEST_OK);
+}
+
+TEST_CASE(test_map_trailing_tokens) {
+    LOG_SECTION(".map lines reject tokens after the default or version");
+    cfgpack_parse_error_t err;
+    cfgpack_schema_t schema;
+    cfgpack_value_t values[8];
+
+    CHECK(parse_map_str("t 1 junk\n1 a u8 0\n", &schema, values, &err) ==
+          CFGPACK_ERR_PARSE);
+    CHECK(err.code == CFGPACK_PARSE_UNEXPECTED_TOKEN && err.line == 1);
+    LOG("header 't 1 junk': ERR_PARSE line 1");
+
+    CHECK(parse_map_str("t 1\n1 a u8 5 junk\n", &schema, values, &err) ==
+          CFGPACK_ERR_PARSE);
+    CHECK(err.code == CFGPACK_PARSE_UNEXPECTED_TOKEN && err.line == 2);
+    CHECK(parse_map_str("t 1\n1 s str \"x\" junk\n", &schema, values, &err) ==
+          CFGPACK_ERR_PARSE);
+    LOG("trailing token after numeric and quoted defaults: ERR_PARSE");
+
+    CHECK(parse_map_str("t 1 # schema\n1 a u8 5 # five\n2 s str \"x\"# x\n",
+                        &schema, values, &err) == CFGPACK_OK);
+    LOG("inline # comments still accepted after header and defaults");
+
+    return (TEST_OK);
+}
+
+TEST_CASE(test_map_version_range) {
+    LOG_SECTION(".map version is a 32-bit unsigned decimal");
+    cfgpack_parse_error_t err;
+    cfgpack_schema_t schema;
+    cfgpack_value_t values[8];
+
+    CHECK(parse_map_str("t 4294967295\n1 a u8 0\n", &schema, values, &err) ==
+          CFGPACK_OK);
+    CHECK(schema.version == 4294967295u);
+    CHECK(parse_map_str("t 4294967296\n1 a u8 0\n", &schema, values, &err) ==
+          CFGPACK_ERR_BOUNDS);
+    CHECK(err.code == CFGPACK_PARSE_VERSION_OUT_OF_RANGE);
+    CHECK(parse_map_str("t 99999999999999999999\n1 a u8 0\n", &schema, values,
+                        &err) == CFGPACK_ERR_BOUNDS);
+    CHECK(parse_map_str("t -1\n1 a u8 0\n", &schema, values, &err) ==
+          CFGPACK_ERR_PARSE);
+    CHECK(parse_map_str("t +1\n1 a u8 0\n", &schema, values, &err) ==
+          CFGPACK_ERR_PARSE);
+    LOG("2^32-1 ok; 2^32, 10^20: BOUNDS; -1, +1: PARSE");
+
+    return (TEST_OK);
+}
+
+TEST_CASE(test_map_float_subnormal) {
+    LOG_SECTION(".map float defaults: subnormals accepted, overflow rejected");
+    cfgpack_parse_error_t err;
+    cfgpack_schema_t schema;
+    cfgpack_value_t values[8];
+
+    CHECK(parse_map_str("t 1\n1 a f64 1e-310\n2 b f32 1e-40\n", &schema, values,
+                        &err) == CFGPACK_OK);
+    CHECK(values[0].v.f64 > 0.0 && values[0].v.f64 < 1e-300);
+    LOG("1e-310 (f64) and 1e-40 (f32) parse as subnormals");
+
+    CHECK(parse_map_str("t 1\n1 a f64 1e999\n", &schema, values, &err) ==
+          CFGPACK_ERR_PARSE);
+    CHECK(parse_map_str("t 1\n1 a f32 1e39\n", &schema, values, &err) ==
+          CFGPACK_ERR_BOUNDS);
+    LOG("1e999 (f64): PARSE; 1e39 (f32): BOUNDS");
+
+    return (TEST_OK);
+}
+
 int main(void) {
     test_result_t overall = TEST_OK;
 
@@ -135,6 +273,16 @@ int main(void) {
     overall |= (test_case_result("bad_type", test_parse_bad_type()) != TEST_OK);
     overall |= (test_case_result("dup_index", test_parse_duplicate_index()) !=
                 TEST_OK);
+    overall |= (test_case_result("map_integer_literals",
+                                 test_map_integer_literals()) != TEST_OK);
+    overall |= (test_case_result("map_index_strict", test_map_index_strict()) !=
+                TEST_OK);
+    overall |= (test_case_result("map_trailing_tokens",
+                                 test_map_trailing_tokens()) != TEST_OK);
+    overall |= (test_case_result("map_version_range",
+                                 test_map_version_range()) != TEST_OK);
+    overall |= (test_case_result("map_float_subnormal",
+                                 test_map_float_subnormal()) != TEST_OK);
 
     if (overall == TEST_OK) {
         printf(COLOR_GREEN "ALL PASS" COLOR_RESET "\n");

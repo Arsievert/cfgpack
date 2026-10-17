@@ -1118,6 +1118,37 @@ TEST_CASE(test_default_float_family_checked) {
     return (TEST_OK);
 }
 
+TEST_CASE(test_version_out_of_range) {
+    LOG_SECTION("msgpack schema version above UINT32_MAX is rejected");
+    uint8_t mp[64];
+    cfgpack_buf_t buf;
+    uint8_t arr = 0x90; /* empty entries array */
+    cfgpack_schema_t schema;
+    cfgpack_entry_t entries[1];
+    cfgpack_value_t values[1];
+    char str_pool[1];
+    uint16_t str_offsets[1];
+    cfgpack_parse_error_t perr;
+    cfgpack_parse_opts_t opts = {&schema, entries,     1, values, str_pool,
+                                 0,       str_offsets, 0, &perr};
+
+    cfgpack_buf_init(&buf, mp, sizeof(mp));
+    cfgpack_msgpack_encode_map_header(&buf, 3);
+    cfgpack_msgpack_encode_uint64(&buf, 0);
+    cfgpack_msgpack_encode_str(&buf, "t", 1);
+    cfgpack_msgpack_encode_uint64(&buf, 1);
+    cfgpack_msgpack_encode_uint64(&buf, 0x100000000ULL);
+    cfgpack_msgpack_encode_uint64(&buf, 2);
+    cfgpack_buf_append(&buf, &arr, 1);
+
+    CHECK(cfgpack_schema_parse_msgpack(mp, buf.len, &opts) ==
+          CFGPACK_ERR_BOUNDS);
+    CHECK(perr.code == CFGPACK_PARSE_VERSION_OUT_OF_RANGE);
+    LOG("version 2^32: ERR_BOUNDS (%s)", cfgpack_parse_error_str(perr.code));
+
+    return (TEST_OK);
+}
+
 int main(void) {
     test_result_t overall = TEST_OK;
 
@@ -1160,6 +1191,8 @@ int main(void) {
     overall |= (test_case_result("default_float_family_checked",
                                  test_default_float_family_checked()) !=
                 TEST_OK);
+    overall |= (test_case_result("version_out_of_range",
+                                 test_version_out_of_range()) != TEST_OK);
 
     if (overall == TEST_OK) {
         printf(COLOR_GREEN "ALL PASS" COLOR_RESET "\n");
