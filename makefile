@@ -140,7 +140,7 @@ $(HOBJ)/%.o: %.c
 	@$(CC) $(CPPFLAGS) $(CFLAGS_HOSTED) $(WERROR) -MMD -MP $(MJ_FLAG) -c $< -o $@
 
 # Vendored code is not held to -Werror; littlefs logging is compiled out.
-$(OBJ)/third_party/%.o $(HOBJ)/third_party/%.o: WERROR :=
+$(OBJ)/third_party/%.o $(HOBJ)/third_party/%.o: override WERROR :=
 $(OBJ)/third_party/littlefs/%.o $(HOBJ)/third_party/littlefs/%.o: CPPFLAGS += $(LFS_FLAGS)
 
 # --- Test targets -------------------------------------------------------------
